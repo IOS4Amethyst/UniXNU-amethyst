@@ -1,0 +1,45 @@
+name: Temporary RAM watchdog override
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  seed:
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: amethyst-ipados-21H461-data-seed
+          run-id: 41169591242
+          github-token: ${{ github.token }}
+          path: original
+      - name: Verify original and fetch pinned packer
+        run: |
+          set -euo pipefail
+          echo '0ce5f13c50c9723fbc6033590d41143a30b7218d22b63b595fbbf96597f64516  original/owner-data.cdr' | shasum -a 256 -c -
+          curl -fLsS -o packed_ramdisk.py https://raw.githubusercontent.com/UniXNU/DarwinBoot/3325e352d7df68a9f9ad74832ed94a6acbbd7390/Test/packed_ramdisk.py
+          python3 packed_ramdisk.py original/owner-data.cdr original/owner-data.packed
+          echo '3d3c26c4e680812f557aa7af5efdb0b8cc387efecb49cadc95e0d30ccfeffa05  original/owner-data.packed' | shasum -a 256 -c -
+      - name: Modify a copy of the RAM seed
+        run: |
+          set -euo pipefail
+          mkdir output
+          python3 scripts/log/disable-watchdog-seed.py --check
+          sudo python3 scripts/log/disable-watchdog-seed.py original/owner-data.packed output/watchdog-disabled.packed --packer "$PWD/packed_ramdisk.py"
+          sudo chown -R "$(id -u):$(id -g)" output
+          (cd output && shasum -a 256 watchdog-disabled.packed > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: amethyst-watchdog-disabled-ram-seed
+          path: |
+            output/watchdog-disabled.packed
+            output/watchdog-disabled.packed.json
+            output/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 1

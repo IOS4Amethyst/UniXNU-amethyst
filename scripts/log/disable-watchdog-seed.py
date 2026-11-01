@@ -63,7 +63,7 @@ def main():
         for offset, data in extents:
             stream.seek(offset)
             stream.write(data)
-    result = subprocess.run(['hdiutil', 'attach', '-plist', '-nobrowse',
+    result = subprocess.run(['hdiutil', 'attach', '-plist', '-nobrowse', '-owners', 'on',
                              '-mountpoint', str(mount), str(raw)],
                             capture_output=True, check=True)
     attached = plistlib.loads(result.stdout)

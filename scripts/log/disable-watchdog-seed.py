@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import plistlib
 import subprocess
@@ -78,6 +79,8 @@ def main():
         if volume_uuid != 'A173DCC8-1F31-46ED-9F67-DB2A68FC25DE':
             raise ValueError('unexpected seed volume UUID; kernel configuration must not change')
         policy = mount / 'db/com.apple.xpc.launchd/disabled.plist'
+        if policy.is_symlink():
+            raise ValueError('refusing a symlink override file')
         previous = plistlib.loads(policy.read_bytes()) if policy.exists() else {}
         updated = disable_jobs(previous)
         policy.parent.mkdir(parents=True, exist_ok=True)
@@ -85,8 +88,19 @@ def main():
         with staged.open('xb') as stream:
             plistlib.dump(updated, stream)
         staged.chmod(0o644)
+        os.chown(staged, 0, 0)
         staged.replace(policy)
+        # This OS selects the modern override loader using this migration marker.
+        marker = policy.with_name('disabled.migrated')
+        if marker.is_symlink():
+            raise ValueError('refusing a symlink migration marker')
+        if not marker.exists():
+            marker.touch(exist_ok=False)
+        marker.chmod(0o644)
+        os.chown(marker, 0, 0)
         assert plistlib.loads(policy.read_bytes()) == updated
+        assert policy.stat().st_uid == 0 and marker.stat().st_uid == 0
+        assert marker.is_file()
         after = plistlib.loads(subprocess.check_output(['diskutil', 'info', '-plist', str(mount)]))
         assert after['VolumeUUID'] == volume_uuid
     finally:
@@ -99,6 +113,7 @@ def main():
         'output_sha256': hashlib.sha256(args.output.read_bytes()).hexdigest(),
         'ram_only': True, 'hardware_tested': False,
         'disabled_jobs': ['com.apple.watchdogd', 'com.apple.watchdog'],
+        'migration_marker': 'db/com.apple.xpc.launchd/disabled.migrated',
         'expiry': 'remove when a real watchdog backend is available',
         'work_directory': str(work),
     }, indent=2) + '\n')

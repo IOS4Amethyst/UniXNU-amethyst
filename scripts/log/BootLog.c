@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Diagnostic log on UFS (boot argument sheng-log=1): every 2 s the text the board page would show (the diagnostic page, the live
-// banner, the GPU rows, a caught panic message) and the kernel message buffer are written to the last 32 MiB of userdata through
+// banner, the GPU rows, a caught panic message) and the kernel message buffer are written to the last 32 MiB of unixnu through
 // NativeUfs's bounded log window, so a run can be read back afterwards (scripts/read-sheng-log.py over the Linux log reader).
 //
 // Window layout (4096-byte blocks): 0 header, 1..32 the kernel message buffer (oldest first), 33.. text slots of 8 blocks in a ring,
@@ -1626,8 +1626,15 @@ int amethyst_boot_log_flush(const char *why) {
   h.msg_bytes = copy_msgbuf(boot_log_panic_buffer);
   h.slots_written = boot_log_rounds;
   h.uptime_s = 0;
+  vm_offset_t stack = thread_get_kernel_stack(current_thread());
+  IOLog("AmethystBootLog: checkpoint=%s thread=%p stack=[%p,%p) header=%p bytes=%lu src=%p\n",
+        why ? why : "?", current_thread(), (void *)stack,
+        (void *)(stack + kernel_stack_size), &h, (unsigned long)sizeof h, boot_log_panic_buffer);
   int ok = native_ufs_log_write(LogMsgFirst, LogMsgBlocks, boot_log_panic_buffer);
-  ok &= native_ufs_log_write(0, 1, (const uint8_t *)&h);
+  // The block API copies 4096 bytes, not sizeof h. Never pass a stack header.
+  memset(boot_log_panic_buffer, 0, LogBlock);
+  memcpy(boot_log_panic_buffer, &h, sizeof h);
+  ok &= native_ufs_log_write(0, 1, boot_log_panic_buffer);
   ok &= native_ufs_log_sync();
   ++amethyst_boot_log_flushes;
   IOLog("AmethystBootLog: flush=%s ok=%d msg=%u\n", why ? why : "?", ok, h.msg_bytes);
@@ -1797,16 +1804,13 @@ static void boot_log_panic_record(const char *str) {
   // Nothing in this function may touch the UFS device. Both entry points are
   // unsafe here: native_ufs_log_write reaches hostWrite4k and
   // native_ufs_log_sync reaches hostScsiDir, and both call lck_mtx_lock before
-  // issuing a blocking SCSI command. In a panic handler that lock never falls
-  // free, because the panicking CPU either already holds it or the peer CPU is
-  // being parked, so lck_mtx_lock aborts with "Mutex ... is unexpectedly owned
-  // by thread" at lock_mtx.c:175. That abort is itself the first nested panic
-  // and it destroys the evidence for the original fault.
+  // issuing a blocking SCSI command. Panic context cannot safely acquire that
+  // lock: its owner may be the panicking CPU or a parked peer. Such calls can
+  // deadlock or cause a nested panic and obscure the original fault.
   //
   // So this hook records only that a panic happened, and leaves wrote/synced at
-  // 0. The text itself is already in the message buffer, which the next boot
-  // reads. Persisting it to unixnu belongs to the flush path, which runs on the
-  // writer thread outside panic context.
+  // 0. This RAM snapshot is NOT proven to survive reset. Only completed normal
+  // writer rounds/checkpoints are durable; the final panic tail may be lost.
   struct boot_log_panic_header *live = (struct boot_log_panic_header *)out;
   live->wrote = 0;
   live->synced = 0;

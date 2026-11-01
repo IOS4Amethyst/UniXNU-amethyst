@@ -36,6 +36,7 @@ _bzero
 _cs_text_fixup_applied
 _cs_text_fixup_parsed
 _current_thread
+_kernel_stack_size
 _kernel_thread_start_priority
 _lck_mtx_lock
 _lck_mtx_try_lock
@@ -241,5 +242,6 @@ _strlcpy
 _strlen
 _strnlen
 _thread_deallocate
+_thread_get_kernel_stack
 _thread_set_thread_name
 _vm_kernel_slide

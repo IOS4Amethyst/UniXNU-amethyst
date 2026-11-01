@@ -10,9 +10,29 @@ Device port of [UniXNU](https://github.com/UniXNU/UniXNU) for the Xiaomi Redmi N
 | Architecture | ARM64 |
 | Device repository | [IOS4Amethyst/UniXNU-amethyst](https://github.com/IOS4Amethyst/UniXNU-amethyst) |
 | UEFI repository | [IOS4Amethyst/uefi-amethyst](https://github.com/IOS4Amethyst/uefi-amethyst/tree/amethyst) |
-| Status | **Kernel bring-up — text console works; root device is the current boundary** |
+| Status | **Apple UI displayed through CPU GOP presentation; touch and Home input not implemented** |
 
 ## Bring-up status
+
+### Current hardware result (2026-11-02)
+
+RAM-only `fastboot boot` reached a white Apple UI with “Press home to upgrade”.
+Scale 2 is confirmed visibly larger. The scale-2 run completed 144 logger rounds
+with zero write errors and 12 copied/completed swaps. This is not a usable
+desktop or completed upgrade: touch/Home input are absent, initial presentation
+is slow, GPU rendering is not validated, and watchdogd is temporarily disabled
+in the volatile Data seed because no watchdog backend is provided.
+
+Known UI-working image: `amethyst-cpu-present-scale2`, SHA256
+`6913b06fa1fddb1948d8922e56b15cfa0401df4c4aa759fc1c1691d9d0cb8e3c`,
+kernel UUID `E37ABB7B-1B56-31D9-9351-90EDCD61DEDB`.
+Android userdata is preserved; experimental logs use the last 32 MiB of the
+dedicated `unixnu` partition. Nothing is flashed by the boot command.
+
+See [current build and hardware evidence](scripts/log/WORKING-BOOT.md),
+[detailed investigation](scripts/log/ABORT-AUDIT.md) and
+[root bring-up history](ROOT-BRINGUP.md). The historical notes below describe
+earlier milestones and defaults; they are not the configuration of this image.
 
 **Current safety override:** automatic UFS takeover is disabled
 (`native-ufs-root=0`, no probe argument). Earlier root-enabled candidates stalled

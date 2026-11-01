@@ -1,6 +1,20 @@
 // SPDX-License-Identifier: BSD-2-Clause-Patent
 #pragma once
 #include <stdint.h>
+// Keep accepted requests until explicit removal; never evict an in-flight one.
+static inline int native_legacy_track_request(const void **entries, unsigned count,
+    const void *request) {
+    if (!request) return 0;
+    for (unsigned i=0;i<count;++i) if (entries[i]==request) return 1;
+    for (unsigned i=0;i<count;++i) if (!entries[i]) {entries[i]=request;return 1;}
+    return 0;
+}
+// Validation must not enqueue work when the selected backend cannot present
+// and retire it. GPU producer synchronization remains a separate contract.
+static inline int native_legacy_pipeline_enabled(unsigned validate,
+    unsigned transfer, unsigned cpuPresent, unsigned retire) {
+    return validate == 1 && transfer == 1 && (cpuPresent == 1 || retire == 1);
+}
 // Original SwapSetLayer sets the update bit and clears the disable bit for
 // a nonnull surface; a null surface sets both. SwapSetBackgroundColor sets
 // bit 31 in both masks and writes opaque RGB. These are masks, not counts.

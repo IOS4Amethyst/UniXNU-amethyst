@@ -63,17 +63,15 @@ class NativeLegacyDisplay : public IOMobileFramebufferLegacy {
     // Every request the validator accepted and the family has not retired yet. A client may submit swap N+1 while swap N is still on the GPU
     // (int-131: swap 3 was validated during swap 2's GPU copy and one remembered pointer lost swap 2, which then never retired and left
     // every wait on it busy), so more than one can be pending.
-    const OriginalLegacySwapRequest *validated[8]={};
+    const void *validated[8]={};
     bool isValidated(const OriginalLegacySwapRequest *request) const {
         if(!request)return false;
         for(auto entry: validated)if(entry==request)return true;
         return false;
     }
     void removeValidated(const OriginalLegacySwapRequest *request) {for(auto &entry: validated)if(entry==request)entry=nullptr;}
-    void addValidated(const OriginalLegacySwapRequest *request) {
-        if(isValidated(request))return;
-        for(auto &entry: validated)if(!entry){entry=request;return;}
-        validated[0]=request;
+    bool addValidated(const OriginalLegacySwapRequest *request) {
+        return native_legacy_track_request(validated,8,request);
     }
     const OriginalLegacySwapRequest *gpuRequest=nullptr;
     uint64_t gpuLength=0;
@@ -396,6 +394,12 @@ public:
         auto word=[&](unsigned offset){uint32_t value=0;memcpy(&value,bytes+offset,4);return value;};
         OSObject *surface=nullptr;unsigned reason=1;bool accepted=false;
         unsigned enabled=0;PE_parse_boot_argn("offline-legacy-validate",&enabled,sizeof(enabled));
+        unsigned transfer=0,cpuPresent=0,retire=0;
+        PE_parse_boot_argn("offline-legacy-transfer",&transfer,sizeof(transfer));
+        PE_parse_boot_argn("offline-legacy-cpu-present",&cpuPresent,sizeof(cpuPresent));
+        PE_parse_boot_argn("offline-legacy-retire",&retire,sizeof(retire));
+        // Fail closed before accepting a swap that would remain pending forever.
+        if(!native_legacy_pipeline_enabled(enabled,transfer,cpuPresent,retire))enabled=0;
         if(enabled==1 && logicalPM && primary && bootMapping && request) {
             reason=2;OSObject *surfaces[4]={};memcpy(surfaces,bytes+2624,sizeof(surfaces));surface=surfaces[0];
             uint32_t width=0,height=0;getDisplayDimensions(&width,&height);
@@ -437,7 +441,8 @@ public:
                 reason=5;accepted=true;
             }
         }
-        if(accepted)addValidated(request);else removeValidated(request);
+        if(accepted && !addValidated(request)){accepted=false;reason=6;}
+        if(!accepted)removeValidated(request);
         native_legacy_swap_validation_observed(accepted,reason,request,surface);return accepted;
     }
     // The original slot-188 caller passes a uint32_t output and consumes an

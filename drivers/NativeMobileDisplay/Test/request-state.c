@@ -3,6 +3,22 @@
 #include <assert.h>
 #include <string.h>
 int main(void) {
+    {
+        int requests[9]={0};const void *entries[8]={0};
+        assert(!native_legacy_track_request(entries,8,0));
+        for(unsigned i=0;i<8;++i)assert(native_legacy_track_request(entries,8,&requests[i]));
+        assert(native_legacy_track_request(entries,8,&requests[0]));
+        assert(!native_legacy_track_request(entries,8,&requests[8]));
+        for(unsigned i=0;i<8;++i)assert(entries[i]==&requests[i]);
+        entries[3]=0;
+        assert(native_legacy_track_request(entries,8,&requests[8]));
+        assert(entries[3]==&requests[8]);
+    }
+    for(unsigned v=0;v<3;++v)for(unsigned t=0;t<3;++t)
+        for(unsigned c=0;c<3;++c)for(unsigned r=0;r<3;++r)
+            assert(native_legacy_pipeline_enabled(v,t,c,r)==
+                (v==1 && t==1 && (c==1 || r==1)));
+    assert(!native_legacy_pipeline_enabled(1,0,0,0));
     assert(native_legacy_single_layer_state(1,0,0));
     assert(native_legacy_single_layer_state(0x80000007U,0x80000006U,0xff000000U));
     // Exhaust the four-layer masks: exactly layer zero may remain active.

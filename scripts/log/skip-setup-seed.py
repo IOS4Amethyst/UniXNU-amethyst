@@ -46,6 +46,13 @@ PREFERENCES = {
     'com.apple.managedconfiguration.notbackedup': {
         'LockdownActivationIndicatesCloudConfigurationAvailable': False},
 }
+# launchd overrides (system domain). The first four are UniXNU skip-setup.md's
+# list for 21H461 ("services that block the first boot"); the kernel lacks
+# sheng-disable-jobs, so they go in disabled.plist like the watchdog override.
+# bluetoothd and callservicesd only respawn every 10s here and flood msgbuf.
+DISABLED_JOBS = ('com.apple.identityservicesd', 'com.apple.locationd', 'com.apple.CommCenter',
+                 'com.apple.iconservices.iconservicesagent',
+                 'com.apple.bluetoothd', 'com.apple.telephonyutilities.callservicesd')
 CONTAINERS = ('Bundle', 'Data/System', 'Shared/SystemGroup', 'Temp')
 
 
@@ -53,6 +60,29 @@ def merged(previous, values):
     if not isinstance(previous, dict):
         raise ValueError('preference file must be a dictionary')
     return {**previous, **values}
+
+
+def disable_jobs(var):
+    policy = var / 'db/com.apple.xpc.launchd/disabled.plist'
+    marker = policy.with_name('disabled.migrated')
+    for path in (policy, marker):
+        if path.is_symlink():
+            raise ValueError(f'refusing symlink {path}')
+    previous = plistlib.loads(policy.read_bytes()) if policy.exists() else {}
+    data = merged(previous, {job: True for job in DISABLED_JOBS})
+    policy.parent.mkdir(parents=True, exist_ok=True)
+    staged = policy.with_suffix('.plist.new')
+    with staged.open('xb') as stream:
+        plistlib.dump(data, stream)
+    os.chown(staged, 0, 0)
+    staged.chmod(0o644)
+    staged.replace(policy)
+    if not marker.exists():
+        marker.touch()
+    os.chown(marker, 0, 0)
+    marker.chmod(0o644)
+    assert plistlib.loads(policy.read_bytes()) == data
+    return sorted(k for k, v in data.items() if v)
 
 
 def write_preferences(var):
@@ -114,6 +144,11 @@ def check():
             assert set(written) == set(PREFERENCES) and created == list(CONTAINERS)
             again = plistlib.loads((var / 'mobile/Library/Preferences/com.apple.purplebuddy.plist').read_bytes())
             assert again['SetupFinishedAllSteps'] is True
+            (var / 'db/com.apple.xpc.launchd').mkdir(parents=True)
+            (var / 'db/com.apple.xpc.launchd/disabled.plist').write_bytes(
+                plistlib.dumps({'com.apple.watchdogd': True, 'other': False}))
+            jobs = disable_jobs(var)
+            assert 'com.apple.watchdogd' in jobs and 'com.apple.locationd' in jobs and 'other' not in jobs
     print('PASS: Setup preferences merged; existing keys preserved')
 
 
@@ -159,6 +194,7 @@ def main():
         if info['VolumeUUID'] != VOLUME_UUID:
             raise ValueError('unexpected seed volume UUID; kernel configuration must not change')
         written, created = write_preferences(mount)
+        disabled = disable_jobs(mount)
         after = plistlib.loads(subprocess.check_output(['diskutil', 'info', '-plist', str(mount)]))
         assert after['VolumeUUID'] == VOLUME_UUID
     finally:
@@ -172,7 +208,7 @@ def main():
         'input_sha256': hashlib.sha256(args.input.read_bytes()).hexdigest(),
         'output_sha256': hashlib.sha256(args.output.read_bytes()).hexdigest(),
         'ram_only': True, 'hardware_tested': False, 'build': BUILD,
-        'preferences': written, 'containers_created': created,
+        'preferences': written, 'containers_created': created, 'disabled_jobs': disabled,
         'source': 'UniXNU scripts/seed-data-skip-setup.py 12c5d44 --no-auto-dim',
         'work_directory': str(work),
     }, indent=2) + '\n')

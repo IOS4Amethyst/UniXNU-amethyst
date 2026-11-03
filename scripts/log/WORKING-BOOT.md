@@ -85,3 +85,18 @@ protection. No signed executable/root image edited, no Android userdata writes.
 
 Binary images, Apple seed contents, private signing material, and Android logs
 are not included in this source commit. Local photos remain beside their images.
+
+## Skip Setup candidate (2026-11-04)
+
+Goal: SpringBoard instead of "Press home to upgrade". Seed from CI run
+41694126335 (branch `skip-setup-seed`, `scripts/log/skip-setup-seed.py`):
+original seed -> watchdog override -> UniXNU seed-data-skip-setup.py values
+with --no-auto-dim, files owned by mobile 501:501. The re-made watchdog seed
+hashes 84a10047… (not the local 40d76e6f…; repacking is not byte-stable).
+Seed `.scratch/ufs-audit/skip-setup-seed/skip-setup.packed` SHA256
+`66c20db7fa955d248a22bd8335808d298f3d58bd69edf3415ebeb9a298df9c9f`.
+Kernel: hardware-tested buttons-native prelinked kernel (power key works).
+Flags: display probe/pm/scale2/validate/cpu-present, --buttons.
+Image `staging/amethyst-skip-setup/Mu-amethyst-skip-setup.img`, SHA256
+`a870567a99ef968916610588215696b2695b8dcd8adef6c0275847b5b00157ca`.
+Pack checks pass. Hardware untested. Touch is still absent.

@@ -23,6 +23,9 @@ extern int native_ufs_log_write(uint64_t, uint32_t, const void *) __attribute__(
 extern uint64_t native_ufs_export_blocks(void) __attribute__((weak_import));
 extern int native_ufs_export_write(uint64_t, uint32_t, const void *) __attribute__((weak_import));
 extern int native_ufs_log_sync(void) __attribute__((weak_import));
+extern void amethyst_touch_snapshot(void) __attribute__((weak_import));
+extern char amethyst_touch_snapshot_rows[48][128] __attribute__((weak_import));
+extern unsigned amethyst_touch_snapshot_count __attribute__((weak_import));
 extern unsigned native_ufs_store_gpt_check(void) __attribute__((weak_import));
 extern uint32_t cs_text_fixup_parsed __attribute__((weak_import));
 extern uint32_t cs_text_fixup_applied __attribute__((weak_import));
@@ -396,6 +399,12 @@ static size_t compose(char *out, size_t cap, uint32_t slot, unsigned now) {
   char head[96];
   snprintf(head, sizeof head, "#slot %u t=%us tag=%s", slot, now, &boot_progress_tag ? boot_progress_tag() : "");
   at = put(out, at, cap, head, sizeof head);
+  if (&amethyst_touch_snapshot_count && &amethyst_touch_snapshot_rows) {
+    unsigned count=__atomic_load_n(&amethyst_touch_snapshot_count,__ATOMIC_ACQUIRE);
+    if(count>48)count=48;
+    at=put(out,at,cap,"[touch snapshot]",17);
+    for(unsigned i=0;i<count;++i)at=put(out,at,cap,amethyst_touch_snapshot_rows[i],128);
+  }
   if (&boot_progress_page_text) {
     at = put(out, at, cap, "[page]", 8);
     for (unsigned i = 0; i < 48; ++i) if (boot_progress_page_text[i][0]) at = put(out, at, cap, boot_progress_page_text[i], 120);
@@ -1739,6 +1748,8 @@ static void writer(void *arg, wait_result_t result) {
     if (!ok) {boot_log_errors = ++errors;} else errors = 0;
     if (errors >= LogMaxErrors) {boot_log_state = 3; return;}
     if (h.gpt_last != h.gpt_open) {boot_log_state = 4; return;}
+    // Opt-in read-only probe; normal thread context, after a durable round.
+    if (ok && &amethyst_touch_snapshot) amethyst_touch_snapshot();
     if (autoreset && now >= autoreset && !reset_tried && ok) {
       reset_tried = 1;
       if (!reset_ok) strlcpy(boot_log_reset_result, "autoreset skipped: the probe found no writable cell", sizeof boot_log_reset_result);

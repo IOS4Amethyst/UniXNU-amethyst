@@ -46,7 +46,37 @@ parser.add_argument('--display-validate', action='store_true',
                     help='enable the bounded GOP swap validator (requires --display-pm)')
 parser.add_argument('--display-cpu-present', action='store_true',
                     help='enable transfer and retirement together (requires --display-validate)')
+parser.add_argument('--touch-snapshot', action='store_true',
+                    help='opt-in read-only clock/pin/SE0 snapshot; requires matching linked probe')
+parser.add_argument('--touch-clock-vote', action='store_true',
+                    help='opt-in additive QUP0 clock votes, no SPI/reset/rails (requires --touch-snapshot)')
+parser.add_argument('--touch-dma-preflight', action='store_true',
+                    help='allocate retained buffers and plan only; requires --touch-clock-vote')
+parser.add_argument('--touch-loopback', action='store_true',
+                    help='run one DMA loopback after the route commit; requires --touch-dma-preflight')
+parser.add_argument('--shim-from', type=Path,
+                    help='reuse the 192-byte boot shim of an earlier packed image (when the donor BootShim.S is gone); '
+                         'its encoded payload size and total size are still asserted')
+parser.add_argument('--touch-goodix', action='store_true',
+                    help='after a passing loopback: rails, reset, SPI pins, one Goodix identity read; requires --touch-loopback')
+parser.add_argument('--buttons-survey', action='store_true', help='read-only Amethyst SPMI arbiter survey')
+parser.add_argument('--quiet-kprintf', action='store_true', help='remove explicit kprintf spam flag; retain durable logging')
+parser.add_argument('--home-once', action='store_true', help='one native Home press/release after HID attachment; requires --buttons')
+parser.add_argument('--buttons', action='store_true', help='native Amethyst power/volume HID candidate')
+parser.add_argument('--buttons-identity', action='store_true', help='bounded PMIC identity reads; requires --buttons-survey')
 args = parser.parse_args()
+if args.home_once and not args.buttons:
+    parser.error('--home-once requires --buttons')
+if args.buttons_identity and not args.buttons_survey:
+    parser.error('--buttons-identity requires --buttons-survey')
+if args.touch_goodix and not args.touch_loopback:
+    parser.error('--touch-goodix requires --touch-loopback')
+if args.touch_loopback and not args.touch_dma_preflight:
+    parser.error('--touch-loopback requires --touch-dma-preflight')
+if args.touch_dma_preflight and not args.touch_clock_vote:
+    parser.error('--touch-dma-preflight requires --touch-clock-vote')
+if args.touch_clock_vote and not args.touch_snapshot:
+    parser.error('--touch-clock-vote requires --touch-snapshot')
 if args.display_pm and not args.display_probe:
     parser.error('--display-pm requires --display-probe')
 if args.display_unit_scale is not None and not args.display_probe:
@@ -122,6 +152,34 @@ with tempfile.TemporaryDirectory(dir=AUDIT, prefix='log-pack-') as tempdir:
             assert flag not in config, 'presentation setting already supplied'
         config = config.replace(b'offline-legacy-gop=1',
                                 b'offline-legacy-gop=1 offline-legacy-transfer=1 offline-legacy-cpu-present=1')
+    if args.quiet_kprintf:
+        assert config.count(b' -enable_kprintf_spam') == 1
+        config=config.replace(b' -enable_kprintf_spam',b'')
+    if args.buttons:
+        assert b'amethyst-buttons=' not in config
+        config=config.replace(b'sheng-log=1',b'sheng-log=1 amethyst-buttons=1')
+    if args.home_once:
+        assert b'amethyst-home-once=' not in config
+        config=config.replace(b'sheng-log=1',b'sheng-log=1 amethyst-home-once=1')
+    if args.buttons_survey:
+        assert b'amethyst-buttons-survey=' not in config
+        config=config.replace(b'sheng-log=1',b'sheng-log=1 amethyst-buttons-survey=1')
+    if args.buttons_identity:
+        assert b'amethyst-buttons-identity=' not in config
+        config=config.replace(b'sheng-log=1',b'sheng-log=1 amethyst-buttons-identity=1')
+    if args.touch_snapshot:
+        assert b'amethyst-touch-snapshot=' not in config, 'touch snapshot setting already supplied'
+        mode=2 if args.touch_clock_vote else 1
+        config = config.replace(b'sheng-log=1', b'sheng-log=1 '+f'amethyst-touch-snapshot={mode}'.encode())
+    if args.touch_dma_preflight:
+        assert b'amethyst-touch-dma-preflight=' not in config
+        config=config.replace(b'sheng-log=1',b'sheng-log=1 amethyst-touch-dma-preflight=1')
+    if args.touch_goodix:
+        assert b'amethyst-touch-goodix=' not in config
+        config=config.replace(b'sheng-log=1',b'sheng-log=1 amethyst-touch-goodix=1')
+    if args.touch_loopback:
+        assert b'amethyst-touch-loopback=' not in config
+        config=config.replace(b'sheng-log=1',b'sheng-log=1 amethyst-touch-loopback=1')
 
     adt = get(old, '::/EFI/UniXNU/Payloads/kernel.macho.adt')
     trust = get(old, '::/EFI/UniXNU/Payloads/kernel.macho.trustcache')
@@ -161,6 +219,11 @@ with tempfile.TemporaryDirectory(dir=AUDIT, prefix='log-pack-') as tempdir:
     shim_source = Path('/home/bluekyeet/amethyst-work/donors/prev-artifacts-stage1/diag/uefi/BootShim/BootShim.S')
 
     def shim(payload):
+        if args.shim_from:
+            donor = args.shim_from.read_bytes()
+            dz = zlib.decompressobj(31)
+            donor_raw = dz.decompress(donor[4096:4096 + struct.unpack_from('<I', donor, 8)[0]])
+            return donor_raw[:192]
         obj, binary = temp / 'shim.o', temp / 'shim.bin'
         subprocess.run(['clang', '--target=aarch64-none-elf', '-c', '-DFD_BASE=0xa7100000',
                         '-DFD_SIZE=0x300000', f'-DEMBEDDED_PAYLOAD_SIZE={payload}',
@@ -196,6 +259,11 @@ with tempfile.TemporaryDirectory(dir=AUDIT, prefix='log-pack-') as tempdir:
         f'display_unit_scale={args.display_unit_scale}\n'
         f'display_validate={args.display_validate}\n'
         f'display_cpu_present={args.display_cpu_present}\n'
+        f'touch_snapshot={args.touch_snapshot}\n'
+        f'touch_clock_vote={args.touch_clock_vote}\n'
+        f'touch_dma_preflight={args.touch_dma_preflight}\n'
+        f'touch_loopback={args.touch_loopback}\n'
+        f'touch_goodix={args.touch_goodix}\n'
         f'data_seed_override={args.data_seed or "none"}\n'
         f'data_seed_sha256={hashlib.sha256(seed).hexdigest() if seed is not None else "none"}\n'
         f'changed=Payloads/kernel.macho + unixnu.toml logging/display settings\n'

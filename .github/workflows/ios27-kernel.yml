@@ -1,0 +1,122 @@
+# iOS 27 (iPhone15,4, 27.0.1 24A446) kernel build for amethyst: macos.yml with `--os ios-27.0.1-24A446` and UniXNU from
+# IOS4Amethyst/UniXNU ios27-iphone15 (upstream main 82b847c + the profile). Kernel only for now: the iPadOS 17 payload and
+# userdata steps stay off. Runs on pushes to this branch (a dispatch-only workflow is only listed once it is on main).
+name: iOS 27 kernel
+
+on:
+  push:
+    branches: [ios27]
+  workflow_dispatch:
+    inputs:
+      defconfig:
+        description: Defconfig name
+        required: true
+        default: amethyst_defconfig
+      build_payload:
+        description: "Build Payload"
+        type: boolean
+        default: false
+      build_userdata:
+        description: "Build Userdata (takes ~16GB disk)"
+        type: boolean
+        default: false
+      xcode:
+        description: Xcode version
+        required: true
+        default: "26.6"
+
+permissions:
+  contents: read
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+  HOMEBREW_NO_ENV_HINTS: 1
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 360
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_${{ inputs.xcode || '26.6' }}.app/Contents/Developer
+      DEFCONFIG: ${{ inputs.defconfig || 'amethyst_defconfig' }}
+      OS_PROFILE: ios-27.0.1-24A446
+
+    steps:
+      - name: Check out Device Repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Check out UniXNU Core
+        uses: actions/checkout@v4
+        with:
+          repository: IOS4Amethyst/UniXNU
+          ref: ios27-iphone15
+          path: unixnu-core
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check out UEFI repo
+        if: inputs.build_payload
+        uses: actions/checkout@v4
+        with:
+          repository: IOS4Amethyst/uefi-amethyst.git
+          ref: amethyst
+          path: uefi-amethyst
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install host tools
+        run: |
+          brew install llvm lld mtools dtc
+          if ! command -v unifdef >/dev/null; then
+            brew install unifdef
+            echo "$(brew --prefix unifdef)/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Build bootstrap candidate
+        working-directory: ./unixnu-core
+        env:
+          DEVICE_DIR: ${{ github.workspace }}
+        run: |
+          chmod +x "$DEVICE_DIR/scripts/ci-bootstrap-candidate.sh"
+          bash "$DEVICE_DIR/scripts/ci-bootstrap-candidate.sh"
+
+      - name: Select the device
+        working-directory: ./unixnu-core
+        run: ./unixnu defconfig "$DEFCONFIG" --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
+
+      - name: Build kernel
+        working-directory: ./unixnu-core
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./unixnu build kernel --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
+
+      - name: Build payload
+        if: inputs.build_payload
+        working-directory: ./unixnu-core
+        env:
+          UNIXNU_UNIQUE_CHIP_ID: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
+        run: |
+          ./unixnu build payload --uefi uefi-amethyst --edk2 uefi-amethyst/Mu_Basecore -D "$GITHUB_WORKSPACE"
+
+      - name: Build userdata
+        if: inputs.build_userdata
+        working-directory: ./unixnu-core
+        run: ./unixnu build userdata -D "$GITHUB_WORKSPACE"
+
+      - name: Upload compiled binaries and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unixnu-ios27-kernel
+          path: |
+            unixnu-core/out/**/kernel/**
+            unixnu-core/out/**/payload/**
+            unixnu-core/out/**/userdata/**
+            unixnu-core/out/**/logs/*.log
+          if-no-files-found: warn
+          retention-days: 7

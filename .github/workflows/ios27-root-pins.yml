@@ -21,9 +21,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Tools
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          brew install blacktop/tap/ipsw
-          ipsw version
+          # Pinned release binary: the Homebrew tap now refuses to load (untrusted tap).
+          gh release download v3.1.741 -R blacktop/ipsw -p 'ipsw_3.1.741_macOS_x86_64.tar.gz' -D "$RUNNER_TEMP/ipsw"
+          tar -xzf "$RUNNER_TEMP/ipsw/ipsw_3.1.741_macOS_x86_64.tar.gz" -C "$RUNNER_TEMP/ipsw"
+          echo "$RUNNER_TEMP/ipsw" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/ipsw/ipsw" version
           df -h "$RUNNER_TEMP" .
       - name: Measure
         run: python3 scripts/ios27/root-pins.py "$RUNNER_TEMP/ios27"

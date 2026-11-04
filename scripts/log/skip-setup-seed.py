@@ -52,7 +52,12 @@ PREFERENCES = {
 # bluetoothd and callservicesd only respawn every 10s here and flood msgbuf.
 DISABLED_JOBS = ('com.apple.identityservicesd', 'com.apple.locationd', 'com.apple.CommCenter',
                  'com.apple.iconservices.iconservicesagent',
-                 'com.apple.bluetoothd', 'com.apple.telephonyutilities.callservicesd')
+                 'com.apple.bluetoothd', 'com.apple.telephonyutilities.callservicesd',
+                 # Run 2 (v2): these crash and respawn every 10s; their spam pushes the first
+                 # 220s (SpringBoard start) out of the 128 KiB log window. Unknown labels are ignored.
+                 'com.apple.fitcored', 'com.apple.liveactivitiesd', 'com.apple.privacyaccountingd',
+                 'com.apple.ScreenTimeAgent', 'com.apple.dmd', 'com.apple.assistantd',
+                 'com.apple.biomesyncd', 'com.apple.biomed')
 CONTAINERS = ('Bundle', 'Data/System', 'Shared/SystemGroup', 'Temp')
 
 

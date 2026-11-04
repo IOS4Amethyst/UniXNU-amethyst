@@ -1,0 +1,33 @@
+name: iOS 27 iPhone15,4 root pins
+
+# Reads the APFS volume UUIDs and raw-disk SHA-256 of the iPhone15,4 iOS 27.0.1
+# OS and Cryptex1,SystemOS images (AEA-encrypted, so macOS) for the
+# ios-27.0.1-24A446 profile. Only the JSON report is uploaded.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios27-iphone15-pins]
+    paths:
+      - .github/workflows/ios27-root-pins.yml
+      - scripts/ios27/root-pins.py
+
+permissions:
+  contents: read
+
+jobs:
+  pins:
+    runs-on: macos-15-intel
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          brew install blacktop/tap/ipsw
+          ipsw version
+          df -h "$RUNNER_TEMP" .
+      - name: Measure
+        run: python3 scripts/ios27/root-pins.py "$RUNNER_TEMP/ios27"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios27-iphone15-root-pins
+          path: root-pins.json

@@ -21,7 +21,10 @@ on:
       unixnu_ref:
         description: rootstockos/UniXNU ref (Turnip, bridge and Metal frontend sources)
         required: true
-        default: asteroids-dev
+        # amethyst: pinned. asteroids-dev from 2026-10-31 22:12 on (the branch merges, then priority rings 769d533) has Turnip
+        # patches against a newer NativeAdreno ABI (NativeAdrenoAbiPriority, NativeAdrenoMethodNote) than drivers/Adreno740
+        # 5e2b23e, which amethyst's kernel runs; f2ce6cce45 (AdrenoMetal 13b40af, asteroids T80) is the last without them.
+        default: f2ce6cce45989ebbd29ab305f9c9678f1df2633a
       runner:
         description: Hosted runner (macos-26 is arm64; macos-26-intel when the arm64 pool has no capacity)
         type: choice
@@ -61,7 +64,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: rootstockos/UniXNU
-          ref: ${{ inputs.unixnu_ref || 'asteroids-dev' }}
+          ref: ${{ inputs.unixnu_ref || 'f2ce6cce45989ebbd29ab305f9c9678f1df2633a' }}
           path: unixnu
           persist-credentials: false
 

@@ -1,0 +1,32 @@
+--- a/libkern/c++/OSKext.cpp
++++ b/libkern/c++/OSKext.cpp
+@@ -1714,6 +1714,29 @@
+ 	OSKext::resetAfterUserspaceReboot();
+ }
+ 
++// Match OSKext::load's lock order while registering built-in board classes.
++extern "C" OSReturn OSKextRegisterBoardClasses(const char *, void (*)(void));
++extern "C" OSReturn
++OSKextRegisterBoardClasses(const char *identifier, void (*constructors)(void))
++{
++	if (!identifier || !constructors) {
++		return kOSReturnError;
++	}
++	OSReturn result = kOSKextReturnNoMemory;
++	if (sKextLock) {
++		IORecursiveLockLock(sKextLock);
++	}
++	void *handle = OSMetaClass::preModLoad(identifier);
++	if (handle) {
++		constructors();
++		result = OSMetaClass::postModLoad(handle);
++	}
++	if (sKextLock) {
++		IORecursiveLockUnlock(sKextLock);
++	}
++	return result;
++}
++
+ /*
+  * Remove daemon exit requests from sKernelRequests
+  *

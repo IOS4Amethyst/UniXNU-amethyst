@@ -10,6 +10,9 @@ _PE_parse_boot_argn
 ___stack_chk_fail
 ___stack_chk_guard
 ___ubsan_handle_add_overflow_minimal
+_amethyst_touch_snapshot
+_amethyst_touch_snapshot_count
+_amethyst_touch_snapshot_rows
 _boot_diag_errors
 _boot_diag_files
 _boot_diag_scan

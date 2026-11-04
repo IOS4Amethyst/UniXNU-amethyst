@@ -63,7 +63,7 @@ if __name__ == '__main__':
     if 'arguments' not in record:
         record = record['jobs'][0] if 'jobs' in record else record
     objects = []
-    for name in ('BootLog.c', 'BootLogStandins.c'):
+    for name in ('BootLog.c', 'BootLogStandins.c', 'AmethystCpuIdle.c'):
         obj = KIT / (Path(name).stem + '.o')
         objects.append(compile_command(record, KIT / name, obj, FLAGS, True))
         print('PASS: compiled', name)

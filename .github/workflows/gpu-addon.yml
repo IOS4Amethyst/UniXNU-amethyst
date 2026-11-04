@@ -12,6 +12,10 @@ name: GPU addon
 #   openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in gpu-addon.tar.gz.enc -pass file:KEYFILE | tar xz
 
 on:
+  # amethyst: also on pushes to this branch (a workflow_dispatch workflow is only dispatchable once it is on the default
+  # branch); a push run takes the inputs' defaults below.
+  push:
+    branches: [gpu-addon]
   workflow_dispatch:
     inputs:
       unixnu_ref:
@@ -39,12 +43,12 @@ concurrency:
 
 jobs:
   addon:
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'macos-26' }}
     # amethyst keeps ARTIFACT_PASSPHRASE as a secret of the environment of the same name (not a repository secret)
     environment: ARTIFACT_PASSPHRASE
     timeout-minutes: 180
     env:
-      DEVELOPER_DIR: /Applications/Xcode_${{ inputs.xcode }}.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode_${{ inputs.xcode || '26.6' }}.app/Contents/Developer
     steps:
       - name: Check out the device repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -57,7 +61,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: rootstockos/UniXNU
-          ref: ${{ inputs.unixnu_ref }}
+          ref: ${{ inputs.unixnu_ref || 'asteroids-dev' }}
           path: unixnu
           persist-credentials: false
 
@@ -110,9 +114,9 @@ jobs:
           abi=$(shasum -a 256 ../device/drivers/Adreno740/NativeAdrenoABI.h | cut -c1-16)
           # mesa-venv links to setup-python's interpreter, so a new Python starts the Turnip cache over.
           py=$(python3 -c 'import platform; print(platform.python_version())')
-          echo "turnip=turnip-${{ runner.arch }}-xcode${{ inputs.xcode }}-py$py-$mesa" >> "$GITHUB_OUTPUT"
+          echo "turnip=turnip-${{ runner.arch }}-xcode${{ inputs.xcode || '26.6' }}-py$py-$mesa" >> "$GITHUB_OUTPUT"
           echo "abi=$abi" >> "$GITHUB_OUTPUT"
-          echo "bridge=bridge-${{ runner.arch }}-xcode${{ inputs.xcode }}-${{ hashFiles('unixnu/scripts/data/gpu-metal-vulkan-inputs.json', 'unixnu/drivers/AdrenoMetal/bridge/**') }}" >> "$GITHUB_OUTPUT"
+          echo "bridge=bridge-${{ runner.arch }}-xcode${{ inputs.xcode || '26.6' }}-${{ hashFiles('unixnu/scripts/data/gpu-metal-vulkan-inputs.json', 'unixnu/drivers/AdrenoMetal/bridge/**') }}" >> "$GITHUB_OUTPUT"
 
       - name: Restore Turnip
         id: turnip-cache

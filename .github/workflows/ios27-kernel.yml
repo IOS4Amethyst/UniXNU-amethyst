@@ -1,6 +1,6 @@
 # iOS 27 (iPhone15,4, 27.0.1 24A446) kernel build for amethyst: macos.yml with `--os ios-27.0.1-24A446` and UniXNU from
 # IOS4Amethyst/UniXNU ios27-iphone15 (upstream main 82b847c + the profile). Kernel only for now: the iPadOS 17 payload and
-# userdata steps stay off. Runs on pushes to this branch (a dispatch-only workflow is only listed once it is on main).
+# userdata steps stay off; the iPadOS 17 bootstrap candidate step of macos.yml is left out. Runs on pushes to this branch (a dispatch-only workflow is only listed once it is on main).
 name: iOS 27 kernel
 
 on:
@@ -76,14 +76,6 @@ jobs:
             brew install unifdef
             echo "$(brew --prefix unifdef)/bin" >> "$GITHUB_PATH"
           fi
-
-      - name: Build bootstrap candidate
-        working-directory: ./unixnu-core
-        env:
-          DEVICE_DIR: ${{ github.workspace }}
-        run: |
-          chmod +x "$DEVICE_DIR/scripts/ci-bootstrap-candidate.sh"
-          bash "$DEVICE_DIR/scripts/ci-bootstrap-candidate.sh"
 
       - name: Select the device
         working-directory: ./unixnu-core

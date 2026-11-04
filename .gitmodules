@@ -11,3 +11,7 @@
 	path = drivers/ArmDTPlatform
 	url = https://github.com/IOS4Amethyst/ArmDTPlatform
 	branch = amethyst
+[submodule "drivers/Adreno740"]
+	path = drivers/Adreno740
+	url = https://github.com/rootstockos/NativeAdreno.git
+	branch = asteroids

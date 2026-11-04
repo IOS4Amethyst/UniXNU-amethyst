@@ -40,6 +40,8 @@ concurrency:
 jobs:
   addon:
     runs-on: ${{ inputs.runner }}
+    # amethyst keeps ARTIFACT_PASSPHRASE as a secret of the environment of the same name (not a repository secret)
+    environment: ARTIFACT_PASSPHRASE
     timeout-minutes: 180
     env:
       DEVELOPER_DIR: /Applications/Xcode_${{ inputs.xcode }}.app/Contents/Developer

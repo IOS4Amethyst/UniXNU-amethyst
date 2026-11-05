@@ -8,6 +8,10 @@
 #include <mach/kmod.h>
 #include <pexpert/pexpert.h>
 
+#ifndef AMETHYST_PMGR_ARM64E
+#define AMETHYST_PMGR_ARM64E 0
+#endif
+
 extern "C" {
 extern kmod_info_t g_kernel_kmod_info;
 kern_return_t OSKextLoadKextWithIdentifier(const char *);
@@ -46,7 +50,12 @@ OSMetaClassConstructorInit(ShengPlatformPower, ApplePMGR, )
 OSDefineBasicStructors(ShengPlatformPower, ApplePMGR)
 void *ShengPlatformPower::operator new(size_t size) { return OSObject::operator new(size); }
 void ShengPlatformPower::operator delete(void *memory, size_t size) { OSObject::operator delete(memory, size); }
-static_assert(sizeof(ShengPlatformPower) == 0x4b8a8, "Exact original provider storage");
+static constexpr size_t originalProviderSize = AMETHYST_PMGR_ARM64E ? 0x738d8 : 0x4b8a8;
+static_assert(sizeof(ShengPlatformPower) == originalProviderSize, "Exact original provider storage");
+
+#if AMETHYST_PMGR_ARM64E
+#include "OriginalPMGRPAC.h"
+#endif
 
 static const OSMetaClass *lookup(const char *text)
 {
@@ -68,7 +77,7 @@ extern "C" void sheng_pmgr_run(void)
   kern_return_t result = OSKextLoadKextWithIdentifier("com.apple.driver.ApplePMGR");
   if (result) { sheng_pmgr_observation[1] = static_cast<uint32_t>(result); sheng_pmgr_checkpoint(); return; }
   const OSMetaClass *parent = lookup("ApplePMGR"), *nubMeta = lookup("ApplePMGRNub");
-  if (!parent || parent != &ApplePMGR::gMetaClass || parent->getClassSize() != 0x4b8a8 ||
+  if (!parent || parent != &ApplePMGR::gMetaClass || parent->getClassSize() != originalProviderSize ||
       !nubMeta || nubMeta->getClassSize() != 0x740) { sheng_pmgr_checkpoint(); return; }
   sheng_pmgr_observation[2] = parent->getClassSize();
   void *handle = OSMetaClass::preModLoad(g_kernel_kmod_info.name);
@@ -79,6 +88,9 @@ extern "C" void sheng_pmgr_run(void)
   sheng_pmgr_observation[9] = ShengPlatformPower::gMetaClass.getInstanceCount();
   sheng_pmgr_observation[11] = nubMeta->getInstanceCount();
   ShengPlatformPower *provider = new ShengPlatformPower;
+#if AMETHYST_PMGR_ARM64E
+  if (provider) installOriginalPMGRTable(provider);
+#endif
   IORegistryEntry *description = new IORegistryEntry;
   IOService *nub = nullptr;
   do {

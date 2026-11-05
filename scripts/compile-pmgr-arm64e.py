@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Two-pass PMGR compilation in an assembled iOS 27 tree; does not publish an archive."""
+"""Two-pass PMGR compilation and optional late-registration archive for iPhone15,4."""
 import argparse
 import importlib.util
 import json
+import hashlib
 from pathlib import Path
 import subprocess
 import sys
@@ -12,6 +13,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--tree', type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument('--kernelcache', type=Path, required=True)
+    parser.add_argument('--archive', action='store_true', help='Emit the qualified-profile late-registration archive')
     args = parser.parse_args()
     tree = args.tree.resolve()
     out = tree / 'build/sheng-platform-power-arm64e'
@@ -62,6 +64,36 @@ def main():
     audit_command[-1] = str(final)
     report = subprocess.check_output(audit_command, text=True)
     (out / 'object-audit.json').write_text(report)
+    if args.archive:
+        sys.path.insert(0, str(tree / 'kits/XnuPrelink'))
+        from kc_image import Image
+        data = args.kernelcache.read_bytes()
+        audit.require(hashlib.sha256(data).hexdigest() == audit.PIN, 'Kernelcache changed after audit')
+        undefined = set(subprocess.check_output(['llvm-nm', '--undefined-only', str(final)], text=True).split())
+        bindings = audit.lifecycle_bindings(Image(data), undefined, -0x1000000)
+        assembly = out / 'original-bindings.S'
+        assembly.write_text(''.join(f'.globl {name}\n.set {name}, {address:#x}\n' for name, address in bindings.items()))
+        binding_object = out / 'original-bindings.o'
+        subprocess.run(['xcrun', 'clang', '-target', 'arm64e-apple-ios27.0', '-c', str(assembly),
+                        '-o', str(binding_object)], check=True)
+        late = out / 'ShengPlatformPower.late.o'
+        subprocess.run(['llvm-objcopy', '--remove-section=__DATA,__mod_init_func',
+                        '--globalize-symbol=__GLOBAL__sub_I_ShengPlatformPower.cpp', str(final), str(late)], check=True)
+        audit.require(audit.object_table(late, '__ZTV18ShengPlatformPower') == second,
+                      'Late-registration rewrite changed vtable symbols or PAC metadata')
+        for object_path, dump in ((final, out / 'before.text'), (late, out / 'after.text')):
+            subprocess.run(['llvm-objcopy', f'--dump-section=__TEXT,__text={dump}', str(object_path)], check=True)
+        audit.require((out / 'before.text').read_bytes() == (out / 'after.text').read_bytes(),
+                      'Late-registration rewrite changed instructions')
+        # Publish only after both compilation and object rewriting succeed.
+        archive = out / 'libShengPlatformPower.a'
+        temporary = out / 'libShengPlatformPower.pending.a'
+        temporary.unlink(missing_ok=True)
+        subprocess.run(['xcrun', 'ar', 'rcs', str(temporary), str(late), str(binding_object)], check=True)
+        temporary.replace(archive)
+        (out / 'bindings.json').write_text(json.dumps({n: hex(v) for n, v in bindings.items()}, indent=2) + '\n')
+        print(f'PASS: late-registration archive emitted: {archive}; link/runtime unverified')
+        return
     print(f'PASS: two-pass 439-slot object audited: {final}; lifecycle bindings/archive still pending')
 
 

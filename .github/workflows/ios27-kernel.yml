@@ -105,7 +105,7 @@ jobs:
           PY
           python3 "$GITHUB_WORKSPACE/scripts/compile-pmgr-arm64e.py" \
             --tree "out/amethyst/$OS_PROFILE/amethyst/tree" \
-            --kernelcache out/ipsw/24A446/kernelcache.decompressed
+            --kernelcache out/ipsw/24A446/kernelcache.decompressed --archive
 
       - name: Build payload
         if: inputs.build_payload

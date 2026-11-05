@@ -10,6 +10,30 @@ import sys
 PIN = 'b508b34e17ded04ea54c51399bc486592fb75b8d4629b9bf0c30fbc36d0071b2'
 
 
+def lifecycle_bindings(image, undefined, slide):
+    require(slide == -0x1000000, 'Only the qualified iPhone profile slide is supported')
+    bindings = {
+        '__ZN9ApplePMGRC2EPK11OSMetaClass': 0xfffffff008feb7bc,
+        '__ZN9ApplePMGRD2Ev': 0xfffffff008feb98c,
+        '__ZN9ApplePMGR10gMetaClassE': 0xfffffff00b03a960,
+        '_sheng_original_pmgr_nub_create': 0xfffffff00903da68,
+        '_sheng_original_pmgr_nub_read': 0xfffffff009041284,
+        '_sheng_original_pmgr_nub_write': 0xfffffff00903ecd4,
+    }
+    imports = {name for name in undefined if 'ApplePMGR' in name or name.startswith('_sheng_original_pmgr_')}
+    require(imports == set(bindings), f'Unexpected PMGR imports: {sorted(imports ^ set(bindings))}')
+    for start, end, digest in (
+        (0xfffffff008feb7bc, 0xfffffff008feb98c, '97b185ada8331c2d25e00e15fd0942738f96c3a8201725c1ec9642db17f2d55d'),
+        (0xfffffff00903da68, 0xfffffff00903db1c, 'ae99db3dd5b6738184e0ca2c9b92d0a54765f38176f89202397f337ce05ed7af'),
+        (0xfffffff00903db1c, 0xfffffff00903e428, 'd0094f0e8d802d8e93c395d72f8c127177747eb20ace0b4dcb256ad67d112951'),
+    ):
+        require(hashlib.sha256(image.read(start, end - start)).hexdigest() == digest,
+                f'PMGR lifecycle fingerprint mismatch at {start:#x}')
+    require(image.read(0xfffffff008feb98c, 8) == struct.pack('<2I', 0xd503245f, 0x14014227),
+            'Nonvirtual destructor must tail-call ApplePMGRBase destructor')
+    return {name: address + slide for name, address in bindings.items()}
+
+
 def abi_headers():
     """Opaque declarations preserve the original inheritance and vtable order.
 

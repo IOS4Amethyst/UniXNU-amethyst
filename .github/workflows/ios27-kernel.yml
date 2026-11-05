@@ -72,6 +72,7 @@ jobs:
       - name: Install host tools
         run: |
           brew install llvm lld mtools dtc
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
           if ! command -v unifdef >/dev/null; then
             brew install unifdef
             echo "$(brew --prefix unifdef)/bin" >> "$GITHUB_PATH"

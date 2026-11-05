@@ -86,7 +86,7 @@ static void installOriginalPMGRTable(ShengPlatformPower *provider)
   installed = true;
   __asm__ volatile("dmb ish" ::: "memory");
   *reinterpret_cast<void **>(provider) = ptrauth_sign_unauthenticated(
-      copy, ptrauth_key_process_independent_data,
+      &copy[0], ptrauth_key_process_independent_data,
       ptrauth_blend_discriminator(provider, 0xcda1));
 }
 '''

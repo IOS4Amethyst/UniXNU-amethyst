@@ -2,6 +2,7 @@
 """Prepare hash-pinned raw iPhone root images on macOS for policy signing."""
 import argparse
 import hashlib
+import json
 import platform
 import plistlib
 from pathlib import Path
@@ -47,8 +48,16 @@ def main():
         dmg = source.disk_image(component)
         attached = plistlib.loads(subprocess.check_output([
             'hdiutil', 'attach', '-plist', '-nomount', '-readonly', '-noverify', '-noautofsck', str(dmg)]))
-        disks = whole_image_disks(attached['system-entities'], lambda disk: plistlib.loads(
-            subprocess.check_output(['diskutil', 'info', '-plist', disk])))
+        def inspect(disk):
+            info = plistlib.loads(subprocess.check_output(['diskutil', 'info', '-plist', disk]))
+            fields = ('Whole', 'DeviceNode', 'BusProtocol', 'Writable', 'MediaReadOnly',
+                      'VolumeReadOnly', 'VirtualOrPhysical', 'DiskImage', 'TotalSize',
+                      'Content', 'ParentWholeDisk')
+            print(json.dumps({'disk': disk, 'properties': {k: info.get(k) for k in fields},
+                              'available_keys': sorted(info)}, sort_keys=True), flush=True)
+            return info
+        print(json.dumps({'attachment_entities': attached['system-entities']}, default=str), flush=True)
+        disks = whole_image_disks(attached['system-entities'], inspect)
         if len(disks) != 1:
             # Detach only devices returned by our own image attachment.
             for disk in dict.fromkeys(e.get('dev-entry', '') for e in attached['system-entities']):

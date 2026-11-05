@@ -1,0 +1,77 @@
+name: iOS 27 iPhone root policies
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios27]
+    paths:
+      - .github/workflows/ios27-root-policies.yml
+      - scripts/build-ios27-root-policies.py
+      - scripts/prepare-ios27-root-images.py
+
+permissions:
+  contents: read
+
+jobs:
+  policies:
+    runs-on: macos-15-intel
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: IOS4Amethyst/UniXNU
+          ref: ios27-iphone15
+          path: unixnu-core
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/VerifiedRoot
+          ref: def026642c6c6e71be0dea267d989df1d29ddc64
+          path: verified-root
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Provision owner signing key
+        env:
+          OWNER_KEY: ${{ secrets.IOS27_ROOT_OWNER_KEY }}
+        run: |
+          test -n "$OWNER_KEY" || { echo 'Missing IOS27_ROOT_OWNER_KEY repository secret'; exit 1; }
+          umask 077
+          mkdir "$RUNNER_TEMP/ios27-owner"
+          printf '%s\n' "$OWNER_KEY" > "$RUNNER_TEMP/ios27-owner/owner.pem"
+          openssl pkey -in "$RUNNER_TEMP/ios27-owner/owner.pem" -pubout -out "$RUNNER_TEMP/ios27-owner/public.pem"
+      - name: Install image tools and build verifier
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          brew install openssl@3
+          gh release download v3.1.741 -R blacktop/ipsw -p 'ipsw_3.1.741_macOS_x86_64.tar.gz' -D "$RUNNER_TEMP/ipsw"
+          tar -xzf "$RUNNER_TEMP/ipsw/ipsw_3.1.741_macOS_x86_64.tar.gz" -C "$RUNNER_TEMP/ipsw"
+          echo "$RUNNER_TEMP/ipsw" >> "$GITHUB_PATH"
+          xcrun clang -std=c11 -Wall -Wextra -Werror -dynamiclib \
+            -I verified-root/include -I "$(brew --prefix openssl@3)/include" \
+            verified-root/src/verified_root.c verified-root/tests/openssl_provider.c \
+            -L "$(brew --prefix openssl@3)/lib" -lcrypto -o "$RUNNER_TEMP/verified-root.dylib"
+      - name: Prepare exact raw images
+        run: python3 scripts/prepare-ios27-root-images.py --core unixnu-core --output "$RUNNER_TEMP/ios27-images"
+      - name: Sign and verify every image block
+        run: |
+          python3 scripts/build-ios27-root-policies.py \
+            --profile unixnu-core/profiles/os/ios-27.0.1-24A446/profile.toml \
+            --verified-root verified-root --library "$RUNNER_TEMP/verified-root.dylib" \
+            --private-key "$RUNNER_TEMP/ios27-owner/owner.pem" --public-key "$RUNNER_TEMP/ios27-owner/public.pem" \
+            --os-image "$RUNNER_TEMP/ios27-images/OS.raw" --systemos-image "$RUNNER_TEMP/ios27-images/SystemOS.raw" \
+            --output "$RUNNER_TEMP/ios27-policies"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios27-iphone15-root-policies
+          path: |
+            ${{ runner.temp }}/ios27-policies/*/manifest.bin
+            ${{ runner.temp }}/ios27-policies/*/manifest.header.bin
+            ${{ runner.temp }}/ios27-policies/*/trusted-key.bin
+            ${{ runner.temp }}/ios27-policies/*/verification.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove temporary owner key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/ios27-owner/owner.pem"

@@ -44,6 +44,12 @@ switch = {'NativeAdreno': 'XNU_NATIVE_ADRENO', 'NativeVirtioBlock': 'XNU_NATIVE_
 if switch and os.environ.get(switch) == '0':
     print(f'build-arm-driver: {identifier} skipped ({switch} is off)')
     sys.exit(0)
+# amethyst: on the source-storage path build-sheng-source-storage.py compiles the same driver with the
+# source API enabled and publishes build/sheng-ufs/libShengUfs.a itself. Rebuilding it here would
+# overwrite that archive with a build that has no native_ufs_source_create().
+if component == 'ShengUfs' and 'build-sheng-source-storage.py' in (ROOT / 'board.toml').read_text():
+    print(f'build-arm-driver: {identifier} skipped (build-sheng-source-storage.py owns libShengUfs.a)')
+    sys.exit(0)
 recipe = ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/IOPlatformExpert.cpo.json'
 record = json.loads(recipe.read_text().strip().rstrip(','))
 directory = 'GopFramebuffer' if runtime in ('NativeLegacyDisplay', 'NativeGOPPresenter') else 'AdrenoMetal' if runtime in ('NativeOfflineGPU', 'NativeOfflineAccelerator', 'NativeIOGPUProviderProbe') else identifier

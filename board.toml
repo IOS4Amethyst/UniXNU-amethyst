@@ -34,7 +34,7 @@ archives = [
   "build-libpthread-kernel.py",
   "build-amethyst-platform-power.py",
   "component:ShengUfs",
-  "build-ufs-original-bindings.py --candidate build/xnu-prelink/bootstrap-candidate.macho",
+  "build-sheng-source-storage.py --policy-dir scripts/policies/ios-27.0.1-24A446",
   "component:SoftwareAES",
   "build-native-aes-bindings.py",
   "component:RamBlock",
@@ -85,6 +85,10 @@ volume = "AMETHYSTESP"
 size_mib = 80
 loader = "firmware"
 title = "iPadOS for amethyst"
+# Source storage authenticates each root read against the owner-signed policy bundle written by
+# build-sheng-source-storage.py from scripts/policies/ios-27.0.1-24A446 (544-byte signed headers;
+# the full block tables remain a local input of the userdata image).
+root_policies = "{tree}/build/sheng-source-storage/root-policies.bin"
 dram_size = "0x1FFE00000"
 # Match hardware-working kernel87: retain native text console without binary
 # entry/MMU/panic detours (panic_screen also installs the colour-bar probes).
@@ -96,9 +100,11 @@ kernel_args = [
   "-enable_kprintf_spam",
   "-textconsole",
   "sheng-pmgr=2",
-  # Controller/SMMU takeover is not yet qualified on SM7635. Observation only.
-  "native-ufs-root=0",
-  "native-ufs-allow-unverified=1",
+  # Source storage (build-sheng-source-storage.py) starts the UFS driver from its own
+  # module-init pass after the original IOStorageFamily loads, so the personality stays
+  # observation-only here. Persistence and logging stay off for the first root read.
+  "native-source-storage=1",
+  "native-ufs-root=1",
   "offline-apfs-load=1",
   "-apfs_shared_datavolume",
   "sheng-data-persist=0",

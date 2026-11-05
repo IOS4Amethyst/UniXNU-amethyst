@@ -2,3 +2,6 @@
 arch:../../../patches/xnu/zzzzz-video-console-physical-fb.patch
 arch:../../../patches/xnu/zzzzzz-video-console-text.patch
 early-text-console.patch
+# Starts the source storage runtime after vfsinit (bsd/kern/bsd_init.c); the symbol is weak, so a
+# build without build-sheng-source-storage.py links unchanged. Copied from UniXNU/UniXNU-sheng.
+source-storage-runtime.patch

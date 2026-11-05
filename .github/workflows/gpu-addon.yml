@@ -1,5 +1,5 @@
 # amethyst: rootstockos/UniXNU-asteroids .github/workflows/gpu-addon.yml (checkout bbf26b0) with --no-audio (amethyst has no
-# audio driver) and amethyst artifact names. amethyst's GPU runs the same NativeAdreno (drivers/Adreno740 at 5e2b23e, asteroids'
+# audio driver) and amethyst artifact names. amethyst's GPU runs the same NativeAdreno (drivers/Adreno740 at 38227e7, asteroids'
 # pin) and the same iPadOS 17.7.11 image, so the plugin, Turnip ABI, prime list and original trust bundle are asteroids' inputs.
 # Hardware: GPU power modes 1-16 pass on amethyst (V31-V42: GMU cold start, GX on, CP, zap, first IB, a bar drawn on the panel).
 name: GPU addon
@@ -21,10 +21,10 @@ on:
       unixnu_ref:
         description: rootstockos/UniXNU ref (Turnip, bridge and Metal frontend sources)
         required: true
-        # amethyst: pinned. asteroids-dev from 2026-10-31 22:12 on (the branch merges, then priority rings 769d533) has Turnip
-        # patches against a newer NativeAdreno ABI (NativeAdrenoAbiPriority, NativeAdrenoMethodNote) than drivers/Adreno740
-        # 5e2b23e, which amethyst's kernel runs; f2ce6cce45 (AdrenoMetal 13b40af, asteroids T80) is the last without them.
-        default: f2ce6cce45989ebbd29ab305f9c9678f1df2633a
+        # amethyst: pinned to asteroids-dev bd4766ae (2026-11-05). drivers/Adreno740 is at asteroids' 38227e7, which only declares
+        # upstream's SetPriority and Note methods for Turnip (asteroids 50c58c1); f2ce6cce45 (the V45-V51 add-on) drew garbled text
+        # and icons on amethyst and hung the GPU (V51).
+        default: bd4766ae2cc27035a4c0f96360a5dd74a2e5b858
       runner:
         description: Hosted runner (macos-26 is arm64; macos-26-intel when the arm64 pool has no capacity)
         type: choice
@@ -64,7 +64,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: rootstockos/UniXNU
-          ref: ${{ inputs.unixnu_ref || 'f2ce6cce45989ebbd29ab305f9c9678f1df2633a' }}
+          ref: ${{ inputs.unixnu_ref || 'bd4766ae2cc27035a4c0f96360a5dd74a2e5b858' }}
           path: unixnu
           persist-credentials: false
 

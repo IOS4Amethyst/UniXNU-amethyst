@@ -58,6 +58,14 @@ DISABLED_JOBS = ('com.apple.identityservicesd', 'com.apple.locationd', 'com.appl
                  'com.apple.fitcored', 'com.apple.liveactivitiesd', 'com.apple.privacyaccountingd',
                  'com.apple.ScreenTimeAgent', 'com.apple.dmd', 'com.apple.assistantd',
                  'com.apple.biomesyncd', 'com.apple.biomed')
+# GPU compositing (amethyst v48/v49): with the Metal plugin published, backboardd allocated Apple-compressed
+# framebuffers ('b3a8', two planes), which the GOP display path cannot scan out, so every swap failed verify_swap
+# and the screen stayed black. UniXNU add-gpu-plugin-data.py --publish and make-data-seed.py set these three for
+# backboardd and the global domain, for mobile and root; the render server reads them at launch.
+CA_FRAMEBUFFER = {'CAEnableDeepFramebuffer': False, 'CAEnableFramebufferCompression': False,
+                  'CAEnableIOSurfaceCompression': False}
+for _domain in ('backboardd', '.GlobalPreferences'):
+    PREFERENCES[_domain] = dict(CA_FRAMEBUFFER)
 CONTAINERS = ('Bundle', 'Data/System', 'Shared/SystemGroup', 'Temp')
 
 
@@ -118,6 +126,25 @@ def write_preferences(var):
         assert plistlib.loads(path.read_bytes()) == data
         assert path.stat().st_uid == MOBILE and path.stat().st_gid == MOBILE
         written[name] = sorted(values)
+    root_prefs = var / 'root/Library/Preferences'
+    if (var / 'root').is_dir() and not (var / 'root').is_symlink():
+        for part in (var / 'root/Library', root_prefs):
+            if part.is_symlink():
+                raise ValueError(f'refusing symlink {part}')
+        root_prefs.mkdir(parents=True, exist_ok=True)
+        for domain in ('backboardd', '.GlobalPreferences'):
+            path = root_prefs / (domain + '.plist')
+            if path.is_symlink():
+                raise ValueError(f'refusing symlink {path}')
+            previous = plistlib.loads(path.read_bytes()) if path.exists() else {}
+            data = merged(previous, CA_FRAMEBUFFER)
+            staged = path.with_suffix('.plist.new')
+            with staged.open('xb') as stream:
+                plistlib.dump(data, stream, fmt=plistlib.FMT_BINARY)
+            os.chown(staged, 0, 0)
+            staged.chmod(0o600)
+            staged.replace(path)
+            written['root:' + domain] = sorted(CA_FRAMEBUFFER)
     created = []
     for sub in CONTAINERS:
         d = var / 'containers' / sub
@@ -147,6 +174,7 @@ def check():
         if os.geteuid() == 0:
             written, created = write_preferences(var)
             assert set(written) == set(PREFERENCES) and created == list(CONTAINERS)
+            assert plistlib.loads((var / 'mobile/Library/Preferences/backboardd.plist').read_bytes())['CAEnableFramebufferCompression'] is False
             again = plistlib.loads((var / 'mobile/Library/Preferences/com.apple.purplebuddy.plist').read_bytes())
             assert again['SetupFinishedAllSteps'] is True
             (var / 'db/com.apple.xpc.launchd').mkdir(parents=True)

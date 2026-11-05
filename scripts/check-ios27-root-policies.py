@@ -7,6 +7,19 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import importlib.util
+
+spec = importlib.util.spec_from_file_location('prepare', Path(__file__).with_name('prepare-ios27-root-images.py'))
+prepare = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(prepare)
+entities = [{'dev-entry': '/dev/disk2', 'content-hint': 'Apple_APFS'},
+            {'dev-entry': '/dev/disk2s1'}, {'dev-entry': '/dev/disk2'}]
+def inspect(disk):
+    assert disk == '/dev/disk2'
+    return {'Whole': True, 'DeviceNode': disk, 'BusProtocol': 'Disk Image', 'Writable': False}
+assert prepare.whole_image_disks(entities, inspect) == ['/dev/disk2']
+assert prepare.whole_image_disks(entities, lambda disk: dict(inspect(disk), Writable=True)) == []
+assert prepare.whole_image_disks(entities, lambda disk: dict(inspect(disk), BusProtocol='USB')) == []
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--verified-root', type=Path, required=True)

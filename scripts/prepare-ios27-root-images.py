@@ -7,8 +7,22 @@ import plistlib
 from pathlib import Path
 import subprocess
 import sys
+import re
 import tomllib
 from types import SimpleNamespace
+
+
+def whole_image_disks(entities, inspect):
+    """hdiutil content hints vary; select actual whole read-only image media."""
+    disks = []
+    for disk in dict.fromkeys(e.get('dev-entry') for e in entities):
+        if not disk or not re.fullmatch(r'/dev/disk\d+', disk):
+            continue
+        info = inspect(disk)
+        if (info.get('Whole') is True and info.get('DeviceNode') == disk and
+                info.get('BusProtocol') == 'Disk Image' and info.get('Writable') is False):
+            disks.append(disk)
+    return disks
 
 
 def main():
@@ -33,13 +47,13 @@ def main():
         dmg = source.disk_image(component)
         attached = plistlib.loads(subprocess.check_output([
             'hdiutil', 'attach', '-plist', '-nomount', '-readonly', '-noverify', '-noautofsck', str(dmg)]))
-        disks = [e['dev-entry'] for e in attached['system-entities']
-                 if e.get('content-hint') == 'GUID_partition_scheme']
+        disks = whole_image_disks(attached['system-entities'], lambda disk: plistlib.loads(
+            subprocess.check_output(['diskutil', 'info', '-plist', disk])))
         if len(disks) != 1:
             # Detach only devices returned by our own image attachment.
-            for entry in attached['system-entities']:
-                if entry.get('dev-entry'):
-                    subprocess.run(['hdiutil', 'detach', entry['dev-entry']], check=False)
+            for disk in dict.fromkeys(e.get('dev-entry', '') for e in attached['system-entities']):
+                if re.fullmatch(r'/dev/disk\d+', disk):
+                    subprocess.run(['hdiutil', 'detach', disk], check=False)
             raise SystemExit(f'{name}: expected one whole virtual disk')
         disk = disks[0]
         partial = output / f'{name}.raw.partial'

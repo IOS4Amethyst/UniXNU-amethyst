@@ -12,12 +12,27 @@ When a candidate exists, every check runs as on sheng.
 """
 import hashlib
 import json
+import os
 from pathlib import Path
+import shutil
 import struct
 import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+if os.environ.get('UNIXNU_XNU_ARCH') == 'arm64e':
+    cache = os.environ.get('UNIXNU_KERNELCACHE')
+    if not cache or not Path(cache).is_file():
+        raise SystemExit('arm64e PMGR requires UNIXNU_KERNELCACHE pointing to the pinned decompressed image')
+    subprocess.run([sys.executable, str(ROOT / 'scripts/compile-pmgr-arm64e.py'),
+                    '--tree', str(ROOT), '--kernelcache', cache, '--archive'], check=True)
+    destination = ROOT / 'build/sheng-platform-power/libShengPlatformPower.a'
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix('.pending.a')
+    shutil.copyfile(ROOT / 'build/sheng-platform-power-arm64e/libShengPlatformPower.a', temporary)
+    temporary.replace(destination)
+    print(f'PASS: published audited arm64e PMGR archive: {destination}')
+    raise SystemExit(0)
 OUT = ROOT / 'build/sheng-platform-power'
 OUT.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(ROOT / 'kits/XnuPrelink'))

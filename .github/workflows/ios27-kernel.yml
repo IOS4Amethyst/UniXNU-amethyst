@@ -82,14 +82,7 @@ jobs:
         working-directory: ./unixnu-core
         run: ./unixnu defconfig "$DEFCONFIG" --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
 
-      - name: Build kernel
-        working-directory: ./unixnu-core
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: ./unixnu build kernel --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
-
-      - name: Compile arm64e PMGR candidate
-        if: ${{ !cancelled() && hashFiles('unixnu-core/out/**/tree/build/xnu/ios-obj/**/IOPMGR.cpo') != '' }}
+      - name: Prepare pinned PMGR kernelcache
         working-directory: ./unixnu-core
         run: |
           python3 - <<'PY'
@@ -104,9 +97,13 @@ jobs:
           source = Ipsw(ctx, spec=profile['ipsw']['url'])
           print(kernelcache(ctx, source))
           PY
-          python3 "$GITHUB_WORKSPACE/scripts/compile-pmgr-arm64e.py" \
-            --tree "out/amethyst/$OS_PROFILE/amethyst/tree" \
-            --kernelcache out/ipsw/24A446/kernelcache.decompressed --archive
+          echo "UNIXNU_KERNELCACHE=$GITHUB_WORKSPACE/unixnu-core/out/ipsw/24A446/kernelcache.decompressed" >> "$GITHUB_ENV"
+
+      - name: Build kernel
+        working-directory: ./unixnu-core
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./unixnu build kernel --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
 
       - name: Build payload
         if: inputs.build_payload

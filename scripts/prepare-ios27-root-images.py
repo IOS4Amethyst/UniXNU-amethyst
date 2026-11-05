@@ -20,7 +20,8 @@ def whole_image_disks(entities, inspect):
         if not disk or not re.fullmatch(r'/dev/disk\d+', disk):
             continue
         info = inspect(disk)
-        if (info.get('Whole') is True and info.get('DeviceNode') == disk and
+        if (info.get('WholeDisk') is True and not info.get('APFSPhysicalStores') and
+                info.get('DeviceNode') == disk and
                 info.get('BusProtocol') == 'Disk Image' and info.get('Writable') is False):
             disks.append(disk)
     return disks
@@ -50,7 +51,7 @@ def main():
             'hdiutil', 'attach', '-plist', '-nomount', '-readonly', '-noverify', '-noautofsck', str(dmg)]))
         def inspect(disk):
             info = plistlib.loads(subprocess.check_output(['diskutil', 'info', '-plist', disk]))
-            fields = ('Whole', 'DeviceNode', 'BusProtocol', 'Writable', 'MediaReadOnly',
+            fields = ('WholeDisk', 'APFSPhysicalStores', 'DeviceNode', 'BusProtocol', 'Writable', 'MediaReadOnly',
                       'VolumeReadOnly', 'VirtualOrPhysical', 'DiskImage', 'TotalSize',
                       'Content', 'ParentWholeDisk')
             print(json.dumps({'disk': disk, 'properties': {k: info.get(k) for k in fields},

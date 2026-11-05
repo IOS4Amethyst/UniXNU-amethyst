@@ -16,10 +16,17 @@ entities = [{'dev-entry': '/dev/disk2', 'content-hint': 'Apple_APFS'},
             {'dev-entry': '/dev/disk2s1'}, {'dev-entry': '/dev/disk2'}]
 def inspect(disk):
     assert disk == '/dev/disk2'
-    return {'Whole': True, 'DeviceNode': disk, 'BusProtocol': 'Disk Image', 'Writable': False}
+    return {'WholeDisk': True, 'DeviceNode': disk, 'BusProtocol': 'Disk Image', 'Writable': False}
 assert prepare.whole_image_disks(entities, inspect) == ['/dev/disk2']
 assert prepare.whole_image_disks(entities, lambda disk: dict(inspect(disk), Writable=True)) == []
 assert prepare.whole_image_disks(entities, lambda disk: dict(inspect(disk), BusProtocol='USB')) == []
+assert prepare.whole_image_disks(entities, lambda disk: dict(inspect(disk), APFSPhysicalStores=[{'DeviceIdentifier': 'disk1'}])) == []
+assert prepare.whole_image_disks(entities, lambda disk: dict(inspect(disk), WholeDisk=False)) == []
+assert prepare.whole_image_disks(
+    entities + [{'dev-entry': '/dev/disk3'}],
+    lambda disk: inspect(disk) if disk == '/dev/disk2' else {
+        'WholeDisk': True, 'DeviceNode': disk, 'BusProtocol': 'Disk Image', 'Writable': False,
+        'APFSPhysicalStores': [{'DeviceIdentifier': 'disk2'}]}) == ['/dev/disk2']
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--verified-root', type=Path, required=True)

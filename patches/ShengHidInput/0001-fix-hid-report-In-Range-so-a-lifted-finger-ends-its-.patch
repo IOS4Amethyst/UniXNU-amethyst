@@ -1,0 +1,57 @@
+From d1ffc9dcb75ed691c1fb414aad34b7f4edd44424 Mon Sep 17 00:00:00 2001
+From: Allan Zhang <bluekyeet@bluedmc.xyz>
+Date: Sat, 7 Nov 2026 09:37:20 +1300
+Subject: [PATCH] fix(hid): report In Range so a lifted finger ends its touch
+
+The finger collection had Tip Switch and Touch Valid but no In Range.
+iOS took a lift (tip up) for a hovering finger and kept the touch alive,
+so the next press with the same contact ID continued it: on amethyst
+(V55) a tap on Settings reopened the Search a previous drag had opened.
+
+In Range (0x32) is 1 while the finger is down and 0 on its lift, the
+padding shrinks from 6 bits to 5. Tested on amethyst V56-V60.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ NativeHidInput.cpp | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/NativeHidInput.cpp b/NativeHidInput.cpp
+index 0ec71df..91f4f6f 100644
+--- a/NativeHidInput.cpp
++++ b/NativeHidInput.cpp
+@@ -47,9 +47,12 @@ static const unsigned char descriptor[]={
+ // Report 3: ten-finger Touch Screen collection (Tip Switch, Touch Valid, Contact Identifier, X, Y per finger, then Contact Count).
+ // Touch Valid (0x47) is the finger confidence: IOHIDEventDriver turns a finger transducer whose value is 0 into a hand (palm), which
+ // multi-finger and system edge gestures ignore, so every finger, down or lifting, sends 1.
++// amethyst: In Range (0x32) after it, 1 while down and 0 in the lift entry. Without it a lifted finger stayed in range (hovering) for
++// iOS, which kept the touch: with fresh identifiers the touch table filled and touch stopped after ~30 presses; with reused ones a new
++// press continued an old touch (a tap on an icon reopened the search pull-down it had been used for).
+ // Coordinates are normalised to 0..32767 on both axes by the producer.
+ #define FINGER_DESC \
+-    0x09,0x22,0xa1,0x02, 0x09,0x42,0x15,0x00,0x25,0x01,0x75,0x01,0x95,0x01,0x81,0x02, 0x09,0x47,0x81,0x02, 0x75,0x06,0x95,0x01,0x81,0x03, \
++    0x09,0x22,0xa1,0x02, 0x09,0x42,0x15,0x00,0x25,0x01,0x75,0x01,0x95,0x01,0x81,0x02, 0x09,0x47,0x81,0x02, 0x09,0x32,0x81,0x02, 0x75,0x05,0x95,0x01,0x81,0x03, \
+     0x09,0x51,0x75,0x08,0x95,0x01,0x15,0x00,0x26,0xff,0x00,0x81,0x02, \
+     0x05,0x01,0x09,0x30,0x15,0x00,0x26,0xff,0x7f,0x75,0x10,0x95,0x01,0x81,0x02, 0x09,0x31,0x81,0x02, 0x05,0x0d, 0xc0,
+ static const unsigned char touchDescriptor[]={
+@@ -295,7 +298,7 @@ class NativeHidInput : public IOHIDDevice {
+         for(unsigned i=0;i<count && slot<TOUCH_FINGERS;++i,++slot) {
+             unsigned x=transformCoordinate(xs[i],30480),y=transformCoordinate(ys[i],20320);
+             unsigned char *f=report+1+slot*6;
+-            f[0]=3;f[1]=(unsigned char)(ids[i]&0xff);f[2]=(unsigned char)x;f[3]=(unsigned char)(x>>8);f[4]=(unsigned char)y;f[5]=(unsigned char)(y>>8);   // tip, valid
++            f[0]=7;f[1]=(unsigned char)(ids[i]&0xff);f[2]=(unsigned char)x;f[3]=(unsigned char)(x>>8);f[4]=(unsigned char)y;f[5]=(unsigned char)(y>>8);   // tip, valid, in range
+             nextIds[slot]=ids[i];nextX[slot]=(int)x;nextY[slot]=(int)y;
+         }
+         const unsigned downCount=slot;
+@@ -311,7 +314,7 @@ class NativeHidInput : public IOHIDDevice {
+             for(unsigned i=0;i<downCount && !kept;++i)kept=(ids[i]&0xff)==(id&0xff);
+             if(kept || slot>=TOUCH_FINGERS)continue;
+             unsigned char *f=report+1+slot*6;
+-            f[0]=2;f[1]=(unsigned char)(id&0xff);   // tip up, valid
++            f[0]=2;f[1]=(unsigned char)(id&0xff);   // tip up, valid, out of range
+             f[2]=(unsigned char)self->prevX[j];f[3]=(unsigned char)(self->prevX[j]>>8);
+             f[4]=(unsigned char)self->prevY[j];f[5]=(unsigned char)(self->prevY[j]>>8);
+             ++slot;edge::native_touch_hid_multi[2]=edge::native_touch_hid_multi[2]+1;
+-- 
+2.53.0
+

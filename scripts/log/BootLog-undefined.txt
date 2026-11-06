@@ -54,6 +54,7 @@ _native_adreno_client_stats
 _native_adreno_client_text
 _native_adreno_coherent_skips
 _native_adreno_cp_aperture
+_native_adreno_deferred_frees
 _native_adreno_dram_read32
 _native_adreno_export_stats
 _native_adreno_fence_pending
@@ -189,6 +190,7 @@ _native_mic_extra
 _native_mic_peaks
 _native_mic_regs
 _native_mic_stats
+_native_panel_stats
 _native_qrtr_stats
 _native_qrtr_text
 _native_staged_apps_dirs

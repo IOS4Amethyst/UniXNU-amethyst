@@ -157,9 +157,43 @@ int main(void) {
         for (unsigned f = 0; f < 5; ++f) goodix_diff_frame(&s, grid);
     }
 
+    {                                                                      // V56: a lifting finger never jumps
+        fill(10640); for (unsigned f = 0; f < 5; ++f) goodix_diff_frame(&s, grid);
+        unsigned before = s.presses;
+        for (unsigned c = 38; c >= 28; --c) { fill(10640); blob(9, c, -1200); goodix_diff_frame(&s, grid); }
+        CHECK(s.pressed && s.presses == before + 1 && s.live.index == 9 * C + 28);
+        for (unsigned f = 0; f < GoodixDiffReleaseFrames; ++f) {           // the finger fades while a weak dip
+            fill(10640); blob(9, 28, -250); blob(12, 33, -450); blob(4, 36, -480);   // sits near and far
+            goodix_diff_frame(&s, grid);
+            CHECK(s.live.index == 9 * C + 28);                             // never followed
+        }
+        CHECK(!s.pressed && s.presses == before + 1);                      // released instead
+        fill(10640); for (unsigned f = 0; f < 5; ++f) goodix_diff_frame(&s, grid);
+    }
+
+    {                                                                      // V58: a tap stays put, a swipe follows
+        fill(10640); for (unsigned f = 0; f < 5; ++f) goodix_diff_frame(&s, grid);
+        unsigned before = s.presses;
+        fill(10640); blob(9, 20, -1200);
+        for (unsigned f = 0; f < GoodixDiffHold; ++f) goodix_diff_frame(&s, grid);
+        CHECK(s.pressed && s.presses == before + 1 && !s.moving);
+        const struct GoodixDiffPress down = s.report;
+        fill(10640); blob(9, 20, -1200); blob(10, 20, -700); goodix_diff_frame(&s, grid);   // the contact widens a little
+        CHECK(s.live.row16 != down.row16 && s.report.row16 == down.row16 && s.report.col16 == down.col16 && !s.moving);
+        fill(10640); blob(10, 21, -450); goodix_diff_frame(&s, grid);       // rolling off: shallow, a node away
+        CHECK(s.report.row16 == down.row16 && s.report.col16 == down.col16 && !s.moving);
+        fill(10640); lift(); CHECK(!s.pressed);
+        fill(10640); for (unsigned f = 0; f < 5; ++f) goodix_diff_frame(&s, grid);
+        blob(9, 30, -1200); for (unsigned f = 0; f < GoodixDiffHold; ++f) goodix_diff_frame(&s, grid);
+        for (unsigned c = 29; c >= 20; --c) { fill(10640); blob(9, c, -1200); goodix_diff_frame(&s, grid); }
+        CHECK(s.pressed && s.moving && s.report.col16 == s.live.col16 && s.report.col16 < 21 * 16);   // follows exactly
+        fill(10640); lift(); CHECK(!s.pressed);
+        fill(10640); for (unsigned f = 0; f < 5; ++f) goodix_diff_frame(&s, grid);
+    }
+
     goodix_diff_reset(&s, 40, 40);                                         // too many nodes
     CHECK(s.nodes == 0 && goodix_diff_frame(&s, grid) == 0);
     if (failures) return 1;
-    puts("PASS: Goodix finger blob press (3 frames, centroid), spikes and lone stuck nodes ignored, hysteresis, drift, stuck-press recalibration, slow drift tracked, line noise removed, live position and screen mapping, debounced release, hold after swipe");
+    puts("PASS: Goodix finger blob press (3 frames, centroid), spikes and lone stuck nodes ignored, hysteresis, drift, stuck-press recalibration, slow drift tracked, line noise removed, live position and screen mapping, debounced release, hold after swipe, no jump on lift, tap slop");
     return 0;
 }

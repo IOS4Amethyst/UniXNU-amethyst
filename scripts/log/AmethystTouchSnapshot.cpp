@@ -162,7 +162,6 @@ extern "C" volatile uint32_t amethyst_hid_published_flags __attribute__((weak_im
 extern "C" volatile uint32_t amethyst_touch_hid_published __attribute__((weak_import));
 extern "C" volatile uint32_t amethyst_touch_hid_downs __attribute__((weak_import));
 extern "C" volatile uint32_t amethyst_touch_hid_shorts __attribute__((weak_import));
-extern "C" volatile uint32_t amethyst_touch_hid_corner __attribute__((weak_import));
 extern "C" volatile int amethyst_touch_hid_last[2] __attribute__((weak_import));
 extern "C" volatile uint32_t native_touch_edge_stats[4] __attribute__((weak_import));   // NativeHidInput: installed, begun, at edge, skipped
 extern "C" volatile uint32_t native_legacy_swap_accepted_count __attribute__((weak_import));
@@ -177,10 +176,10 @@ extern "C" void amethyst_touch_snapshot(void) {
     // HID delivery (V30): NativeHidInput events (2 started, 3 driver attached, 6 touch reports), the
     // Built-In/PrimaryUsage publication, and what the touch thread handed over.
     if(&amethyst_hid_events && &amethyst_touch_hid_published) {
-        amethyst_touch_row_set(49,"AmethystHid: drv=%u/%d rep=%u/%d btn=%u/%u pub=%u sent=%u dn=%u sh=%u cn=%u edge=%u/%u/%u/%u last=%d,%d\n",
+        amethyst_touch_row_set(49,"AmethystHid: drv=%u/%d rep=%u/%d btn=%u/%u pub=%u sent=%u dn=%u sh=%u edge=%u/%u/%u/%u last=%d,%d\n",
             amethyst_hid_events[3],amethyst_hid_results[3],
             amethyst_hid_events[6],amethyst_hid_results[6],amethyst_hid_events[4],amethyst_hid_events[5],amethyst_hid_published_flags,
-            amethyst_touch_hid_published,amethyst_touch_hid_downs,&amethyst_touch_hid_shorts?amethyst_touch_hid_shorts:0,&amethyst_touch_hid_corner?amethyst_touch_hid_corner:0,
+            amethyst_touch_hid_published,amethyst_touch_hid_downs,&amethyst_touch_hid_shorts?amethyst_touch_hid_shorts:0,
             &native_touch_edge_stats?native_touch_edge_stats[0]:9,&native_touch_edge_stats?native_touch_edge_stats[1]:0,
             &native_touch_edge_stats?native_touch_edge_stats[2]:0,&native_touch_edge_stats?native_touch_edge_stats[3]:0,
             amethyst_touch_hid_last[0],amethyst_touch_hid_last[1]);

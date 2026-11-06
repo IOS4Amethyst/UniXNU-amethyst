@@ -32,7 +32,8 @@ int boot_log_export_put(uint32_t generation,uint32_t total,uint32_t offset,const
 extern volatile uint32_t native_touch_seq,native_touch_count;
 extern volatile int native_touch_xs[12],native_touch_ys[12],native_touch_ids[12];
 void native_touch_published(void);
-volatile uint32_t amethyst_touch_hid_published,amethyst_touch_hid_downs,amethyst_touch_hid_shorts,amethyst_touch_hid_corner;
+extern volatile uint32_t amethyst_hid_events[8] __attribute__((weak_import));   // AmethystButtonsHid.cpp
+volatile uint32_t amethyst_touch_hid_published,amethyst_touch_hid_downs,amethyst_touch_hid_shorts;
 volatile int amethyst_touch_hid_last[2];
 }
 
@@ -65,6 +66,9 @@ uint64_t recordUntilMs;
 // V35: amethyst-touch-record-press=<s> stops recording that many seconds after the first press, so the
 // ring (4096 frames, ~48 s at 85 fps) holds the frames around the user's touches.
 unsigned recordPressS;
+// V55: amethyst-touch-record-button=1 keeps the last kRingFrames frames until a hardware button goes down (AmethystButtonsHid.cpp
+// event 4), then stops and exports once: press volume right after a touch misbehaves and the export holds the ~48 s before it.
+unsigned recordButton,recordButtonBase;
 uint8_t *ring;size_t entryBytes;unsigned ringCount,ringNext,sequence,exported,exportGeneration;
 uint64_t startTicks,lastExportMs;int exportStatus;
 uint64_t nowMs() {
@@ -212,11 +216,11 @@ int frameClear() {
     return geni_spi_transfer(engine,ftx,frx,total,0);
 }
 bool hidEnabled,hidDown;
-// V48: iPadOS 17's finger corner gestures (bottom-left screenshot, bottom-right Quick Note) froze touch on hardware while the
-// kernel kept reporting. A point within hidCorner TouchState units of both an x edge and a y edge is moved out of that corner
-// square, so no touch ever starts in a corner. amethyst-touch-corner=N sets the size (0 turns it off).
-int hidCorner=1500;
-// One finger (or none) to TouchState. Each press gets a new identifier so iOS sees a new touch.
+// V54: contact identifiers cycle through 1..hidIds (amethyst-touch-ids=N, 1..200; default 8). V30-V53 gave every press the next of 1..200,
+// and iOS stopped taking touches after a few dozen presses (V52: 37 downs, V52b: ~30) while the kernel delivered every press and release:
+// real controllers reuse a few small identifiers, and the climbing ones ran past what iOS keeps per touch path.
+unsigned hidIds=8;
+// One finger (or none) to TouchState. Each press gets the next identifier of 1..hidIds, so iOS sees a new touch.
 void hidPublish() {
     const bool down=diff.pressed!=0;
     if(!down && !hidDown)return;
@@ -224,13 +228,8 @@ void hidPublish() {
     __atomic_store_n(&native_touch_seq,seq+1,__ATOMIC_RELEASE);
     __asm__ volatile("dmb ish" ::: "memory");
     if(down) {
-        int x,y;goodix_diff_screen(&diff,&diff.live,&x,&y);
-        const int c=hidCorner;
-        if(c>0 && (x<c || x>30480-c) && (y<c || y>20320-c)) {
-            x=x<c?c:30480-c;y=y<c?c:20320-c;
-            if(!hidDown)amethyst_touch_hid_corner=amethyst_touch_hid_corner+1;
-        }
-        native_touch_xs[0]=x;native_touch_ys[0]=y;native_touch_ids[0]=(int)(diff.presses%200)+1;
+        int x,y;goodix_diff_screen(&diff,&diff.report,&x,&y);   // live past the tap slop (GoodixDiffSlop)
+        native_touch_xs[0]=x;native_touch_ys[0]=y;native_touch_ids[0]=(int)(diff.presses%hidIds)+1;
         amethyst_touch_hid_last[0]=x;amethyst_touch_hid_last[1]=y;
         if(!hidDown)amethyst_touch_hid_downs=amethyst_touch_hid_downs+1;
     }
@@ -273,6 +272,7 @@ void frameWorker(void *,wait_result_t) {
             press=goodix_diff_frame(&diff,frame+goodix_berlin_frame_grid_offset(&layout));
             if(hidEnabled)hidPublish();
             if(recordPressS && !recordUntilMs && diff.presses)recordUntilMs=nowMs()+(uint64_t)recordPressS*1000;
+            if(recordButton && !recordUntilMs && &amethyst_hid_events && amethyst_hid_events[4]!=recordButtonBase)recordUntilMs=nowMs();
             if(!recordUntilMs || nowMs()<recordUntilMs)
                 ringPut(frame+goodix_berlin_frame_grid_offset(&layout),(uint32_t)nowMs());
             if(fstats.last.max>fstats.peak){fstats.peak=fstats.last.max;fstats.peakIndex=fstats.last.maxIndex;fstats.peakFrame=fstats.reads;}
@@ -282,7 +282,7 @@ void frameWorker(void *,wait_result_t) {
         else ++fstats.clears;
         if(press || !(fstats.reads&15))framePublish();
         const uint64_t ms=nowMs();
-        if(ms-lastExportMs>=kExportEvery && sequence!=exported){lastExportMs=ms;ringExport(ms);framePublish();}
+        if(ms-lastExportMs>=kExportEvery && sequence!=exported && (!recordButton || recordUntilMs)){lastExportMs=ms;ringExport(ms);framePublish();}
         IOSleep(2);
     }
 }
@@ -323,7 +323,7 @@ extern "C" int amethyst_touch_events_start(struct geni_spi *spi,unsigned mode,co
     fstats.peak=INT16_MIN;fstats.floor=INT16_MAX;
     unsigned hid=0;
     hidEnabled=mode==2 && PE_parse_boot_argn("sheng-touch-hid",&hid,sizeof hid) && hid==1;
-    {unsigned corner=0;if(PE_parse_boot_argn("amethyst-touch-corner",&corner,sizeof corner))hidCorner=corner>5000?5000:(int)corner;}
+    {unsigned ids=0;if(PE_parse_boot_argn("amethyst-touch-ids",&ids,sizeof ids) && ids>=1)hidIds=ids>200?200:ids;}
     goodix_diff_reset(&diff,mode==2?layout.drvNum:0,mode==2?layout.senNum:0);
     unsigned record=0;
     // V20: exporting from this thread while iOS read its root froze userspace at the
@@ -336,6 +336,9 @@ extern "C" int amethyst_touch_events_start(struct geni_spi *spi,unsigned mode,co
         unsigned until=0;
         if(PE_parse_boot_argn("amethyst-touch-record-until",&until,sizeof until))recordUntilMs=(uint64_t)until*1000;
         PE_parse_boot_argn("amethyst-touch-record-press",&recordPressS,sizeof recordPressS);
+        PE_parse_boot_argn("amethyst-touch-record-button",&recordButton,sizeof recordButton);
+        recordButton=recordButton==1;
+        recordButtonBase=&amethyst_hid_events?amethyst_hid_events[4]:0;
     }
     thread_t thread;
     kern_return_t rc=kernel_thread_start(mode==2?frameWorker:worker,nullptr,&thread);

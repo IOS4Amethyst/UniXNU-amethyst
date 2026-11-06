@@ -76,6 +76,8 @@ parser.add_argument('--touch-record-until', type=int, default=0,
                     help='record Goodix frames (amethyst-touch-record=1) and stop N s after touch start; export read by pull-log.py')
 parser.add_argument('--touch-hid', action='store_true',
                     help='deliver frame-detector presses to iOS (sheng-touch-hid=1: NativeHidInput digitizer); requires --touch-frames and --buttons')
+parser.add_argument('--touch-record-button', action='store_true',
+                    help='record Goodix frames until a hardware button goes down, then export the ~48 s before it once')
 parser.add_argument('--touch-record-press', type=int, default=0,
                     help='record Goodix frames and stop N s after the first detected press')
 parser.add_argument('--touch-frames', action='store_true',
@@ -241,6 +243,9 @@ with tempfile.TemporaryDirectory(dir=AUDIT, prefix='log-pack-') as tempdir:
     if args.touch_hid:
         assert args.touch_frames and args.buttons and b'sheng-touch-hid=' not in config
         config=config.replace(b'sheng-log=1',b'sheng-log=1 sheng-touch-hid=1')
+    if args.touch_record_button:
+        assert args.touch_frames and not args.touch_record_until and not args.touch_record_press and b'amethyst-touch-record' not in config
+        config=config.replace(b'sheng-log=1',b'sheng-log=1 amethyst-touch-record=1 amethyst-touch-record-button=1')
     if args.touch_record_press:
         assert args.touch_frames and not args.touch_record_until and b'amethyst-touch-record' not in config
         config=config.replace(b'sheng-log=1',b'sheng-log=1 amethyst-touch-record=1 amethyst-touch-record-press=%d' % args.touch_record_press)

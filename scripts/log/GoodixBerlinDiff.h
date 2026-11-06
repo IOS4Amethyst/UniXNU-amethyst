@@ -49,6 +49,16 @@ enum {
     GoodixDiffTrack = 64,           // baseline follows any slow change at d/64 per frame
     GoodixDiffReleaseFrames = 3,    // V30 swipes: a press ends only after 3 frames above -release
     GoodixDiffShort = 6,            // presses shorter than this many frames are counted (split swipes)
+    GoodixDiffFollow = 6,           // a press follows its finger within this many nodes per frame (V56: swipes up
+                                    // from the bottom jumped back to a -300..-490 dip on the bottom line as the
+                                    // finger lifted, so scrolling stuttered and reversed)
+    GoodixDiffStep = 2,             // ... and within this many when its depth is short of a press
+    GoodixDiffSlop = 8,             // 1/16 node (~2.1 pt each, ~17 pt): a press reports its touch-down point until it
+                                    // moves this far (V58: 16 of 29 taps wandered 10-47 pt, so iOS saw swipes)
+    GoodixDiffFade16 = 8,           // and, until then, ignores frames shallower than Fade16/16 of its deepest: the
+                                    // centroid of a finger rolling off a tap shifted up to half a node
+    GoodixDiffCentroidFloor = 150,  // centroid weight is depth minus this, so a node joins it gradually (a node
+                                    // crossing -300 with its whole depth moved it up to half a node, ~17 pt)
     GoodixDiffSupport = 150,        // adjacent-line neighbour depth that backs a dip (an edge
                                     // tap in V20: -1124 on the edge line, -200..-245 next to it)
 };
@@ -64,6 +74,8 @@ struct GoodixDiffState {
     int16_t extreme; uint16_t extremeIndex;     // most negative ever
     struct GoodixDiffPress current;             // the deepest point of the current press
     struct GoodixDiffPress live;                // this frame's position while pressed (follows a moving finger)
+    struct GoodixDiffPress report;              // the position iOS gets: live past the slop, held while the finger fades
+    int moving;                                 // the press has left its slop
     struct GoodixDiffPress ring[GoodixDiffRing];// last presses, newest at (presses-1) % ring
 };
 
@@ -101,7 +113,7 @@ static inline void goodix_diff_compute(struct GoodixDiffState *s, const uint8_t 
     }
 }
 
-// Weighted centroid (1/16 node) of the nodes at or below -release around `at`.
+// Weighted centroid (1/16 node) of the nodes deeper than -GoodixDiffCentroidFloor around `at`, each by its depth past the floor.
 static inline void goodix_diff_centroid(const struct GoodixDiffState *s, const uint8_t *grid,
     unsigned at, struct GoodixDiffPress *p) {
     (void)grid;
@@ -113,8 +125,9 @@ static inline void goodix_diff_centroid(const struct GoodixDiffState *s, const u
             if (c < 0 || c >= (int)s->cols) continue;
             const unsigned i = (unsigned)r * s->cols + (unsigned)c;
             int32_t d = s->d[i];
-            if (d > -GoodixDiffRelease) continue;
-            w += -d; wr += (int64_t)-d * r; wc += (int64_t)-d * c;
+            if (d > -GoodixDiffCentroidFloor) continue;
+            const int32_t k = -d - GoodixDiffCentroidFloor;
+            w += k; wr += (int64_t)k * r; wc += (int64_t)k * c;
         }
     }
     p->row16 = (uint16_t)(w ? wr * 16 / w : r0 * 16);
@@ -162,6 +175,24 @@ static inline int goodix_diff_frame(struct GoodixDiffState *s, const uint8_t *gr
     if (low < INT16_MIN) low = INT16_MIN;
     s->peak = (int16_t)low; s->peakIndex = (uint16_t)at;
     if (low < s->extreme) { s->extreme = (int16_t)low; s->extremeIndex = (uint16_t)at; }
+    // While pressed, only the finger's own neighbourhood counts: the deepest supported node within
+    // GoodixDiffFollow of the live position. A far dip neither moves the press nor keeps it alive.
+    if (s->pressed) {
+        const int lr = (int)(s->live.index / s->cols), lc = (int)(s->live.index % s->cols);
+        int32_t near = 0; unsigned nearAt = s->live.index;
+        for (unsigned i = 0; i < s->nodes; ++i) {
+            const int r = (int)(i / s->cols), c = (int)(i % s->cols);
+            if (r < lr - GoodixDiffFollow || r > lr + GoodixDiffFollow || c < lc - GoodixDiffFollow || c > lc + GoodixDiffFollow) continue;
+            int32_t d = goodix_diff_at(s, grid, i);
+            if (d < near && d <= -GoodixDiffRelease && !goodix_diff_supported(s, grid, i)) continue;
+            // Farther than GoodixDiffStep a node must be finger-deep: a lifting finger fades, and the
+            // bottom line stays -300..-480 along its length after a swipe leaves it (V56).
+            if (d > -GoodixDiffPress && (r < lr - GoodixDiffStep || r > lr + GoodixDiffStep ||
+                c < lc - GoodixDiffStep || c > lc + GoodixDiffStep)) continue;
+            if (d < near) { near = d; nearAt = i; }
+        }
+        low = near < INT16_MIN ? INT16_MIN : near; at = nearAt;
+    }
     int started = 0;
     if (!s->pressed) {
         s->candidate = low <= -GoodixDiffPress ? s->candidate + 1 : 0;
@@ -188,6 +219,14 @@ static inline int goodix_diff_frame(struct GoodixDiffState *s, const uint8_t *gr
     if (s->pressed && !s->weak) {                         // a weak frame keeps the last position
         s->live.index = (uint16_t)at; s->live.value = (int16_t)low;
         goodix_diff_centroid(s, grid, at, &s->live);
+        // A press that has moved follows its finger exactly (holding a fading swipe cut flings short by up to 200 pt).
+        // Before that it is a tap: it stays put unless a firm finger leaves the slop.
+        if (started) { s->report = s->live; s->moving = 0; }
+        else if (!s->moving && (int32_t)s->live.value * 16 <= (int32_t)s->current.value * GoodixDiffFade16) {
+            const int dr = (int)s->live.row16 - (int)s->report.row16, dc = (int)s->live.col16 - (int)s->report.col16;
+            if (dr >= GoodixDiffSlop || -dr >= GoodixDiffSlop || dc >= GoodixDiffSlop || -dc >= GoodixDiffSlop) s->moving = 1;
+        }
+        if (s->moving) s->report = s->live;
     }
     if (s->pressed) {
         ++s->active;

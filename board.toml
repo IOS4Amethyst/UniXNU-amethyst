@@ -93,7 +93,7 @@ header_version = 4
 
 [payload]
 volume = "AMETHYSTESP"
-size_mib = 80
+size_mib = 128   # the iOS 27 kernel collection alone is ~76 MiB
 loader = "firmware"
 title = "iPadOS for amethyst"
 # Source storage authenticates each root read against the owner-signed policy bundle written by

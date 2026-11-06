@@ -105,7 +105,9 @@ jobs:
         working-directory: ./unixnu-core
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: ./unixnu build kernel --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
+        run: |
+          python3 -c "import sys; sys.path.insert(0,'scripts'); from unixnu.profiles import merge; import tomllib; from pathlib import Path; b=merge({}, tomllib.loads(Path('$GITHUB_WORKSPACE/board.toml').read_text())); print('PROBE merged level =', b.get('kernel',{}).get('config_level')); import unixnu.kernel as K; print('PROBE xnu_env level =', K.xnu_env.__doc__ is not None)"
+          ./unixnu build kernel --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
 
       - name: Build payload
         if: inputs.build_payload

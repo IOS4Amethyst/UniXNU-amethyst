@@ -41,7 +41,29 @@ static bool sb_pmu_fixup(arm_saved_state_t *state) {
     uintptr_t pc = (uintptr_t)get_saved_state_pc(state);
     if (pc < (uintptr_t)sheng_pmu_begin || pc >= (uintptr_t)sheng_pmu_end)
         return false;
+    /* set_saved_state_pc is compiled only where HAS_SET_SAVED_STATE_PC is set, and MASTER
+     * sets that for CONFIG_DTRACE or CONFIG_XNUPOST, which PERF_DBG_DEV carries and
+     * PERF_DBG_RELEASE does not. A RELEASE kernel has no setter, so write the slot the way
+     * the setter does: the PC of the unified state, authenticated when PAC is on. */
+#if HAS_SET_SAVED_STATE_PC
     set_saved_state_pc(state, (register_t)(uintptr_t)sheng_pmu_trapped);
+#elif defined(__arm64__) || defined(__aarch64__)
+    if (is_saved_state32(state)) {
+        saved_state32(state)->pc = (uint32_t)(uintptr_t)sheng_pmu_trapped;
+    } else {
+#if HAS_APPLE_PAC
+        MANIPULATE_SIGNED_THREAD_STATE(state,
+            "mov	x1, %[pc]		\n"
+            "str	x1, [x0, %[SS64_PC]]	\n",
+            [pc] "r"((register_t)(uintptr_t)sheng_pmu_trapped)
+            );
+#else
+        saved_state64(state)->pc = (unsigned long)(uintptr_t)sheng_pmu_trapped;
+#endif /* HAS_APPLE_PAC */
+    }
+#else
+    return false;
+#endif /* HAS_SET_SAVED_STATE_PC */
     return true;
 }
 

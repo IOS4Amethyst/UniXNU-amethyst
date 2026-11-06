@@ -34,7 +34,10 @@ archives = [
   "build-libpthread-kernel.py",
   "build-amethyst-platform-power.py",
   "component:ShengUfs",
-  "build-sheng-source-storage.py --policy-dir scripts/policies/ios-27.0.1-24A446",
+  # The builder searches package/ and kits/sheng; this board's sources are package/, which the tree links as
+  # kits/amethyst. It reads that directory from its [board] kit when the device repository is given, so
+  # build-sheng-source-storage-amethyst.py passes --device from the tree's own resolution.
+  "build-sheng-source-storage-amethyst.py --policy-dir scripts/policies/ios-27.0.1-24A446",
   "component:SoftwareAES",
   "build-native-aes-bindings.py",
   "component:RamBlock",

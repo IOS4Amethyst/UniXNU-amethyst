@@ -119,7 +119,25 @@ jobs:
         working-directory: ./unixnu-core
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: ./unixnu build kernel --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
+        run: |
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0, 'scripts')
+          import os
+          os.environ.setdefault('X','')
+          from unixnu.config import *
+          import unixnu.kernel as K
+          orig = K.xnu_env
+          def spy(ctx):
+              e = orig(ctx)
+              print('SPY level =', e.get('UNIXNU_XNU_CONFIG_LEVEL'), flush=True)
+              print('SPY board kernel =', ctx.board.get('kernel'), flush=True)
+              return e
+          K.xnu_env = spy
+          from unixnu import cli
+          sys.argv = ['unixnu', 'build', 'kernel', '--os', os.environ['OS_PROFILE'], '-D', os.environ['GITHUB_WORKSPACE']]
+          cli.main()
+          PY
 
       - name: Build payload
         if: inputs.build_payload

@@ -138,6 +138,10 @@ jobs:
             # The generated kernel headers the archive compiles against: xnu 12377 moved kmem_* out of the
             # exported vm_kern.h depending on XNU_KERNEL_PRIVATE, so keep the whole osfmk export set.
             unixnu-core/out/**/build/xnu/ios-obj/EXPORT_HDRS/osfmk/**/*.h
+            # The linked kernel itself: the prelink places the native segments against the collection, so
+            # a layout failure (a segment that does not fit a retained range) is diagnosed from these
+            # segment sizes, and the image is the prelink input.
+            unixnu-core/out/**/build/xnu/ios-obj/**/mach.*.noctf
           if-no-files-found: warn
           retention-days: 7
 

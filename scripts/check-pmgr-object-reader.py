@@ -23,7 +23,7 @@ assert header.index('opaque300') < header.index('class ApplePMGR :') < header.in
 assert 'unavailable(266)' not in guards
 assert 'unavailable(280)' not in guards and 'unavailable(281)' not in guards
 assert guards.count('unavailable(') == 439 - 177 - 3
-bridge = Path(__file__).resolve().parents[1] / 'kits/amethyst/ShengPlatformPower.cpp'
+bridge = Path(__file__).resolve().parents[1] / 'package/ShengPlatformPower.cpp'
 source_text = bridge.read_text()
 assert source_text.index('installOriginalPMGRTable(provider);') < source_text.index('!provider->init()')
 try:

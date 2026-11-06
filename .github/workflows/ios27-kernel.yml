@@ -131,6 +131,10 @@ jobs:
             # Per-source compiler logs and command lines of the source-storage archive: the build log only keeps the tail.
             unixnu-core/out/**/tree/build/sheng-source-storage/**/*.log
             unixnu-core/out/**/tree/build/sheng-source-storage/**/*.command.json
+            # The generated kernel headers the archive compiles against (vm_kern.h, vm_map.h presence differs by OS).
+            unixnu-core/out/**/build/xnu/ios-obj/EXPORT_HDRS/osfmk/vm/*.h
+            unixnu-core/out/**/build/xnu/ios-obj/EXPORT_HDRS/osfmk/mach/vm_map.h
+            unixnu-core/out/**/build/xnu/ios-obj/EXPORT_HDRS/osfmk/mach/mach_vm.h
           if-no-files-found: warn
           retention-days: 7
 

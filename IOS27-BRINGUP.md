@@ -15,6 +15,8 @@ The iPadOS 17 port stays the working reference (`ROOT-BRINGUP.md`,
 | `IOS4Amethyst/UniXNU` (core) | `ios27-release-config-level` | `99fa60b` |
 | this repository | `ios27` | this commit |
 
+Taken over from the earlier agent on 2026-11-07, after the iPadOS 17 port reached V60 (touch, GPU, brightness).
+
 The kernel links and prelinks at RELEASE for the iPhone15,4 `24A446`
 kernelcache. The emitted collection is an experimental allow-missing image: its
 report says `mapping_complete`, `runtime_qualified` and `loadable` are `false`.
@@ -80,10 +82,25 @@ result: it names the kext and the original address. It is a measurement, not a
 regression. Core `scripts/report-prelink-unnamed.py` and
 `scripts/summarize-prelink-report.py` print both sets.
 
+## Payload and first image (2026-11-07)
+
+- The `UNIXNU_UNIQUE_CHIP_ID` secret holds the platform seed of the iPadOS 17 images (read from their ADT), so both OS
+  profiles present the same device.
+- `ios27-kernel.yml` now runs in the `ARTIFACT_PASSPHRASE` environment and uploads only `unixnu-ios27-build-encrypted`
+  (aes-256-cbc, pbkdf2 200000): this repository is public and the outputs hold the prelinked Apple kernelcache. The payload
+  step gained `--os`, a bash 3.2-safe empty Data-seed array, and the volume grew to 128 MiB (the files take 76 MiB).
+- Run 42295993833 built the payload: `kernel.macho`, `.adt`, `.vroot` (root policies), no trust cache, no Data seed.
+- `scripts/pack-ios27.py` packs it RAM-only: header, boot shim and FAT geometry of the iPadOS V60 image, the GMU_Pool
+  firmware (`.scratch/uefi-gmu/amethyst-gmu-pool.fd`), the FAT's `EFI/UniXNU` replaced by the payload's. DarwinBoot is
+  pinned at 3c75734 for both profiles. Image `staging/amethyst-ios27-i1` (SHA-256 350fb401...), not booted yet.
+- Expected first result: a stop in `_unixnu_fileset_unmapped` (or earlier) on the text console. RELEASE builds no
+  `BootLog.c`, so there is no UFS log: the screen is the record.
+
 ## Not proven yet
 
-- No payload, boot image or userdata build for an iOS 27 image has been made.
+- No userdata build for an iOS 27 image has been made.
 - No iOS 27 image has been booted on the phone, in RAM or otherwise.
+- No trust cache is in the payload, so userland cannot start even if the kernel does.
 - `Data` seed and root-policy bundle for `24A446` are inputs that exist as
   workflow artifacts, not as tested images.
 

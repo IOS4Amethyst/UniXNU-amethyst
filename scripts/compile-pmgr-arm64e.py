@@ -28,7 +28,12 @@ def main():
     pac = out / 'OriginalPMGRPAC.h'
     # ponytail: first pass is audit input only and must never be linked or archived.
     pac.write_text('static void installOriginalPMGRTable(ShengPlatformPower *) { panic("PMGR audit-only object"); }\n')
-    records = tree / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT'
+    # The compile records sit under whichever configuration level the board selected, so read the
+    # tree's own kernel_target rather than assuming the bring-up level.
+    target_spec = importlib.util.spec_from_file_location('kernel_target', tree / 'scripts/kernel_target.py')
+    target = importlib.util.module_from_spec(target_spec)
+    target_spec.loader.exec_module(target)
+    records = tree / target.OBJECT_TREE / 'iokit' / target.CONFIG_LEVEL
     record = json.loads((records / 'IOPlatformExpert.cpo.json').read_text().strip().rstrip(','))
     source = tree / 'kits/amethyst/ShengPlatformPower.cpp'
     if not source.is_file():

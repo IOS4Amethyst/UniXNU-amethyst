@@ -128,6 +128,9 @@ jobs:
             unixnu-core/out/**/payload/**
             unixnu-core/out/**/userdata/**
             unixnu-core/out/**/logs/*.log
+            # Per-source compiler logs and command lines of the source-storage archive: the build log only keeps the tail.
+            unixnu-core/out/**/tree/build/sheng-source-storage/**/*.log
+            unixnu-core/out/**/tree/build/sheng-source-storage/**/*.command.json
           if-no-files-found: warn
           retention-days: 7
 

@@ -59,6 +59,10 @@ parser.add_argument('--gpu-addon', type=Path,
                     help='the gpu-addon CI output asteroids-metal.addon (NGPUADD2): Payloads/kernel.macho.gpuaddon + ADT GpuAddon')
 parser.add_argument('--owner-trust', type=Path,
                     help='the gpu-addon CI owner-trust.bundle (owner module + the original modules); requires --gpu-addon')
+parser.add_argument('--fb-gpu', action='store_true',
+                    help='V51: the GPU copies each frame to the panel (sheng-fb-gpu=1) with a 120 Hz vsync timer (sheng-vsync=120), as asteroids boots')
+parser.add_argument('--aks', action='store_true',
+                    help='AppleKeyStore stand-in (sheng-aks=1): no passcode, unlocked; the lock screen dismisses without one')
 parser.add_argument('--uefi-fd', type=Path,
                     help='replace the 3 MiB firmware body (e.g. .scratch/uefi-gmu/amethyst-gmu-pool.fd: GMU_Pool reserved)')
 parser.add_argument('--shim-from', type=Path,
@@ -80,10 +84,10 @@ parser.add_argument('--smp', action='store_true',
                     help='start the secondary CPUs: sheng-smp=1 armcpu-spi-ipi=1 armcpu-self-ipi=1 (each core takes a first IPI so XNU will signal it)')
 parser.add_argument('--msgbuf', type=int, default=0,
                     help='kernel message buffer bytes (msgbuf=N); pair with a BootLog whose message area holds it')
-parser.add_argument('--gpu-power', type=int, default=0, choices=tuple(range(19)),
+parser.add_argument('--gpu-power', type=int, default=0, choices=tuple(range(20)),
                     help='Adreno 810 staged power probe (amethyst-gpu-power): 1 reads only, 2 + AHB enable, 3 + CX power-up, '
                          '4 + GMU pool round trip (needs --uefi-fd with GMU_Pool reserved), 5 + GMU SMMU context on the pool, 6 + read-only GMU clocks and command DB, 7 + GMU clocks on, 8 + GMU/RSCC state read, 9 GMU firmware to HFI ready, 10 + HFI startup, 11 + GX on')
-parser.add_argument('--cpufreq', type=int, default=0, choices=tuple(range(19)),
+parser.add_argument('--cpufreq', type=int, default=0, choices=tuple(range(20)),
                     help='EPSS CPU frequency control (sheng-cpufreq): 1 read only, 3 vote max non-turbo, 4 governor')
 parser.add_argument('--cpufreq-cap', type=int, default=0, help='highest MHz the governor may vote (sheng-cpufreq-cap)')
 parser.add_argument('--buttons-survey', action='store_true', help='read-only Amethyst SPMI arbiter survey')
@@ -222,6 +226,18 @@ with tempfile.TemporaryDirectory(dir=AUDIT, prefix='log-pack-') as tempdir:
     if args.smp:
         assert b'sheng-smp=' not in config and b'armcpu-spi-ipi=' not in config and b'armcpu-self-ipi=' not in config
         config=config.replace(b'sheng-log=1',b'sheng-log=1 sheng-smp=1 armcpu-spi-ipi=1 armcpu-self-ipi=1')
+    if args.fb_gpu:
+        # V50: the CPU copy of each 1220x2712 GPU frame took ~170 ms (5-6 fps). asteroids: sheng-fb-gpu=1, sheng-vsync=120.
+        assert args.gpu_addon and b'sheng-fb-gpu=' not in config and b'sheng-vsync=' not in config
+        config=config.replace(b'sheng-log=1',b'sheng-log=1 sheng-fb-gpu=1 sheng-vsync=120')
+    if args.aks:
+        assert b'sheng-aks=' not in config
+        config=config.replace(b'sheng-log=1',b'sheng-log=1 sheng-aks=1')
+    if args.gpu_addon:
+        # V46: the kernel installs and mounts the addon only with sheng-gpu-addon=1 (kern_exec.c native_gpu_addon_prepare);
+        # sheng-gpu-irq=0 is asteroids' board default (fence waits spin).
+        assert b'sheng-gpu-addon=' not in config and b'sheng-gpu-irq=' not in config
+        config=config.replace(b'sheng-log=1',b'sheng-log=1 sheng-gpu-addon=1 sheng-gpu-irq=0')
     if args.touch_hid:
         assert args.touch_frames and args.buttons and b'sheng-touch-hid=' not in config
         config=config.replace(b'sheng-log=1',b'sheng-log=1 sheng-touch-hid=1')

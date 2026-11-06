@@ -149,7 +149,8 @@ void surveySmmu(void) {
 
 extern "C" void amethyst_touch_snapshot(void);
 extern "C" void amethyst_buttons_hid_start(void) __attribute__((weak_import));
-extern "C" void sheng_gpu_power_probe(void) __attribute__((weak_import));   // GpuPowerProbe.cpp (asteroids), V42
+extern "C" void sheng_gpu_power_probe(void) __attribute__((weak_import));
+extern "C" void native_keystore_probe(void) __attribute__((weak_import));   // KeyStoreProbe.cpp (asteroids), V47   // GpuPowerProbe.cpp (asteroids), V42
 extern "C" void sheng_cpufreq_probe(void) __attribute__((weak_import));
 extern "C" void sheng_cpufreq_poll(void) __attribute__((weak_import));
 extern "C" uint32_t amethyst_sigp_disabled_mask(void) __attribute__((weak_import));
@@ -161,23 +162,52 @@ extern "C" volatile uint32_t amethyst_hid_published_flags __attribute__((weak_im
 extern "C" volatile uint32_t amethyst_touch_hid_published __attribute__((weak_import));
 extern "C" volatile uint32_t amethyst_touch_hid_downs __attribute__((weak_import));
 extern "C" volatile uint32_t amethyst_touch_hid_shorts __attribute__((weak_import));
+extern "C" volatile uint32_t amethyst_touch_hid_corner __attribute__((weak_import));
 extern "C" volatile int amethyst_touch_hid_last[2] __attribute__((weak_import));
 extern "C" volatile uint32_t native_touch_edge_stats[4] __attribute__((weak_import));   // NativeHidInput: installed, begun, at edge, skipped
+extern "C" volatile uint32_t native_legacy_swap_accepted_count __attribute__((weak_import));
+extern "C" volatile uint32_t native_legacy_swap_rejected_count __attribute__((weak_import));
+extern "C" volatile uint32_t native_legacy_rej_reason __attribute__((weak_import));
+extern "C" volatile uint64_t native_legacy_rej_surfaces[4] __attribute__((weak_import));
+extern "C" volatile uint32_t native_legacy_rej_state[3] __attribute__((weak_import)),native_legacy_rej_options[3] __attribute__((weak_import));
+extern "C" volatile uint32_t native_legacy_rej_size[2] __attribute__((weak_import)),native_legacy_rej_rects[2][4] __attribute__((weak_import));
+extern "C" char native_legacy_rej_class[32] __attribute__((weak_import));
+extern "C" volatile uint64_t native_legacy_rej_surface[7] __attribute__((weak_import));
 extern "C" void amethyst_touch_snapshot(void) {
     // HID delivery (V30): NativeHidInput events (2 started, 3 driver attached, 6 touch reports), the
     // Built-In/PrimaryUsage publication, and what the touch thread handed over.
     if(&amethyst_hid_events && &amethyst_touch_hid_published) {
-        amethyst_touch_row_set(49,"AmethystHid: drv=%u/%d rep=%u/%d btn=%u/%u pub=%u sent=%u dn=%u sh=%u edge=%u/%u/%u/%u last=%d,%d\n",
+        amethyst_touch_row_set(49,"AmethystHid: drv=%u/%d rep=%u/%d btn=%u/%u pub=%u sent=%u dn=%u sh=%u cn=%u edge=%u/%u/%u/%u last=%d,%d\n",
             amethyst_hid_events[3],amethyst_hid_results[3],
             amethyst_hid_events[6],amethyst_hid_results[6],amethyst_hid_events[4],amethyst_hid_events[5],amethyst_hid_published_flags,
-            amethyst_touch_hid_published,amethyst_touch_hid_downs,&amethyst_touch_hid_shorts?amethyst_touch_hid_shorts:0,
+            amethyst_touch_hid_published,amethyst_touch_hid_downs,&amethyst_touch_hid_shorts?amethyst_touch_hid_shorts:0,&amethyst_touch_hid_corner?amethyst_touch_hid_corner:0,
             &native_touch_edge_stats?native_touch_edge_stats[0]:9,&native_touch_edge_stats?native_touch_edge_stats[1]:0,
             &native_touch_edge_stats?native_touch_edge_stats[2]:0,&native_touch_edge_stats?native_touch_edge_stats[3]:0,
             amethyst_touch_hid_last[0],amethyst_touch_hid_last[1]);
     }
     // SMP signalling: cores XNU cannot signal (SIGPdisabled; a stackshot then runs with them unstopped)
     // and IPIs each core has taken. Expect sigpoff=00 with armcpu-self-ipi=1.
-    if(amethyst_sigp_disabled_mask && &armcpu_core_sgi) {
+    // V49: row 48 shows the display's swap verdicts once a swap was rejected (v48: the GPU-composited frames failed verify_swap
+    // and the screen stayed black). why: 1 validation off, 2 surface/layer state, 3 rectangles/options/size, 4 surface
+    // properties (then the surface's width, height, format, planes, stride, allocation and bytes follow), 6 not recorded.
+    if(&native_legacy_swap_rejected_count && native_legacy_swap_rejected_count) {
+        const unsigned why=native_legacy_rej_reason;
+        if(why==4)
+            amethyst_touch_row_set(48,"Swap a=%u r=%u why=4 sf=%llux%llu f=%llx p=%llu st=%llu al=%llu b=%llu %.16s\n",
+                native_legacy_swap_accepted_count,native_legacy_swap_rejected_count,
+                native_legacy_rej_surface[0],native_legacy_rej_surface[1],native_legacy_rej_surface[2],native_legacy_rej_surface[3],
+                native_legacy_rej_surface[4],native_legacy_rej_surface[5],native_legacy_rej_surface[6],native_legacy_rej_class);
+        else
+            amethyst_touch_row_set(48,"Swap a=%u r=%u why=%u s%u%u%u%u st=%x/%x/%x op=%x/%x/%x sz=%ux%u rc=%u,%u,%u,%u/%u,%u,%u,%u %.12s\n",
+                native_legacy_swap_accepted_count,native_legacy_swap_rejected_count,why,
+                native_legacy_rej_surfaces[0]!=0,native_legacy_rej_surfaces[1]!=0,native_legacy_rej_surfaces[2]!=0,native_legacy_rej_surfaces[3]!=0,
+                native_legacy_rej_state[0],native_legacy_rej_state[1],native_legacy_rej_state[2],
+                native_legacy_rej_options[0],native_legacy_rej_options[1],native_legacy_rej_options[2],
+                native_legacy_rej_size[0],native_legacy_rej_size[1],
+                native_legacy_rej_rects[0][0],native_legacy_rej_rects[0][1],native_legacy_rej_rects[0][2],native_legacy_rej_rects[0][3],
+                native_legacy_rej_rects[1][0],native_legacy_rej_rects[1][1],native_legacy_rej_rects[1][2],native_legacy_rej_rects[1][3],
+                native_legacy_rej_class);
+    } else if(amethyst_sigp_disabled_mask && &armcpu_core_sgi) {
         unsigned self=0;PE_parse_boot_argn("armcpu-self-ipi",&self,sizeof self);
         amethyst_touch_row_set(48,"AmethystSmp: self-ipi=%u sigpoff=%02x sent=%llu ipi %u %u %u %u %u %u %u %u\n",
             self,amethyst_sigp_disabled_mask(),&armcpu_ipi_sent?(unsigned long long)armcpu_ipi_sent:0ULL,
@@ -189,6 +219,8 @@ extern "C" void amethyst_touch_snapshot(void) {
     if(sheng_cpufreq_probe)sheng_cpufreq_probe();
     if(sheng_cpufreq_poll)sheng_cpufreq_poll();
     if(amethyst_buttons_hid_start)amethyst_buttons_hid_start();
+    // AppleKeyStore stand-in (V47): only with sheng-aks=1 here (KeyStoreProbe defaults it on otherwise).
+    {unsigned aks=0;if(native_keystore_probe && PE_parse_boot_argn("sheng-aks",&aks,sizeof aks) && aks==1)native_keystore_probe();}
     // GPU (V42): asteroids' staged probe, only when sheng-gpu-power is given (the file defaults to mode 19).
     {unsigned gpu=0;if(sheng_gpu_power_probe && PE_parse_boot_argn("sheng-gpu-power",&gpu,sizeof gpu) && gpu)sheng_gpu_power_probe();}
     // Independent read-only button transport discovery; no observer commands.

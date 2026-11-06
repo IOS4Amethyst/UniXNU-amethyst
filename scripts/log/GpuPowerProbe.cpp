@@ -1532,7 +1532,9 @@ void publishMetal() {
     // T62 (sheng 9800f8cd): every process that opens this accelerator gets it in place of the sandbox verdict; the original profiles name
     // no class of this driver, and any Metal client (the wallpaper's poster extensions, widgets, icons, apps) runs the plugin. The driver
     // has no connection cap since sheng's iPadOS 27 merge: each connection gets its own address space.
-    accelerator->setProperty("NativeSandboxGrantProcess", "*");
+    // amethyst v48: this kernel's grant patch compares each entry as an exact process name ("*" matched nothing, so v47's sandbox
+    // refused AGXDeviceUserClient to backboardd and the render server stayed on the CPU, asteroids T62). Name the render server.
+    accelerator->setProperty("NativeSandboxGrantProcess", "backboardd");
     gMetalStage = 4;
     if (!accelerator->attach(IOService::getPlatform())) {accelerator->release(); gMetalStatus = kIOReturnNotAttached; return;}
     accelerator->registerService();

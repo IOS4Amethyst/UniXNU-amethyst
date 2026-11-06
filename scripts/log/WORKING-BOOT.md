@@ -374,3 +374,61 @@ V43 on hardware (result-v43): mode 17 complete. Fences and the timer attached (a
 the 19.2 MHz/... CP counter runs), native_adreno_publish 0: NativeAdrenoGpu service, chip 44010000, GMEM 0x90000,
 GPU VA 0x100000000+; user-client test 115/115 steps, 4/4 rounds (words 0badc0de feed000n 600d0a81 match), a burst
 of 32 submissions matched 32/32, 34 jobs done, 3 connections opened and closed. The bar still drawn first.
+V45 = V44 kernel (accelerator) + gpu-addon CI run 41932148833 (addon 1d83155c..., owner trust 2c77eb8b...), sheng-gpu-power=19 (pack-log choices raised to 19). Untested.
+V45 on hardware (result-v45): mode 19 ran: bar drawn once, NativeAdrenoGpu published, Metal accelerator
+published and registered; backboardd, SpringBoard, mediaserverd, WidgetRenderer and CollectionsPoster read its
+properties, MetalPluginName read 0 times; addon files -1 (never installed): the kernel's addon install/mount runs
+only with sheng-gpu-addon=1. UI stayed on CPU rendering. One fence-wait timeout (sheng-gpu-irq default 1).
+V46 = V45 + sheng-gpu-addon=1 sheng-gpu-irq=0 (pack-log adds both with --gpu-addon). Image staging/amethyst-metal-v46.
+V47 = V46 + AppleKeyStore stand-in (sheng-aks=1): UniXNU drivers/AppleKeyStoreState/NativeKeyStoreEvents.cpp (late
+registration) + asteroids KeyStoreProbe.cpp, run from the touch snapshot hook. Answers libaks/MobileKeyBag "no keybag,
+no passcode, unlocked since boot" so the lock screen dismisses on swipe. Kernel kernel-aks-v47 (prelinked 218a929f...),
+image staging/amethyst-aks-v47 (4187c5df...). Untested.
+V47 on hardware (.scratch/result-v47): AKS stand-in live (opens=111 calls=4042); Preferences (Settings) launched, so the
+lock screen was passed. GPU addon installed this time (A files=6 wr=6 mount=5/0). Metal askers: backboardd, SpringBoard,
+mediaserverd, WidgetRenderer, CollectionsPoster, PhotosPosterProvider, Preferences, Spotlight. SpringBoard (s1) and
+Preferences (s2) opened GPU devices; 53 submissions/65 IBs, all fences matched, 0 lost. WidgetRenderer, CollectionsPoster,
+PhotosPosterProvider: Vulkan -3 (no-device); mediaserverd: no-cachedir. backboardd asked but has no GPU device (s-).
+Method 6: 1056 calls, 981 failures (unexamined).
+V47 cause of CPU compositing: msgbuf "Sandbox: backboardd(53) deny(1) iokit-open-user-client AGXDeviceUserClient", open
+res e00002e2, plugin "PUB no device: Vulkan -3" (asteroids T62): GpuPowerProbe set NativeSandboxGrantProcess="*" and this
+kernel's zzw-native-adreno-sandbox-grant compares entries as exact names. SpringBoard/Preferences opened only because their
+profiles allow the class.
+V48 = V47 + NativeSandboxGrantProcess="backboardd" + touch corner guard (points within 1500 units of an x and a y edge are
+moved out of the corner square; amethyst-touch-corner=N, 0 off; counter cn= in the AmethystHid row) against iPadOS's
+bottom-left/right finger corner gestures freezing touch. Kernel kernel-grant-v48 (53d8d926...), staging/amethyst-grant-v48.
+V48 on hardware (.scratch/result-v48): backboardd now holds GPU slot 0; render server on the GPU (596 command buffers,
+504 pipelines, 16.5 s compiling). Screen black: the original IOMobileFramebufferLegacy logged 6352 "verify_swap failed"
+(NativeLegacyDisplay::validateSwap refused the GPU-composited swaps); only 3 copies. Touch thread ran, no presses.
+V49 = V48 + row 48 "Swap a= r= why=..." (rejection reason, layer state/options/size/rects, or surface w/h/format/planes/
+stride/alloc/bytes for why=4) replacing the SMP row once a swap was rejected. staging/amethyst-swapdiag-v49.
+V49 on hardware (.scratch/result-v49): black as V48. Row 48: "Swap a=1 r=13324 why=4 sf=1220x2712 f=62336138 ('b3a8') p=2
+st=1280 al=16838656": backboardd composited into Apple-compressed two-plane framebuffers, which validateSwap (plain BGRA or
+one-plane &BGA only) refuses. Touch: cn=1 (one corner touch moved), 2 downs.
+V50 = V49 kernel + Data seed skip-setup-seed-v4 (skip-setup-seed branch 952ad29, CI run 41995224691): CAEnableDeepFramebuffer,
+CAEnableFramebufferCompression, CAEnableIOSurfaceCompression false in backboardd and .GlobalPreferences for mobile and root
+(as UniXNU add-gpu-plugin-data.py --publish). staging/amethyst-plainfb-v50.
+V50 on hardware (.scratch/result-v50): picture on screen, GPU blur, no swap rejections; very slow. GPU frames 10 ms mean
+(G commit-to-complete), but every display swap took ~170 ms offer-to-done (swap timeline W484-W523): the CPU copy of each
+1220x2712 GPU frame into the GOP framebuffer (5-6 fps). backboardd restarted once (~267 s; EXC_RESOURCE wakeups corpse at 266 s).
+Touch: the kernel delivered every press to the end (rep 2681, 69 downs, last ones bottom-centre swipes); the "touch stopped" and
+garbled picture are on the iOS/GPU side.
+V51 = V50 + --fb-gpu (sheng-fb-gpu=1 sheng-vsync=120, as asteroids): the GPU copies each frame to the panel through the hand-off
+presenter instead of the CPU. staging/amethyst-fbgpu-v51.
+V51 on hardware (.scratch/result-v51): smooth (GPU hand-off: swaps offer 0-7 ms, done 6-50 ms, against ~170 ms in V50) but text
+and icons garbled; froze while moving the UI. No panic text in msgbuf; the log stops at 176 s uptime. Last swap W293 never
+retired; [gpu stall] fence=611, [gpu unstick] kick=3 (the GPU hung; three kicks did not recover it); backboardd opened the GPU
+13 times (the render server restarted). metal2vulkan warned "color attachment 0 ... loaded with DontCare" (tiles outside the
+draws undefined). Our NativeAdreno 5e2b23e is asteroids' pin and includes 4063b92 (WC system BO clean); asteroids' GPU args
+differ only by sheng-gpu-dcvs=1 min 6 max 7. Suspect next: the add-on (plugin/Turnip) built with UniXNU pinned at f2ce6cce45
+against asteroids' own T63+ stack.
+V52 = V51 + add-on rebuilt as asteroids 6370e66 builds it (UniXNU-amethyst-gpu gpu-addon d468023, CI run 41999151153): UniXNU
+asteroids-dev bd4766ae, drivers/Adreno740 38227e7 (header-only: SetPriority/Note declarations), asteroids' current
+AsteroidsMetalPlugin.mm. addon c8d14d93..., owner trust 9be77135... (.scratch/gpu-addon-ci-v2). Kernel unchanged (v49).
+staging/amethyst-addon2-v52.
+V52 on hardware (.scratch/result-v52, uptime 326 s, 162 rounds, 0 write errors): text and icons render correctly and moving the UI no
+longer freezes (user). Swaps steady at ~15 ms intervals, offer 0-3 ms, done 10-11 ms. [gpu unstick] kick=24 recovered every stall; 2860
+submissions, fences matched. GPU clients: backboardd s0, SpringBoard s1, Spotlight s2; mediaserverd no-cachedir, WidgetRenderer,
+CollectionsPoster, PhotosPosterProvider Vulkan -3. Touch: 2035 reports / 37 downs, cn=1 at ~313 s; two more downs were delivered after
+it, but iPadOS stopped reacting to touches after the bottom-corner touch (user). The kernel side keeps delivering; next: turn off the
+iPadOS finger corner gestures (Screenshot / Quick Note) in the Data seed.

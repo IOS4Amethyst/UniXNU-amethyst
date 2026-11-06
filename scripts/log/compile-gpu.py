@@ -31,7 +31,9 @@ CPP = ['NativeAdrenoMemory', 'NativeAdrenoSmmuMemory', 'NativeAdrenoVm', 'Native
        'NativeAdrenoTimer', 'NativeAdrenoProfile', 'NativeAdrenoUserClient', 'NativeAdrenoPublish']
 PM4 = PROJECT / 'UniXNU/kits/AdrenoPM4'
 # V42: the probe itself (asteroids' GpuPowerProbe.cpp, third-party warning policy) and the SMC helper
-PROBE_CPP = [KIT / 'GpuPowerProbe.cpp']
+PROBE_CPP = [KIT / 'GpuPowerProbe.cpp', KIT / 'KeyStoreProbe.cpp']
+# V47: UniXNU's AppleKeyStoreState stand-in, its static initializer removed (KeyStoreProbe registers the class), as asteroids builds it
+AKS = PROJECT / 'UniXNU/drivers/AppleKeyStoreState/NativeKeyStoreEvents.cpp'
 FLAGS = ['-mgeneral-regs-only', '-I', str(ct.TREE / '.cache/xnu-work/osfmk'), '-I', str(KIT),
          '-I', str(ADRENO), '-I', str(SMMU4K), '-I', str(SOC), '-I', str(GEN), '-I', str(HFI), '-I', str(PM4), '-Wno-incompatible-sysroot',
          '-DSHENG_GMU_POOL_BASE=UINT64_C(0xe6440000)', '-DSHENG_GMU_POOL_BYTES=0x2000000u']
@@ -47,6 +49,12 @@ def main():
         compile_with(ct.RECIPE_CPP, ADRENO / (name + '.cpp'), OUT / (name + '.o')); print('PASS: compiled', name)
     for src in PROBE_CPP:
         compile_with(ct.RECIPE_CPP, src, OUT / (src.stem + '.o')); print('PASS: compiled', src.name)
+    obj = OUT / 'NativeKeyStoreEvents.o'
+    compile_with(ct.RECIPE_CPP, AKS, obj)
+    subprocess.run(['llvm-objcopy', '--remove-section=__DATA,__mod_init_func',
+                    '--globalize-symbol=__GLOBAL__sub_I_NativeKeyStoreEvents.cpp', str(obj), str(OUT / 'NativeKeyStoreEvents.late.o')], check=True)
+    obj.unlink()
+    print('PASS: compiled NativeKeyStoreEvents.cpp (late)')
     for src in [PM4 / 'AdrenoPM4.c', KIT / 'AmethystSmc.c', KIT / 'AmethystGpuStandins.c']:
         compile_with(ct.RECIPE_C, src, OUT / (src.stem + '.kit.o')); print('PASS: compiled', src.name)
     for src in KIT_C:

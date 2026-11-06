@@ -32,7 +32,7 @@ int boot_log_export_put(uint32_t generation,uint32_t total,uint32_t offset,const
 extern volatile uint32_t native_touch_seq,native_touch_count;
 extern volatile int native_touch_xs[12],native_touch_ys[12],native_touch_ids[12];
 void native_touch_published(void);
-volatile uint32_t amethyst_touch_hid_published,amethyst_touch_hid_downs,amethyst_touch_hid_shorts;
+volatile uint32_t amethyst_touch_hid_published,amethyst_touch_hid_downs,amethyst_touch_hid_shorts,amethyst_touch_hid_corner;
 volatile int amethyst_touch_hid_last[2];
 }
 
@@ -212,6 +212,10 @@ int frameClear() {
     return geni_spi_transfer(engine,ftx,frx,total,0);
 }
 bool hidEnabled,hidDown;
+// V48: iPadOS 17's finger corner gestures (bottom-left screenshot, bottom-right Quick Note) froze touch on hardware while the
+// kernel kept reporting. A point within hidCorner TouchState units of both an x edge and a y edge is moved out of that corner
+// square, so no touch ever starts in a corner. amethyst-touch-corner=N sets the size (0 turns it off).
+int hidCorner=1500;
 // One finger (or none) to TouchState. Each press gets a new identifier so iOS sees a new touch.
 void hidPublish() {
     const bool down=diff.pressed!=0;
@@ -221,6 +225,11 @@ void hidPublish() {
     __asm__ volatile("dmb ish" ::: "memory");
     if(down) {
         int x,y;goodix_diff_screen(&diff,&diff.live,&x,&y);
+        const int c=hidCorner;
+        if(c>0 && (x<c || x>30480-c) && (y<c || y>20320-c)) {
+            x=x<c?c:30480-c;y=y<c?c:20320-c;
+            if(!hidDown)amethyst_touch_hid_corner=amethyst_touch_hid_corner+1;
+        }
         native_touch_xs[0]=x;native_touch_ys[0]=y;native_touch_ids[0]=(int)(diff.presses%200)+1;
         amethyst_touch_hid_last[0]=x;amethyst_touch_hid_last[1]=y;
         if(!hidDown)amethyst_touch_hid_downs=amethyst_touch_hid_downs+1;
@@ -314,6 +323,7 @@ extern "C" int amethyst_touch_events_start(struct geni_spi *spi,unsigned mode,co
     fstats.peak=INT16_MIN;fstats.floor=INT16_MAX;
     unsigned hid=0;
     hidEnabled=mode==2 && PE_parse_boot_argn("sheng-touch-hid",&hid,sizeof hid) && hid==1;
+    {unsigned corner=0;if(PE_parse_boot_argn("amethyst-touch-corner",&corner,sizeof corner))hidCorner=corner>5000?5000:(int)corner;}
     goodix_diff_reset(&diff,mode==2?layout.drvNum:0,mode==2?layout.senNum:0);
     unsigned record=0;
     // V20: exporting from this thread while iOS read its root froze userspace at the

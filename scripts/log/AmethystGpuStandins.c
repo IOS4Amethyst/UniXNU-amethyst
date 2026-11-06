@@ -15,3 +15,6 @@ __attribute__((weak)) void native_adreno_accelerator_static_init(void) __asm__("
 __attribute__((weak)) void native_adreno_accelerator_static_init(void) {}
 __attribute__((weak)) void *native_adreno_accelerator_allocate(void) {return NULL;}
 __attribute__((weak)) unsigned native_adreno_accelerator_instance_size(void) {return 0;}
+// V47: KeyStoreProbe.cpp (asteroids) writes its AppleKeyStore counters into the diagnostic extension rows, which amethyst's
+// BootLog prints when defined.
+__attribute__((weak)) char boot_progress_ext[8][48];

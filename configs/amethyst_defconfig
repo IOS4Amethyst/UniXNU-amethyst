@@ -19,7 +19,10 @@ CONFIG_XNU_SOURCE_STORAGE_TABLES="userdata"
 CONFIG_XNU_OWNER_ROOT_AUDIT=y
 CONFIG_XNU_OWNER_ROOT_TRUST=y
 CONFIG_XNU_EXTRA_LD_ARCHIVES="-Wl,-force_load,{tree}/build/sheng-source-storage/libShengSourceStorage.a"
-CONFIG_XNU_NATIVE_UFS=y
+# The standalone UFS personality would force-load build/sheng-ufs/libShengUfs.a, which the source
+# storage builder fills with a copy of libShengSourceStorage.a: the same objects enter the link twice
+# and every symbol is a duplicate. The source archive owns the driver on this path.
+# CONFIG_XNU_NATIVE_UFS is not set
 # CONFIG_XNU_NATIVE_AES is not set
 CONFIG_XNU_NATIVE_RAM_BLOCK=y
 CONFIG_XNU_SOURCE_MOCKFS=y

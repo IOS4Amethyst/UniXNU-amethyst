@@ -106,7 +106,9 @@ constants need: the iOS 27 prelink places `com.apple.kernel` in a `0xd8000`
 `__DATA_CONST` slot, while a DEVELOPMENT kernel measures `0x120000` and a
 RELEASE one `0xb8000`. The reference-enabled and the plain RELEASE link both
 pass, and the prelink emits a kernel collection; the payload and the Data seed
-are the next steps. Kernel CI runs on GitHub `macos-26` runners.
+are the next steps. Kernel CI runs on GitHub `macos-26` runners. The numbers,
+the open prelink gaps and the next steps are in
+[IOS27-BRINGUP.md](IOS27-BRINGUP.md).
 
 ## Safety
 

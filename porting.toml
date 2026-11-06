@@ -32,7 +32,7 @@ configuration = [
   "board.toml [board] kit = \"amethyst\"; [components] include ArmDTPlatform, ArmCpu, SoftwareAES, RamBlock, XnuPrelink, DarwinBoot, AppleKeyStoreState, AdrenoFirmware, ShengUfs.",
   "configs/amethyst_defconfig with arch, sm7635 and ipados config fragments; patch_series arch, soc (xnu-12377), os and device patches/xnu/series.",
   "[payload] kernel_args keep sheng-data-persist=0 and sheng-log=0; test images enable the log explicitly.",
-  "Branch ios27: board.toml [kernel] config_level = \"RELEASE\"; scripts/policies/ios-27.0.1-24A446/prelink-regression.json bounds the allow-missing prelink.",
+  "Branch ios27: board.toml [kernel] config_level = \"RELEASE\"; scripts/policies/ios-27.0.1-24A446/prelink-regression.json bounds the allow-missing prelink; IOS27-BRINGUP.md records the state and gaps.",
 ]
 procedure = [
   "./unixnu defconfig amethyst_defconfig -D ../UniXNU-amethyst",

@@ -2,7 +2,7 @@
 
 Device port of [UniXNU](https://github.com/UniXNU/UniXNU) for the Xiaomi Redmi Note 14 Pro+ 5G.
 
-> **Branch `ios27`:** experimental iOS 27.0.1 (`24A446`) port with an iPhone 15 identity (arm64e). Not bootable yet; see [iOS 27](#ios-27-ios27).
+> **Branch `ios27`:** experimental iOS 27.0.1 (`24A446`) port with an iPhone 15 identity (arm64e). The RELEASE kernel links and prelinks; see [iOS 27](#ios-27-ios27).
 
 | Property | Value |
 |---|---|
@@ -92,7 +92,7 @@ in [ROOT-BRINGUP.md](ROOT-BRINGUP.md), [UFS-AUDIT.md](UFS-AUDIT.md) and
 | `amethyst-touch-gpu-bringup` | Touch, SMP, CPU governor and GPU bring-up sources (V18–V44). |
 | `skip-setup-seed` | CI job that builds the Data seed: skips Setup, disables crash-looping daemons, turns off compressed/deep framebuffers. |
 | `gpu-addon` | CI job that builds the GPU add-on (Metal plugin + Turnip) and owner trust bundle. Artifacts are encrypted. |
-| `ios27` | Experimental iOS 27.0.1 (`24A446`) port with an iPhone 15 identity (arm64e). The kernel does not build yet. |
+| `ios27` | Experimental iOS 27.0.1 (`24A446`) port with an iPhone 15 identity (arm64e). The RELEASE kernel links and prelinks; the payload and Data seed are next. |
 | `ios27-iphone15-pins` | Root image pins for iPhone15,4 `24A446`, used by `ios27`. |
 
 The V45–V52 kernel sources (AppleKeyStore stand-in, sandbox grant, corner guard,
@@ -100,10 +100,13 @@ swap diagnostics, `pack-log.py --aks/--fb-gpu`) are not on any branch yet.
 
 ### iOS 27 (`ios27`)
 
-Not bootable yet. The source-storage root path has been ported, and the kernel
-is being moved to the RELEASE configuration so its constants fit the iOS 27
-kernelcache layout. Kernel CI runs on GitHub `macos-26` runners. Nothing has
-been tested on hardware.
+Nothing has been tested on hardware yet. The source-storage root path has been
+ported, and the kernel now builds at the RELEASE configuration, which its
+constants need: the iOS 27 prelink places `com.apple.kernel` in a `0xd8000`
+`__DATA_CONST` slot, while a DEVELOPMENT kernel measures `0x120000` and a
+RELEASE one `0xb8000`. The reference-enabled and the plain RELEASE link both
+pass, and the prelink emits a kernel collection; the payload and the Data seed
+are the next steps. Kernel CI runs on GitHub `macos-26` runners.
 
 ## Safety
 

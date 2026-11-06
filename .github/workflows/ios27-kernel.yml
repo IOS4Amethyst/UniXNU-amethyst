@@ -20,6 +20,14 @@ on:
         description: "Build Userdata (takes ~16GB disk)"
         type: boolean
         default: false
+      data_ramdisk:
+        description: "Data seed (owner-data.cdr from the Data seed workflow) for the payload"
+        required: false
+        default: ""
+      root_policies:
+        description: "Root-policy bundle for the payload (built here unless a path is given)"
+        required: false
+        default: ""
       xcode:
         description: Xcode version
         required: true
@@ -67,6 +75,26 @@ jobs:
           path: uefi-amethyst
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Locate root-policy bundle
+        id: root-policies
+        if: inputs.build_payload
+        env:
+          GIVEN: ${{ inputs.root_policies }}
+        run: |
+          set -euo pipefail
+          # The bundle is written by this repository's "iOS 27 iPhone root policies" workflow
+          # (scripts/build-ios27-root-policies.py) from the owner key. board.toml points the payload at
+          # {tree}/build/sheng-source-storage/root-policies.bin, which is the tree outside the core checkout.
+          if [ -n "$GIVEN" ]; then
+            test -f "$GIVEN" || { echo "root-policy bundle not found: $GIVEN"; exit 1; }
+            mkdir -p "$GITHUB_WORKSPACE/build/sheng-source-storage"
+            cp "$GIVEN" "$GITHUB_WORKSPACE/build/sheng-source-storage/root-policies.bin"
+            echo "board.toml root_policies: build/sheng-source-storage/root-policies.bin (from $GIVEN)"
+          else
+            echo "No root_policies given: the payload boot entry carries no root-policy bundle" \
+                 "(the kernel boots without a root read, as in the last RAM-only test)."
+          fi
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -112,8 +140,16 @@ jobs:
         working-directory: ./unixnu-core
         env:
           UNIXNU_UNIQUE_CHIP_ID: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
+          DATA_SEED: ${{ inputs.data_ramdisk }}
         run: |
-          ./unixnu build payload --uefi uefi-amethyst --edk2 uefi-amethyst/Mu_Basecore -D "$GITHUB_WORKSPACE"
+          set -euo pipefail
+          extra=()
+          if [ -n "$DATA_SEED" ]; then
+            test -f "$DATA_SEED" || { echo "Data seed not found: $DATA_SEED"; exit 1; }
+            extra+=(--data-ramdisk "$DATA_SEED")
+          fi
+          ./unixnu build payload --uefi uefi-amethyst --edk2 uefi-amethyst/Mu_Basecore \
+            -D "$GITHUB_WORKSPACE" "${extra[@]}"
 
       - name: Build userdata
         if: inputs.build_userdata

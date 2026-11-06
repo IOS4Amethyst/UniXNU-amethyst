@@ -43,6 +43,9 @@ archives = [
   "component:RamBlock",
   "build-mockfs-fixture.py",
   "component:AppleKeyStoreState",
+  # The iOS 27 profile's prelink matches against the symbol-bearing RELEASE build of the same XNU
+  # source (--fileset-reference); this produces it, as sheng does.
+  "build-fileset-release-reference.py --tree . --lto",
 ]
 
 [device_tree]

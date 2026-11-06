@@ -44,6 +44,9 @@ env:
 jobs:
   build:
     runs-on: macos-26
+    # ARTIFACT_PASSPHRASE is a secret of the environment of the same name (as gpu-addon.yml): the outputs hold the prelinked
+    # Apple kernelcache, so they are only uploaded encrypted. This repository is public.
+    environment: ARTIFACT_PASSPHRASE
     timeout-minutes: 360
     env:
       DEVELOPER_DIR: /Applications/Xcode_${{ inputs.xcode || '26.6' }}.app/Contents/Developer
@@ -156,48 +159,53 @@ jobs:
         working-directory: ./unixnu-core
         run: ./unixnu build userdata -D "$GITHUB_WORKSPACE"
 
-      - name: Upload compiled binaries and logs
+      - name: Encrypt compiled binaries and logs
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: unixnu-ios27-kernel
-          path: |
-            unixnu-core/out/**/kernel/**
-            unixnu-core/out/**/payload/**
-            unixnu-core/out/**/userdata/**
-            unixnu-core/out/**/logs/*.log
-            # Per-source compiler logs and command lines of the source-storage archive: the build log only keeps the tail.
-            unixnu-core/out/**/tree/build/sheng-source-storage/**/*.log
-            unixnu-core/out/**/tree/build/sheng-source-storage/**/*.command.json
-            # The RELEASE fileset reference the prelink matches against; its long build log only
-            # exists here when the reference link fails. The binary is kept because RELEASE drops
-            # the development/mach_assert/config_xnupost options the main DEVELOPMENT kernel
-            # carries, so its __DATA_CONST is the measurement of how much that saves.
-            unixnu-core/out/**/tree/build/xnu/fileset-reference/**/*.log
-            unixnu-core/out/**/tree/build/xnu/fileset-reference/**/*.json
-            unixnu-core/out/**/tree/build/xnu/fileset-reference/mach.*.noctf
-            # The generated kernel headers the archive compiles against: xnu 12377 moved kmem_* out of the
-            # exported vm_kern.h depending on XNU_KERNEL_PRIVATE, so keep the whole osfmk export set.
-            unixnu-core/out/**/build/xnu/ios-obj/EXPORT_HDRS/osfmk/**/*.h
-            # The linked kernel itself: the prelink places the native segments against the collection, so
-            # a layout failure (a segment that does not fit a retained range) is diagnosed from these
-            # segment sizes, and the image is the prelink input.
-            unixnu-core/out/**/build/xnu/ios-obj/**/mach.*.noctf
-          if-no-files-found: warn
-          retention-days: 7
+        env:
+          ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
+        run: |
+          set -uo pipefail
+          [ -n "$ARTIFACT_PASSPHRASE" ] || { echo "::error::No ARTIFACT_PASSPHRASE secret: nothing is uploaded."; exit 1; }
+          # The kernel, payload, userdata and PMGR outputs carry the prelinked Apple kernelcache and ABI derived from it.
+          # Decrypt: openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in ios27-build.tar.gz.enc -pass file:KEYFILE | tar xz
+          # bash 3.2 on the macOS runner has no globstar: expand the patterns in Python.
+          python3 - "$RUNNER_TEMP/files.txt" <<'PY'
+          import glob, os, sys
+          patterns = [
+              'unixnu-core/out/**/kernel/**',
+              'unixnu-core/out/**/payload/**',
+              'unixnu-core/out/**/userdata/**',
+              'unixnu-core/out/**/logs/*.log',
+              'unixnu-core/out/**/tree/build/sheng-source-storage/**/*.log',
+              'unixnu-core/out/**/tree/build/sheng-source-storage/**/*.command.json',
+              'unixnu-core/out/**/tree/build/xnu/fileset-reference/**/*.log',
+              'unixnu-core/out/**/tree/build/xnu/fileset-reference/**/*.json',
+              'unixnu-core/out/**/tree/build/xnu/fileset-reference/mach.*.noctf',
+              'unixnu-core/out/**/build/xnu/ios-obj/EXPORT_HDRS/osfmk/**/*.h',
+              'unixnu-core/out/**/build/xnu/ios-obj/**/mach.*.noctf',
+              'unixnu-core/out/**/tree/build/sheng-platform-power/ShengPlatformPower.o',
+              'unixnu-core/out/**/tree/build/sheng-platform-power/OriginalPMGRABI.h',
+              'unixnu-core/out/**/tree/build/sheng-platform-power/GuardedPMGRSlots.inc',
+              'unixnu-core/out/**/tree/build/sheng-platform-power-arm64e/**',
+              'unixnu-core/out/**/tree/build/xnu/ios-obj/**/IOPMGR.cpo',
+              'unixnu-core/out/**/tree/build/xnu/ios-obj/**/IOPMGR.cpo.json',
+              'unixnu-core/out/**/tree/build/xnu/ios-obj/**/IOPlatformExpert.cpo.json',
+          ]
+          files = sorted({f for p in patterns for f in glob.glob(p, recursive=True) if os.path.isfile(f)})
+          open(sys.argv[1], 'wb').write(b''.join(f.encode() + b'\0' for f in files))
+          print(len(files), 'files')
+          PY
+          mkdir -p "$RUNNER_TEMP/encrypted"
+          [ -s "$RUNNER_TEMP/files.txt" ] || { echo "::warning::nothing to upload"; exit 0; }
+          tar --null -czf - -T "$RUNNER_TEMP/files.txt" \
+            | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:ARTIFACT_PASSPHRASE \
+              -out "$RUNNER_TEMP/encrypted/ios27-build.tar.gz.enc"
 
-      - name: Upload PMGR ABI diagnostics
+      - name: Upload encrypted build
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: unixnu-ios27-pmgr-abi
-          path: |
-            unixnu-core/out/**/tree/build/sheng-platform-power/ShengPlatformPower.o
-            unixnu-core/out/**/tree/build/sheng-platform-power/OriginalPMGRABI.h
-            unixnu-core/out/**/tree/build/sheng-platform-power/GuardedPMGRSlots.inc
-            unixnu-core/out/**/tree/build/sheng-platform-power-arm64e/**
-            unixnu-core/out/**/tree/build/xnu/ios-obj/**/IOPMGR.cpo
-            unixnu-core/out/**/tree/build/xnu/ios-obj/**/IOPMGR.cpo.json
-            unixnu-core/out/**/tree/build/xnu/ios-obj/**/IOPlatformExpert.cpo.json
+          name: unixnu-ios27-build-encrypted
+          path: ${{ runner.temp }}/encrypted/ios27-build.tar.gz.enc
           if-no-files-found: warn
           retention-days: 7

@@ -52,7 +52,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: IOS4Amethyst/UniXNU
-          ref: ios27-iphone15
+          # The configuration-level parameter. Merge back to ios27-iphone15 once the
+          # RELEASE kernel links and prelinks.
+          ref: ios27-release-config-level
           path: unixnu-core
           token: ${{ secrets.GITHUB_TOKEN }}
 

@@ -24,6 +24,14 @@ windows = [
 
 [kernel]
 defconfig = "amethyst_defconfig"
+# The iOS 27 prelink fits the native segments around the collection's retained kexts, and
+# com.apple.kernel's __DATA_CONST slot is 0xd8000. A DEVELOPMENT kernel's __DATA_CONST is
+# 0x120000 (over by 0x48000) because KERNEL_DEV adds mach_assert, config_xnupost and
+# development on top of KERNEL_BASE; the RELEASE set is KERNEL_BASE alone and measures
+# 0xb8000. Every file in this board's patches, defconfig and kit sources that is gated on
+# DEVELOPMENT or DEBUG is behind a config macro this board leaves off, so nothing
+# board-specific is lost. See the porting record for the audit.
+config_level = "RELEASE"
 config_fragments = ["arch:configs/common.config", "soc:configs/sm7635.config", "os:configs/ipados.config"]
 patch_series = ["arch:patches/xnu/series", "soc:patches/xnu-12377/series", "os:patches/xnu/series", "device:patches/xnu/series"]
 archives = [

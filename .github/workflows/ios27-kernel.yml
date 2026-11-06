@@ -119,6 +119,16 @@ jobs:
               return e
           K.xnu_env = spy
           from unixnu import cli
+          import atexit
+          def check():
+              from pathlib import Path as P
+              f = P('out/amethyst/ios-27.0.1-24A446/amethyst/tree/scripts/kernel_target.py')
+              print('PROBE tree target exists =', f.is_file(), flush=True)
+              if f.is_file():
+                  txt = f.read_text()
+                  print('PROBE tree has CONFIG_LEVEL =', 'CONFIG_LEVEL' in txt, flush=True)
+                  print('PROBE tree line =', [l for l in txt.splitlines() if 'CONFIG_LEVEL =' in l][:1], flush=True)
+          atexit.register(check)
           cli.main()
           "
           ./unixnu build kernel --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"

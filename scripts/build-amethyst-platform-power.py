@@ -2,7 +2,8 @@
 """Build the opt-in, guarded sheng original-PMGR integration instrument for amethyst.
 
 Copied from UniXNU/UniXNU-sheng scripts/build-sheng-platform-power.py (BSD-2-Clause-Patent). The source is sheng's
-package/ShengPlatformPower.cpp, unchanged, in this repository's package/ (kits/amethyst in the build tree); it
+package/ShengPlatformPower.cpp, unchanged, in this repository's kits/amethyst (the kit the build tree links the
+device package to, named by board.toml [board] kit); it
 touches no hardware and only publishes an ApplePMGR provider so the unchanged AMFI finds one.
 
 One change: sheng checks the vtable against a prelinked candidate left by an earlier local build. A fresh CI tree has

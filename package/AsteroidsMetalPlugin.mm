@@ -436,6 +436,122 @@ static id clientDevice(unsigned port) {
     }
     return device;
 }
+// amethyst: SpringBoard's own unified log, for the bottom-edge swipe that leaves touch dead while the screen keeps animating (V52: the kernel
+// delivers every press and release, so the stuck state is inside SpringBoard). OSLogStore's current-process scope needs no entitlement; the
+// whole-system scope (upstream's NativeOsLogExport.mm, adrenoprobed) does, and that daemon never started on alioth. Every kOsLogPeriod
+// seconds the entries since the latest boot are rewritten as text into kOsLogDir under SpringBoard's own Caches; cacheexport::run sends
+// the directory to the kernel's UFS log export once it has stayed unchanged for one of its 15 s periods (the kernel accepts the export
+// method from SpringBoard as well as backboardd on this board). Line: "<uptime s> <level> <subsystem>:<category> <message>".
+// Markers 0x6Cxx: 00 started, 01 directory ready, 02 a pass written (0x6Dnn: its lines / 1000, saturated), f0 no directory, f1 no store.
+namespace oslogexport {
+constexpr unsigned kOsLogPeriod = 40;
+constexpr uint64_t kOsLogLines = 400000;
+static const char *levelName(NSInteger level) {
+    switch (level) {
+    case 1: return "debug";
+    case 2: return "info";
+    case 3: return "notice";
+    case 4: return "error";
+    case 5: return "fault";
+    default: return "-";
+    }
+}
+static uint64_t writePass(const std::string &temporary, const std::string &final) {
+    uint64_t lines = 0;
+    @autoreleasepool {
+        FILE *out = fopen(temporary.c_str(), "w");
+        if (!out) return 0;
+        const double uptime = [NSProcessInfo processInfo].systemUptime;
+        NSDate *now = [NSDate date];
+        fprintf(out, "# amethyst oslog %s pid %d uptime %.3f\n", getprogname(), getpid(), uptime);
+        Class storeClass = NSClassFromString(@"OSLogStore");
+        NSError *error = nil;
+        // OSLogStoreCurrentProcessIdentifier = 1.
+        id store = storeClass ? ((id (*)(Class, SEL, NSInteger, NSError **))objc_msgSend)(storeClass, @selector(storeWithScope:error:), 1, &error)
+                              : nil;
+        if (!store) {
+            fprintf(out, "# no store: %s\n", (error ? error.description : @"OSLogStore missing").UTF8String);
+        } else {
+            id position = ((id (*)(id, SEL, NSTimeInterval))objc_msgSend)(store, @selector(positionWithTimeIntervalSinceLatestBoot:), 0);
+            id entries = ((id (*)(id, SEL, NSUInteger, id, id, NSError **))objc_msgSend)(
+                store, @selector(entriesEnumeratorWithOptions:position:predicate:error:), 0, position, nil, &error);
+            if (!entries) fprintf(out, "# no entries: %s\n", (error ? error.description : @"nil").UTF8String);
+            for (id entry in entries) {
+                @autoreleasepool {
+                    if (++lines > kOsLogLines) {fprintf(out, "# line limit\n"); break;}
+                    NSDate *date = [entry valueForKey:@"date"];
+                    const double at = uptime - [now timeIntervalSinceDate:date];
+                    NSString *message = [entry valueForKey:@"composedMessage"];
+                    const bool isLog = [entry respondsToSelector:@selector(level)];
+                    NSString *subsystem = [entry respondsToSelector:@selector(subsystem)] ? [entry valueForKey:@"subsystem"] : @"";
+                    NSString *category = [entry respondsToSelector:@selector(category)] ? [entry valueForKey:@"category"] : @"";
+                    const NSInteger level = isLog ? [[entry valueForKey:@"level"] integerValue] : 0;
+                    fprintf(out, "%10.3f %s %s:%s %s\n", at, levelName(level), subsystem.UTF8String ?: "", category.UTF8String ?: "",
+                            message.UTF8String ?: "");
+                }
+            }
+            fprintf(out, "# %llu entries\n", (unsigned long long)lines);
+        }
+        if (fclose(out) != 0) return 0;
+        chmod(temporary.c_str(), 0644);
+        if (rename(temporary.c_str(), final.c_str()) != 0) return 0;
+    }
+    return lines;
+}
+static void start(unsigned port) {
+    static bool started;
+    if (started) return;
+    started = true;
+    if (void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW | RTLD_LOCAL)) {
+        if (auto retain = (int (*)(unsigned))dlsym(iokit, "IOObjectRetain")) retain(port);
+    }
+    Gpu *gpu = makeGpu(port);
+    if (!gpu) return;
+    gpu->mark(0x6C00);
+    pthread_attr_t attributes;
+    pthread_attr_init(&attributes);
+    pthread_attr_setdetachstate(&attributes, PTHREAD_CREATE_DETACHED);
+    pthread_attr_setstacksize(&attributes, 1u << 20);
+    pthread_t writer;
+    pthread_create(&writer, &attributes, [](void *arg) -> void * {
+        Gpu *g = static_cast<Gpu *>(arg);
+        std::string caches;
+        @autoreleasepool {
+            NSString *path = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
+            if (path) caches = path.UTF8String;
+        }
+        if (caches.empty()) {g->mark(0x6Cf0); return nullptr;}
+        const std::string directory = caches + "/amethyst-oslog", staging = caches + "/amethyst-oslog-staging";
+        mkdir(directory.c_str(), 0755);
+        mkdir(staging.c_str(), 0755);
+        struct stat st = {};
+        if (stat(directory.c_str(), &st) != 0 || stat(staging.c_str(), &st) != 0) {g->mark(0x6Cf0); return nullptr;}
+        g->mark(0x6C01);
+        pthread_attr_t exporterAttributes;
+        pthread_attr_init(&exporterAttributes);
+        pthread_attr_setdetachstate(&exporterAttributes, PTHREAD_CREATE_DETACHED);
+        pthread_attr_setstacksize(&exporterAttributes, 1u << 20);
+        pthread_t exporter;
+        auto *job = new std::pair<Gpu *, std::string>(g, directory);
+        if (pthread_create(&exporter, &exporterAttributes, [](void *arg) -> void * {
+                auto *j = static_cast<std::pair<Gpu *, std::string> *>(arg);
+                cacheexport::run(*j->first, j->second);
+                return nullptr;
+            }, job) != 0) delete job;
+        pthread_attr_destroy(&exporterAttributes);
+        const std::string name = getprogname();
+        for (;;) {
+            sleep(kOsLogPeriod);
+            const uint64_t lines = writePass(staging + "/" + name + ".txt", directory + "/" + name + ".txt");
+            if (!lines) {g->mark(0x6Cf1); continue;}
+            g->mark(0x6C02);
+            g->mark(0x6D00 | (uint32_t)(lines / 1000 > 0xff ? 0xff : lines / 1000));
+        }
+        return nullptr;
+    }, gpu);
+    pthread_attr_destroy(&attributes);
+}
+}  // namespace oslogexport
 static id deviceForPort(unsigned port) {
     static id device;
     static bool tried;
@@ -449,6 +565,7 @@ static id deviceForPort(unsigned port) {
         // runtime keeps within a texture's rows (bridge patch 0016). asteroids: plus the boot arguments' switches (setTurnipDebug).
         const bool renderServer = strcmp(getprogname(), "backboardd") == 0;
         setTurnipDebug(renderServer);
+        if (!renderServer && strcmp(getprogname(), "SpringBoard") == 0) oslogexport::start(port);
         if (!renderServer) return device = listedClient() ? clientDevice(port) : nil;
         // The discovery releases the accelerator port when it is done; the monitor and the scanout client keep using it.
         if (void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW | RTLD_LOCAL)) {

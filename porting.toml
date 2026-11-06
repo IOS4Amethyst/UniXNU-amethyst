@@ -43,6 +43,7 @@ findings = [
   "Sm7635Platform is not selected: board services are provided by board-package code and test kernels instead.",
   "The board ADT keeps arm_io_base 0x01000000; a zero parent base made pe_identify_machine return early and skip clock-frequency initialisation.",
   "drivers/Adreno740 is fetched from IOS4Amethyst/NativeAdreno (main = 38227e7, the A810 branch of rootstockos/NativeAdreno); the add-on and seed workflows run by hand from main.",
+  "The springboard-oslog branch builds the GPU add-on with the SpringBoard log export; main keeps the V52 add-on.",
 ]
 completion = [
   "All source pins resolve; every selected component has a record; status shows the intended overrides and patch order.",
@@ -366,6 +367,7 @@ findings = [
   "The sandbox grant matches exact process names: it must name backboardd for the render server to open the GPU.",
   "backboardd composited into Apple-compressed two-plane framebuffers until the Data seed set CAEnableFramebufferCompression, CAEnableDeepFramebuffer and CAEnableIOSurfaceCompression false.",
   "An add-on built against an older UniXNU drew garbled text and hung the GPU; rebuilding it from rootstockos/UniXNU bd4766ae with NativeAdreno 38227e7 fixed both.",
+  "Diagnostic branch springboard-oslog: the Metal plugin in SpringBoard writes SpringBoard's own unified log (OSLogStore current-process scope) and sends it through the export method, which the kernel now also accepts from SpringBoard; for the bottom-edge swipe that stops iOS touch input.",
 ]
 completion = [
   "GPU submissions complete, mapping/fence handling is correct, a known image renders, and the selected Metal client presents it.",

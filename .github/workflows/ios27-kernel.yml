@@ -152,7 +152,7 @@ jobs:
             extra+=(--data-ramdisk "$DATA_SEED")
           fi
           ./unixnu build payload --uefi uefi-amethyst --edk2 uefi-amethyst/Mu_Basecore \
-            -D "$GITHUB_WORKSPACE" "${extra[@]}"
+            -D "$GITHUB_WORKSPACE" ${extra[@]+"${extra[@]}"}   # bash 3.2: an empty array is unbound under set -u
 
       - name: Build userdata
         if: inputs.build_userdata

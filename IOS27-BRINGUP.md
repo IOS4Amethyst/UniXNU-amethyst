@@ -96,10 +96,24 @@ regression. Core `scripts/report-prelink-unnamed.py` and
 - Expected first result: a stop in `_unixnu_fileset_unmapped` (or earlier) on the text console. RELEASE builds no
   `BootLog.c`, so there is no UFS log: the screen is the record.
 
+## On the phone (2026-11-07)
+
+- i1 (old firmware DarwinBoot): "returned unsupported". That DarwinBoot predates UniXNU/DarwinBoot 3c75734 and refuses
+  arm64e kernels and MH_FILESET collections. A second DarwinBoot cannot be loaded beside it (DarwinBootEntry returns
+  EFI_ALREADY_STARTED when the loader protocol exists), so it is replaced in place.
+- The CI firmware build cannot run: uefi-amethyst needs the proprietary `Binaries/` tree. DarwinBoot 3c75734 was built
+  alone instead, against mu_basecore cfb93724 and core's UniXNUPkg:
+  `build -p DarwinBootPkg/DarwinBoot.dsc -m DarwinBootPkg/Driver/DarwinBoot.inf -a AARCH64 -t CLANGPDB -b RELEASE`
+  (`CLANGPDB_BIN=/usr/bin/`, an empty `MdePkg/Library/MipiSysTLib/mipisyst/library/include` stub; Brotli need not build).
+  `scripts/patch-darwinboot.py` swaps it into the GMU_Pool firmware (`.scratch/uefi-darwinboot/amethyst-gmu-pool-db3c75734.fd`).
+- i2 (new DarwinBoot): green handoff bar, then nothing; no kernel text.
+- i3 (i2 plus core `patch-xnu-entry-probe.py --reset-delay 6` on the kernel): blue = kernel entry ran, magenta = reached
+  MMU enable, reboot ~6 s later = MMU on. Core 7505af5 fixes the probe's symbol parsing for filesets, so CI can apply it.
+
 ## Not proven yet
 
 - No userdata build for an iOS 27 image has been made.
-- No iOS 27 image has been booted on the phone, in RAM or otherwise.
+- The kernel has not shown any output on the phone yet (see above).
 - No trust cache is in the payload, so userland cannot start even if the kernel does.
 - `Data` seed and root-policy bundle for `24A446` are inputs that exist as
   workflow artifacts, not as tested images.

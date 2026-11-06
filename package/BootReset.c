@@ -8,7 +8,6 @@
 #include <kern/sched.h>
 #include <pexpert/pexpert.h>
 #include "BootResetCore.h"
-
 // Physical windows from the sheng devicetree (spmi@c400000 reg, reg-names core/chnls/obsrvr/cnfg).
 enum {SpmiCore = 0xc400000, SpmiCoreSize = 0x3000, SpmiObsrvr = 0xc440000, SpmiChnls = 0xc500000, SpmiCnfg = 0xc42d000, SpmiCnfgSize = 0x4000};
 enum {PsciVersion = 0x84000000u, PsciFeatures = 0x8400000au, PsciSystemReset = 0x84000009u, PsciSystemReset2_32 = 0x84000012u,
@@ -159,3 +158,62 @@ int boot_reset_bootloader(char *text, unsigned cap) {
   psci(PsciSystemReset, 0);
   return 99;   // SYSTEM_RESET returned
 }
+
+// Optional diagnostic rings that the sheng display, touch, GPU and power stacks publish, imported weakly by
+// BootLog.c, BootDiagExport.c and BootUiTraceProbe.c. This board builds none of those stacks, and a static
+// kernel link cannot leave a weak import undefined. Zero and hidden keeps the exports inert and lets a build
+// with the publishing component win: its strong definition takes precedence. BootDiagExport.c reads a NULL
+// ring as "not captured" and BootUiTraceProbe.c skips a hook that is NULL.
+struct bo_trace;
+struct cpufreq_rec;
+typedef struct arm_saved_state arm_saved_state_t;
+extern bool (*sheng_pmu_fixup)(arm_saved_state_t *);
+__attribute__((weak, visibility("hidden"))) bool (*sheng_pmu_fixup)(arm_saved_state_t *);
+
+extern volatile uint64_t *native_touch_report_ring;
+__attribute__((weak, visibility("hidden"))) volatile uint64_t *native_touch_report_ring;
+extern volatile uint32_t native_touch_report_count;
+__attribute__((weak, visibility("hidden"))) volatile uint32_t native_touch_report_count;
+
+extern volatile uint64_t (*native_legacy_ring)[2];
+__attribute__((weak, visibility("hidden"))) volatile uint64_t (*native_legacy_ring)[2];
+extern volatile uint32_t native_legacy_ring_cap, native_legacy_ring_count;
+__attribute__((weak, visibility("hidden"))) volatile uint32_t native_legacy_ring_cap, native_legacy_ring_count;
+extern volatile uint64_t native_legacy_snap[64][2];
+__attribute__((weak, visibility("hidden"))) volatile uint64_t native_legacy_snap[64][2];
+extern volatile uint32_t native_legacy_snap_count;
+__attribute__((weak, visibility("hidden"))) volatile uint32_t native_legacy_snap_count;
+extern uint64_t *native_legacy_vsync_ring;
+__attribute__((weak, visibility("hidden"))) uint64_t *native_legacy_vsync_ring;
+extern volatile uint32_t native_legacy_vsync_count;
+__attribute__((weak, visibility("hidden"))) volatile uint32_t native_legacy_vsync_count;
+extern void native_legacy_direct_snapshot(void);
+__attribute__((weak, visibility("hidden"))) void native_legacy_direct_snapshot(void) {}
+
+extern volatile uint32_t native_gop_wait_ring_count;
+__attribute__((weak, visibility("hidden"))) volatile uint32_t native_gop_wait_ring_count;
+extern volatile uint64_t native_gop_wait_ring[64][3];
+__attribute__((weak, visibility("hidden"))) volatile uint64_t native_gop_wait_ring[64][3];
+extern volatile uint64_t native_gop_virtual;
+__attribute__((weak, visibility("hidden"))) volatile uint64_t native_gop_virtual;
+
+extern volatile uint64_t (*native_adreno_tl)[8];
+__attribute__((weak, visibility("hidden"))) volatile uint64_t (*native_adreno_tl)[8];
+extern volatile uint32_t native_adreno_tl_cap;
+__attribute__((weak, visibility("hidden"))) volatile uint32_t native_adreno_tl_cap;
+extern void (*native_adreno_bo_hook)(const struct bo_trace *);
+__attribute__((weak, visibility("hidden"))) void (*native_adreno_bo_hook)(const struct bo_trace *);
+extern uint32_t native_gpu_trace_snapshot(void *, uint32_t);
+__attribute__((weak, visibility("hidden"))) uint32_t native_gpu_trace_snapshot(void *buf, uint32_t cap) {(void)buf; (void)cap; return 0;}
+extern uint64_t native_gpu_role_thread(uint32_t, uint32_t);
+__attribute__((weak, visibility("hidden"))) uint64_t native_gpu_role_thread(uint32_t pid, uint32_t kind) {(void)pid; (void)kind; return 0;}
+
+extern struct cpufreq_rec *native_cpufreq_ring;
+__attribute__((weak, visibility("hidden"))) struct cpufreq_rec *native_cpufreq_ring;
+extern volatile uint32_t native_cpufreq_count;
+__attribute__((weak, visibility("hidden"))) volatile uint32_t native_cpufreq_count;
+
+extern volatile uint32_t sheng_idle_sigp_cleared, sheng_idle_sigp_refused;
+__attribute__((weak, visibility("hidden"))) volatile uint32_t sheng_idle_sigp_cleared, sheng_idle_sigp_refused;
+extern volatile uint64_t sheng_idle_enter[8], sheng_idle_disallowed[8];
+__attribute__((weak, visibility("hidden"))) volatile uint64_t sheng_idle_enter[8], sheng_idle_disallowed[8];

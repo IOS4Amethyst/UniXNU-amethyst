@@ -2,8 +2,6 @@
 
 Device port of [UniXNU](https://github.com/UniXNU/UniXNU) for the Xiaomi Redmi Note 14 Pro+ 5G.
 
-> **Branch `amethyst-touch-gpu-bringup`:** touch, SMP, CPU governor and GPU bring-up sources (V18–V44), on top of `main`.
-
 | Property | Value |
 |---|---|
 | Device | Xiaomi Redmi Note 14 Pro+ 5G |
@@ -78,25 +76,28 @@ Latest hardware-tested image: **V52** (RAM-only `fastboot boot`).
 | 2026-11-06 | V52 | Add-on rebuilt from the current asteroids stack: garbled UI and freezes fixed |
 
 The per-image record (hashes, boot arguments, log evidence) is in
-[`scripts/log/WORKING-BOOT.md`](scripts/log/WORKING-BOOT.md): up to the
-2026-11-02 checkpoint on `main`, up to V44 on `amethyst-touch-gpu-bringup`.
-V45–V52 are recorded locally and not pushed yet. Earlier history is
+[`scripts/log/WORKING-BOOT.md`](scripts/log/WORKING-BOOT.md). The device
+record for the UniXNU site is [`porting.toml`](porting.toml). Earlier history is
 in [ROOT-BRINGUP.md](ROOT-BRINGUP.md), [UFS-AUDIT.md](UFS-AUDIT.md) and
 [`scripts/log/ABORT-AUDIT.md`](scripts/log/ABORT-AUDIT.md).
 
-## Branches
+## Branches and related repositories
 
 | Branch | Purpose |
 |---|---|
-| `main` | Hardware-confirmed Apple UI checkpoint (2026-11-02). Base of every other branch. |
-| `amethyst-touch-gpu-bringup` | Touch, SMP, CPU governor and GPU bring-up sources (V18–V44). |
-| `skip-setup-seed` | CI job that builds the Data seed: skips Setup, disables crash-looping daemons, turns off compressed/deep framebuffers. |
-| `gpu-addon` | CI job that builds the GPU add-on (Metal plugin + Turnip) and owner trust bundle. Artifacts are encrypted. |
+| `main` | Everything verified on hardware, up to V52. |
 | `ios27` | Experimental iOS 27.0.1 (`24A446`) port with an iPhone 15 identity (arm64e). The kernel does not build yet. |
 | `ios27-iphone15-pins` | Root image pins for iPhone15,4 `24A446`, used by `ios27`. |
 
-The V45–V52 kernel sources (AppleKeyStore stand-in, sandbox grant, corner guard,
-swap diagnostics, `pack-log.py --aks/--fb-gpu`) are not on any branch yet.
+The touch/GPU bring-up, Data seed and GPU add-on branches are merged into
+`main`. The CI jobs that build the Data seed (`skip-setup-seed.yml`) and the
+GPU add-on (`gpu-addon.yml`) run by hand from the Actions tab.
+
+| Repository | Used for |
+|---|---|
+| [IOS4Amethyst/NativeAdreno](https://github.com/IOS4Amethyst/NativeAdreno) | Adreno 810 kernel driver and ABI (`drivers/Adreno740` submodule); `main` is the A810 work from rootstockos/NativeAdreno |
+| [IOS4Amethyst/AdrenoMetal](https://github.com/IOS4Amethyst/AdrenoMetal) | Metal → Vulkan frontend; `main` is the revision V52's add-on was built with |
+| [IOS4Amethyst/NativeMobileDisplay](https://github.com/IOS4Amethyst/NativeMobileDisplay) | Display driver upstream (UniXNU GopFramebuffer); this repository carries its own tested copy in `drivers/NativeMobileDisplay` |
 
 ### iOS 27 (`ios27`)
 

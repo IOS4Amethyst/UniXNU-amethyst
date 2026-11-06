@@ -4,7 +4,7 @@ schema_version = 1
 name = "amethyst"
 soc = "SM7635"
 os_profile = "ipados-17.7.11-21H461"
-summary = "Xiaomi Redmi Note 14 Pro+ 5G on SM7635 running iPadOS 17.7.11 from RAM. This branch adds SMP, CPU frequency, touch, buttons and GPU bring-up (V18-V44)."
+summary = "Xiaomi Redmi Note 14 Pro+ 5G on SM7635 running iPadOS 17.7.11 from RAM: home screen without the lock screen, GPU-composited UI on the Adreno 810, touch, buttons, SMP and CPU frequency scaling (V52)."
 
 [[area]]
 id = "configuration"
@@ -21,6 +21,9 @@ paths = [
   "AGENTS.md",
   "LICENSE",
   "drivers/ArmDTPlatform",
+  "package/*Metal*",
+  "scripts/shader_tools.py",
+  "scripts/*asteroids*",
 ]
 inputs = [
   "SoC SM7635 (soc_source sm7635), OS profile ipados-17.7.11-21H461 (A10 iPad kernelcache, arm64 without PAC).",
@@ -39,6 +42,7 @@ procedure = [
 findings = [
   "Sm7635Platform is not selected: board services are provided by board-package code and test kernels instead.",
   "The board ADT keeps arm_io_base 0x01000000; a zero parent base made pe_identify_machine return early and skip clock-frequency initialisation.",
+  "drivers/Adreno740 is fetched from IOS4Amethyst/NativeAdreno (main = 38227e7, the A810 branch of rootstockos/NativeAdreno); the add-on and seed workflows run by hand from main.",
 ]
 completion = [
   "All source pins resolve; every selected component has a record; status shows the intended overrides and patch order.",
@@ -51,6 +55,7 @@ next_action = [
 ]
 evidence = [
   { kind = "source", reference = "board.toml", result = "Board identity, component selection, payload and ADT settings." },
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V52 (staging amethyst-addon2-v52, SHA-256 b1a1c8ab...; kernel kernel-swapdiag-v49, add-on c8d14d93...): iPadOS 17.7.11 reaches the home screen without the lock screen; GPU-composited UI renders correctly; swaps every ~15 ms, done in 10-11 ms; 326 s, 162 log rounds, 0 write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "8bd7b0d9f312ac5ade7fcacd1404a6e5b4acb7fa" },
 ]
 
 [[area]]
@@ -90,6 +95,7 @@ next_action = [
 ]
 evidence = [
   { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "Redmi Note 14 Pro+ 5G (amethyst), iPadOS 17.7.11 21H461: image amethyst-cpu-present-scale2 (SHA-256 6913b06f...) reached the Apple UI on 2026-11-02; kernel UUID E37ABB7B-1B56-31D9-9351-90EDCD61DEDB; 144 log rounds, zero write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "140c844d1118e55e570d2f0ee39113d7635bf211" },
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V52 (staging amethyst-addon2-v52, SHA-256 b1a1c8ab...; kernel kernel-swapdiag-v49, add-on c8d14d93...): iPadOS 17.7.11 reaches the home screen without the lock screen; GPU-composited UI renders correctly; swaps every ~15 ms, done in 10-11 ms; 326 s, 162 log rounds, 0 write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "8bd7b0d9f312ac5ade7fcacd1404a6e5b4acb7fa" },
 ]
 
 [[area]]
@@ -116,6 +122,7 @@ procedure = [
 findings = [
   "Without armcpu-self-ipi=1 the secondaries keep SIGPdisabled until their first IPI, so a stackshot (DebuggerXCallEnter) could not signal them and the boot hung.",
   "Booting all 8 cores cut time to the lock screen from about 272 s to about 152 s.",
+  "scripts/log/AmethystSmc.c carries the SMC call helper used by the GPU zap load.",
 ]
 completion = [
   "Every enabled CPU reaches its entry checkpoint and timer/IPI handling works on each enabled CPU.",
@@ -200,6 +207,7 @@ procedure = [
 findings = [
   "Mounting SystemOS alone did not satisfy the shared-region carrier policy; the owner cache carrier requires read-only root/cache mounts with the exact signed UUIDs.",
   "On split devices persistent Data and log/export opens stay disabled; the log uses only the last 32 MiB of unixnu.",
+  "The AppleKeyStore stand-in (sheng-aks=1) reports no keybag and no passcode, so the lock screen dismisses; it protects nothing.",
 ]
 completion = [
   "Host: register, clock, link and SMMU facts match the board inventory.",
@@ -216,6 +224,7 @@ next_action = [
 evidence = [
   { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "Redmi Note 14 Pro+ 5G (amethyst), iPadOS 17.7.11 21H461: image amethyst-cpu-present-scale2 (SHA-256 6913b06f...) reached the Apple UI on 2026-11-02; kernel UUID E37ABB7B-1B56-31D9-9351-90EDCD61DEDB; 144 log rounds, zero write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "140c844d1118e55e570d2f0ee39113d7635bf211" },
   { kind = "source", reference = "ROOT-BRINGUP.md", result = "Root, SystemOS and cache-carrier bring-up record." },
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V52 (staging amethyst-addon2-v52, SHA-256 b1a1c8ab...; kernel kernel-swapdiag-v49, add-on c8d14d93...): iPadOS 17.7.11 reaches the home screen without the lock screen; GPU-composited UI renders correctly; swaps every ~15 ms, done in 10-11 ms; 326 s, 162 log rounds, 0 write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "8bd7b0d9f312ac5ade7fcacd1404a6e5b4acb7fa" },
 ]
 
 [[area]]
@@ -254,13 +263,13 @@ completion = [
 ]
 limits = [
   "Backlight control is not implemented.",
-  "The GPU hand-off presenter path is not on main yet.",
 ]
 next_action = [
-  "Commit the GPU hand-off configuration and implement backlight control.",
+  "Implement backlight control.",
 ]
 evidence = [
   { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "Redmi Note 14 Pro+ 5G (amethyst), iPadOS 17.7.11 21H461: image amethyst-cpu-present-scale2 (SHA-256 6913b06f...) reached the Apple UI on 2026-11-02; kernel UUID E37ABB7B-1B56-31D9-9351-90EDCD61DEDB; 144 log rounds, zero write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "140c844d1118e55e570d2f0ee39113d7635bf211" },
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V52 (staging amethyst-addon2-v52, SHA-256 b1a1c8ab...; kernel kernel-swapdiag-v49, add-on c8d14d93...): iPadOS 17.7.11 reaches the home screen without the lock screen; GPU-composited UI renders correctly; swaps every ~15 ms, done in 10-11 ms; 326 s, 162 log rounds, 0 write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "8bd7b0d9f312ac5ade7fcacd1404a6e5b4acb7fa" },
 ]
 
 [[area]]
@@ -282,6 +291,7 @@ paths = [
   "scripts/log/*Input*",
   "scripts/log/*input*",
   "scripts/log/QcomRpmh*",
+  "scripts/log/*Spmi*",
   "scripts/log/check-home-once.py",
 ]
 inputs = [
@@ -299,6 +309,7 @@ findings = [
   "Boot UI animation shifts whole drive lines by +-500 counts; the detector removes each line's shift and needs an adjacent-line neighbour, which removed all false presses.",
   "backboardd drops digitizer events unless the driver publishes Built-In, DisplayIntegrated and PrimaryUsage 0x0D/4.",
   "After a bottom-corner touch iPadOS stops reacting while the kernel keeps delivering reports; likely the iPadOS corner gesture (Screenshot / Quick Note).",
+  "A kernel corner guard (amethyst-touch-corner=N) moves points out of the corner squares; it does not stop the iPadOS corner freeze on its own.",
 ]
 completion = [
   "Touches map to the display, simultaneous contacts keep stable IDs, release events arrive, and buttons produce expected HID reports.",
@@ -312,6 +323,7 @@ next_action = [
 ]
 evidence = [
   { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V29: exactly one press for one tap, none during boot. V30: IOHIDEventDriver attached, 3595 touch reports rc=0. V37: replay matches the user's taps; all 64 presses reported.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "3fae65e8701c70db957c701f0873fa48d9196846" },
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V52 (staging amethyst-addon2-v52, SHA-256 b1a1c8ab...; kernel kernel-swapdiag-v49, add-on c8d14d93...): iPadOS 17.7.11 reaches the home screen without the lock screen; GPU-composited UI renders correctly; swaps every ~15 ms, done in 10-11 ms; 326 s, 162 log rounds, 0 write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "8bd7b0d9f312ac5ade7fcacd1404a6e5b4acb7fa" },
 ]
 
 [[area]]
@@ -332,6 +344,10 @@ paths = [
   "scripts/log/*gpu*",
   "scripts/log/*Gmu*",
   "scripts/log/GPU-BRINGUP.md",
+  "drivers/Adreno740",
+  "package/*Metal*",
+  "scripts/shader_tools.py",
+  "scripts/*asteroids*",
 ]
 inputs = [
   "Adreno 810 (chip 44010000, gen80300): gen80300_sqe.fw and gen80300_gmu.bin match UniXNU-asteroids; gen80300_zap.mbn is the OEM-signed amethyst copy.",
@@ -348,6 +364,8 @@ findings = [
   "CX GDSC, SMMU vote and the GMU pool round trip pass once firmware reserves GMU_Pool.",
   "Zap loads through SCM PAS 13 with amethyst's own gen80300_zap.mbn; CP init, CP_MEM_WRITE and the first IB pass.",
   "The sandbox grant matches exact process names: it must name backboardd for the render server to open the GPU.",
+  "backboardd composited into Apple-compressed two-plane framebuffers until the Data seed set CAEnableFramebufferCompression, CAEnableDeepFramebuffer and CAEnableIOSurfaceCompression false.",
+  "An add-on built against an older UniXNU drew garbled text and hung the GPU; rebuilding it from rootstockos/UniXNU bd4766ae with NativeAdreno 38227e7 fixed both.",
 ]
 completion = [
   "GPU submissions complete, mapping/fence handling is correct, a known image renders, and the selected Metal client presents it.",
@@ -361,6 +379,7 @@ next_action = [
 ]
 evidence = [
   { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V42: modes 12-16 pass, first IB and a bar drawn into the console framebuffer (pixels read back). V43: user-client test 115/115 steps, 32/32 burst submissions matched.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "3fae65e8701c70db957c701f0873fa48d9196846" },
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V52 (staging amethyst-addon2-v52, SHA-256 b1a1c8ab...; kernel kernel-swapdiag-v49, add-on c8d14d93...): iPadOS 17.7.11 reaches the home screen without the lock screen; GPU-composited UI renders correctly; swaps every ~15 ms, done in 10-11 ms; 326 s, 162 log rounds, 0 write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "8bd7b0d9f312ac5ade7fcacd1404a6e5b4acb7fa" },
 ]
 
 [[area]]
@@ -498,6 +517,7 @@ procedure = [
 findings = [
   "The guarded ApplePMGR provider only publishes what AMFI needs; unimplemented power operations panic rather than touch unqualified registers.",
   "watchdogd traps without a backend, so the Data seed disables it.",
+  "GPU power-up (CX GDSC, SMMU vote clock, GMU votes) runs from GpuPowerProbe modes 1-19; scripts/log/check-gpu-power.c covers the GMU pool round trip on the host.",
 ]
 completion = [
   "Declared power controls and battery readings match observations; each claimed sleep/resume transition restores its dependent peripherals.",
@@ -546,6 +566,7 @@ procedure = [
 ]
 findings = [
   "Test kernels use the unchanged original pe_init.o object; hand-assembled pe_init flags caused an earlier regression.",
+  "pack-log.py --aks adds sheng-aks=1; --fb-gpu adds sheng-fb-gpu=1 sheng-vsync=120 and requires --gpu-addon.",
 ]
 completion = [
   "Kernel and prelink succeed, payload contains all declared inputs, and the boot image matches the bootloader format and size limit.",
@@ -558,6 +579,7 @@ next_action = [
 ]
 evidence = [
   { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "Redmi Note 14 Pro+ 5G (amethyst), iPadOS 17.7.11 21H461: image amethyst-cpu-present-scale2 (SHA-256 6913b06f...) reached the Apple UI on 2026-11-02; kernel UUID E37ABB7B-1B56-31D9-9351-90EDCD61DEDB; 144 log rounds, zero write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "140c844d1118e55e570d2f0ee39113d7635bf211" },
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V52 (staging amethyst-addon2-v52, SHA-256 b1a1c8ab...; kernel kernel-swapdiag-v49, add-on c8d14d93...): iPadOS 17.7.11 reaches the home screen without the lock screen; GPU-composited UI renders correctly; swaps every ~15 ms, done in 10-11 ms; 326 s, 162 log rounds, 0 write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "8bd7b0d9f312ac5ade7fcacd1404a6e5b4acb7fa" },
 ]
 
 [[area]]
@@ -601,6 +623,7 @@ procedure = [
 findings = [
   "The panic hook does not write UFS; periodic writes continue during normal operation.",
   "The log is found by partition name in recovery because this device keeps its root image in a split partition.",
+  "Row 48 shows the swap rejection reason (why=, surface format and planes) once a swap is refused.",
 ]
 completion = [
   "Each claimed milestone has a reproducible command, a matching source/image revision and an accessible result.",
@@ -613,4 +636,5 @@ next_action = [
 ]
 evidence = [
   { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "Redmi Note 14 Pro+ 5G (amethyst), iPadOS 17.7.11 21H461: image amethyst-cpu-present-scale2 (SHA-256 6913b06f...) reached the Apple UI on 2026-11-02; kernel UUID E37ABB7B-1B56-31D9-9351-90EDCD61DEDB; 144 log rounds, zero write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "140c844d1118e55e570d2f0ee39113d7635bf211" },
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V52 (staging amethyst-addon2-v52, SHA-256 b1a1c8ab...; kernel kernel-swapdiag-v49, add-on c8d14d93...): iPadOS 17.7.11 reaches the home screen without the lock screen; GPU-composited UI renders correctly; swaps every ~15 ms, done in 10-11 ms; 326 s, 162 log rounds, 0 write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "8bd7b0d9f312ac5ade7fcacd1404a6e5b4acb7fa" },
 ]

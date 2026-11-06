@@ -131,6 +131,10 @@ jobs:
             # Per-source compiler logs and command lines of the source-storage archive: the build log only keeps the tail.
             unixnu-core/out/**/tree/build/sheng-source-storage/**/*.log
             unixnu-core/out/**/tree/build/sheng-source-storage/**/*.command.json
+            # The RELEASE fileset reference the prelink matches against; its long build log only
+            # exists here when the reference link fails.
+            unixnu-core/out/**/tree/build/xnu/fileset-reference/**/*.log
+            unixnu-core/out/**/tree/build/xnu/fileset-reference/**/*.json
             # The generated kernel headers the archive compiles against: xnu 12377 moved kmem_* out of the
             # exported vm_kern.h depending on XNU_KERNEL_PRIVATE, so keep the whole osfmk export set.
             unixnu-core/out/**/build/xnu/ios-obj/EXPORT_HDRS/osfmk/**/*.h

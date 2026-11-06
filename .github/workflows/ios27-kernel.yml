@@ -133,6 +133,9 @@ jobs:
           def ba(ctx, env):
               print('PROBE build_archives env level =', env.get('UNIXNU_XNU_CONFIG_LEVEL'), flush=True)
               print('PROBE build_archives ctx.board level =', ctx.board.get('kernel', {}).get('config_level'), flush=True)
+              from pathlib import Path as P
+              f = P('out/amethyst/ios-27.0.1-24A446/amethyst/tree/scripts/kernel_target.py')
+              print('PROBE archive-time target:', [l for l in f.read_text().splitlines() if 'CONFIG_LEVEL =' in l][:1], flush=True)
               return _ba(ctx, env)
           K.build_archives = ba
           cli.main()

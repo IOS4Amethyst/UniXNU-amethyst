@@ -136,6 +136,9 @@ jobs:
               from pathlib import Path as P
               f = P('out/amethyst/ios-27.0.1-24A446/amethyst/tree/scripts/kernel_target.py')
               print('PROBE archive-time target:', [l for l in f.read_text().splitlines() if 'CONFIG_LEVEL =' in l][:1], flush=True)
+              import subprocess as sp
+              r = sp.run(['python3','-c','import sys;sys.path.insert(0,"out/amethyst/ios-27.0.1-24A446/amethyst/tree/scripts");import kernel_target as k;print("CHILD level =",k.CONFIG_LEVEL)'],env=env,capture_output=True,text=True)
+              print('PROBE child says:', r.stdout.strip(), '| err:', r.stderr.strip()[:100], flush=True)
               return _ba(ctx, env)
           K.build_archives = ba
           cli.main()

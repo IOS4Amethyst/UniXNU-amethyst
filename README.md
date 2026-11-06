@@ -15,7 +15,7 @@ Device port of [UniXNU](https://github.com/UniXNU/UniXNU) for the Xiaomi Redmi N
 
 ## Current status (2026-11-07)
 
-Latest hardware-tested image: **V52** (RAM-only `fastboot boot`).
+Latest hardware-tested image: **V60** (RAM-only `fastboot boot`).
 
 - **Boot:** UEFI → UniXNU → DarwinBoot → XNU → launchd → SpringBoard. Setup is
   skipped and the lock screen is dismissed (AppleKeyStore stand-in that reports
@@ -27,17 +27,20 @@ Latest hardware-tested image: **V52** (RAM-only `fastboot boot`).
   finish in about 10 ms, so the UI is smooth. Text and icons render correctly
   since V52.
 - **Touch:** Goodix touch controller, delivered to iOS as a HID digitizer.
-  Hardware buttons work.
+  Taps, scrolling and edge swipes work (V60). Hardware buttons work.
+- **Brightness:** the AMOLED panel's brightness is set over DSI commands; the
+  Control Center slider works and the panel turns off and on with lock/unlock.
 - **CPU:** all cores are online (SMP) and a CPU frequency governor is running.
 
 ### Known issues
 
-- **Bottom-left/right corner touches:** iPadOS stops responding to touch after a
-  touch in a bottom corner. The kernel keeps delivering touches; the hang is on
-  the iOS side, probably the iPadOS corner swipe (Screenshot / Quick Note).
-  A kernel corner guard (`amethyst-touch-corner=N`) is not enough on its own.
+- **Single touch only:** one finger at a time; some taps still move up to
+  ~20 pt across the 18-row sensor axis.
+- **No GPU restart:** the driver detects a GPU hang but cannot restart the GPU,
+  so a hang freezes the UI. The one cause seen so far (V56: freed buffers a
+  queued job still used) is fixed in V58.
 - **GPU recovery events:** the log still shows occasional GPU stalls recovered
-  by a kick. They are not visible in the UI in V52.
+  by a kick. They are not visible in the UI.
 - **Some GPU clients have no device:** mediaserverd, widget and poster renderers
   report `Vulkan -3` and fall back.
 - **No persistence:** the Data volume is a RAM seed packed into the boot image,
@@ -53,9 +56,9 @@ Latest hardware-tested image: **V52** (RAM-only `fastboot boot`).
 | UEFI boot (`fastboot boot`) | ✅ Working | RAM only, nothing is flashed |
 | XNU kernel, SMP, CPU frequency | ✅ Working | All clusters online, governor running |
 | Root and Data | ✅ Working | Root read from the `unixnu` partition; Data is a volatile RAM seed |
-| Display | ✅ Working | GPU hand-off presenter, 120 Hz vsync |
+| Display | ✅ Working | GPU hand-off presenter, 120 Hz vsync; brightness and panel sleep over DSI DCS |
 | GPU (Adreno 810) | ✅ Working | Native Adreno driver, Metal → Vulkan (Turnip) |
-| Touch | 🟡 Mostly working | Bottom-corner touches stop iOS input |
+| Touch | ✅ Working | Single contact |
 | Buttons | ✅ Working | |
 | Lock screen / Setup | ✅ Skipped | Data seed + AppleKeyStore stand-in |
 | Persistence | ⏳ Not started | Needs a validated write plan for the `unixnu` partition |
@@ -74,6 +77,7 @@ Latest hardware-tested image: **V52** (RAM-only `fastboot boot`).
 | 2026-11-05 | V45–V47 | Metal accelerator published, GPU add-on installed, lock screen skipped |
 | 2026-11-06 | V48–V51 | backboardd on the GPU, uncompressed framebuffers, GPU frame hand-off (smooth) |
 | 2026-11-06 | V52 | Add-on rebuilt from the current asteroids stack: garbled UI and freezes fixed |
+| 2026-11-07 | V54–V60 | Touch no longer dies or sticks, smooth swipes and taps; GPU freeze on freed buffers fixed; brightness |
 
 The per-image record (hashes, boot arguments, log evidence) is in
 [`scripts/log/WORKING-BOOT.md`](scripts/log/WORKING-BOOT.md). The device
@@ -85,7 +89,7 @@ in [ROOT-BRINGUP.md](ROOT-BRINGUP.md), [UFS-AUDIT.md](UFS-AUDIT.md) and
 
 | Branch | Purpose |
 |---|---|
-| `main` | Everything verified on hardware, up to V52. |
+| `main` | Everything verified on hardware, up to V60. |
 | `ios27` | Experimental iOS 27.0.1 (`24A446`) port with an iPhone 15 identity (arm64e). The kernel does not build yet. |
 | `ios27-iphone15-pins` | Root image pins for iPhone15,4 `24A446`, used by `ios27`. |
 

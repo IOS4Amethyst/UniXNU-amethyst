@@ -241,6 +241,8 @@ paths = [
   "scripts/*framebuffer*",
   "scripts/log/*Display*",
   "scripts/log/*Scanout*",
+  "scripts/log/AmethystPanel.cpp",
+  "scripts/log/AmethystBacklight.cpp",
   "scripts/check-source-console.py",
   "patches/xnu/early-text-console.patch",
 ]
@@ -249,6 +251,7 @@ inputs = [
 ]
 configuration = [
   "offline-mobile-graphics-load=1 offline-legacy-register=1 offline-legacy-phase=4 offline-legacy-gop=1 offline-legacy-pm=1 offline-legacy-unit-scale=2 offline-legacy-validate=1 offline-legacy-transfer=1 offline-legacy-cpu-present=1.",
+  "amethyst-panel=3 (pack-log --panel 3): the iOS brightness service over DSI0 DCS.",
 ]
 procedure = [
   "pack-log.py --display-probe --display-pm --display-unit-scale 2 --display-validate --display-cpu-present, then boot.",
@@ -257,19 +260,22 @@ findings = [
   "NativeLegacyDisplay rejects pipeline-disabled swaps and keeps accepted requests in its tracking table.",
   "validateSwap accepts plain BGRA or one-plane &BGA only; Apple-compressed two-plane framebuffers are refused, so the Data seed disables CA framebuffer compression.",
   "Presenting by CPU copy costs about 170 ms per frame; the GPU hand-off presenter (sheng-fb-gpu=1, sheng-vsync=120) brings swaps to about 10 ms.",
+  "The o16u AMOLED has no backlight chip (bl_ctrl_dcs): brightness is DCS 0x51 hi lo, 8..4095. Commands go through DSI0's TPG command FIFO on the first front-porch line (ported from UniXNU-asteroids PanelProbe.cpp, same SM7635 DSI0 0x0ae94000), with no DMA buffer or display SMMU mapping.",
+  "AmethystBacklight conforms to AppleARMBacklight with backlight-control; level 0 turns the panel off (28, 10) and the next level on (11, 120 ms, 29).",
 ]
 completion = [
   "A known frame appears with correct geometry and colors, then userland presentation and backlight controls work.",
 ]
 limits = [
-  "Backlight control is not implemented.",
+  "Brightness is the panel's normal range (max 4095); the panel's high-brightness range and nits calibration are not used.",
 ]
 next_action = [
-  "Implement backlight control.",
+  "Publish nits calibration for iPadOS 27's brightness-nits path.",
 ]
 evidence = [
   { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "Redmi Note 14 Pro+ 5G (amethyst), iPadOS 17.7.11 21H461: image amethyst-cpu-present-scale2 (SHA-256 6913b06f...) reached the Apple UI on 2026-11-02; kernel UUID E37ABB7B-1B56-31D9-9351-90EDCD61DEDB; 144 log rounds, zero write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "140c844d1118e55e570d2f0ee39113d7635bf211" },
   { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V52 (staging amethyst-addon2-v52, SHA-256 b1a1c8ab...; kernel kernel-swapdiag-v49, add-on c8d14d93...): iPadOS 17.7.11 reaches the home screen without the lock screen; GPU-composited UI renders correctly; swaps every ~15 ms, done in 10-11 ms; 326 s, 162 log rounds, 0 write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "8bd7b0d9f312ac5ade7fcacd1404a6e5b4acb7fa" },
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V60 (staging amethyst-tap-v60, SHA-256 fbfd6f43...): the Control Center brightness slider changes the panel, and lock and unlock turn it off and on.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "a0c98e8c859b4cb2dcc65f57a9afb367b9e0e0dc" },
 ]
 
 [[area]]
@@ -278,6 +284,7 @@ status = "device-verified"
 components = []
 paths = [
   "drivers/ShengHidInput",
+  "patches/ShengHidInput/**",
   "package/*Touch*",
   "package/*Button*",
   "scripts/*touch*",
@@ -299,7 +306,7 @@ inputs = [
   "Volume and power keys on the PMIC (SPMI).",
 ]
 configuration = [
-  "sheng-touch-hid=1 publishes touches as a HID digitizer; amethyst-touch-corner=N moves points out of the corners (0 off).",
+  "sheng-touch-hid=1 publishes touches as a HID digitizer; amethyst-touch-ids=N cycles contact identifiers 1..N (default 8); amethyst-touch-record-button=1 records frames until a button press.",
 ]
 procedure = [
   "pack-log.py --touch-snapshot --touch-goodix --touch-frames --touch-hid --buttons, boot, read the AmethystTouch and AmethystHid rows in the pulled log.",
@@ -308,22 +315,25 @@ findings = [
   "The grid starts 20 bytes after head+attr+log; the 18 axis is screen x (0 left), the 40 axis screen y (0 top).",
   "Boot UI animation shifts whole drive lines by +-500 counts; the detector removes each line's shift and needs an adjacent-line neighbour, which removed all false presses.",
   "backboardd drops digitizer events unless the driver publishes Built-In, DisplayIntegrated and PrimaryUsage 0x0D/4.",
-  "After a bottom-corner touch iPadOS stops reacting while the kernel keeps delivering reports; likely the iPadOS corner gesture (Screenshot / Quick Note).",
-  "A kernel corner guard (amethyst-touch-corner=N) moves points out of the corner squares; it does not stop the iPadOS corner freeze on its own.",
+  "Touch stopped after ~30 presses with contact identifiers 1..200; cycling 1..8 fixed it (V54). The corner guard was removed (V55).",
+  "Without the In Range usage iOS took a lift for a hover and continued an old touch on the next press with that identifier (a tap reopened Search); patches/ShengHidInput/0001 adds it.",
+  "A lifting finger's position jumped to a weak dip on the bottom line, so swipes up stuttered; a press now follows only its finger's neighbourhood (41 jumps to 0 on V56's recording).",
+  "Taps wandered 10-47 pt as the finger rolled off; a 17 pt tap slop that ignores roll-off frames and a depth-past-floor centroid cut them from 16 of 29 to 7 of 37 without slowing swipes (V58 recording).",
 ]
 completion = [
   "Touches map to the display, simultaneous contacts keep stable IDs, release events arrive, and buttons produce expected HID reports.",
 ]
 limits = [
   "Single contact only.",
-  "Bottom-corner touches stop iOS input.",
+  "Some taps still move up to ~20 pt along the 18-row axis.",
 ]
 next_action = [
-  "Disable the iPadOS finger corner gestures in the Data seed and retest the corners.",
+  "Track a second contact for multi-touch.",
 ]
 evidence = [
   { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V29: exactly one press for one tap, none during boot. V30: IOHIDEventDriver attached, 3595 touch reports rc=0. V37: replay matches the user's taps; all 64 presses reported.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "3fae65e8701c70db957c701f0873fa48d9196846" },
   { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V52 (staging amethyst-addon2-v52, SHA-256 b1a1c8ab...; kernel kernel-swapdiag-v49, add-on c8d14d93...): iPadOS 17.7.11 reaches the home screen without the lock screen; GPU-composited UI renders correctly; swaps every ~15 ms, done in 10-11 ms; 326 s, 162 log rounds, 0 write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "8bd7b0d9f312ac5ade7fcacd1404a6e5b4acb7fa" },
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V60 (staging amethyst-tap-v60, SHA-256 fbfd6f43...): taps, scrolling, swipes up from the bottom, brightness and lock/unlock confirmed by the user.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "5b9c6ed8b9e7329e12c4da2a338a2ed0295adbe8" },
 ]
 
 [[area]]
@@ -366,6 +376,8 @@ findings = [
   "The sandbox grant matches exact process names: it must name backboardd for the render server to open the GPU.",
   "backboardd composited into Apple-compressed two-plane framebuffers until the Data seed set CAEnableFramebufferCompression, CAEnableDeepFramebuffer and CAEnableIOSurfaceCompression false.",
   "An add-on built against an older UniXNU drew garbled text and hung the GPU; rebuilding it from rootstockos/UniXNU bd4766ae with NativeAdreno 38227e7 fixed both.",
+  "A submission pins only its IBs: freeing a texture a queued job still read left the GPU on a translation fault and the CP stuck (V56, spamming Spotlight). NativeAdreno 26c1da7 keeps a freed BO mapped until the client's pending jobs pass it.",
+  "NativeAdreno detects hangs but nothing installs its restart hook, so a hang is counted and never recovered.",
 ]
 completion = [
   "GPU submissions complete, mapping/fence handling is correct, a known image renders, and the selected Metal client presents it.",
@@ -373,6 +385,7 @@ completion = [
 limits = [
   "Some GPU clients (mediaserverd, widget and poster renderers) report Vulkan -3.",
   "Occasional GPU stalls are recovered by a kick.",
+  "No GPU restart after a hang (a8xx recovery is a CX GDSC collapse and GMU cold start).",
 ]
 next_action = [
   "Investigate the clients without a Vulkan device and the stall/kick events.",
@@ -380,6 +393,7 @@ next_action = [
 evidence = [
   { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V42: modes 12-16 pass, first IB and a bar drawn into the console framebuffer (pixels read back). V43: user-client test 115/115 steps, 32/32 burst submissions matched.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "3fae65e8701c70db957c701f0873fa48d9196846" },
   { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V52 (staging amethyst-addon2-v52, SHA-256 b1a1c8ab...; kernel kernel-swapdiag-v49, add-on c8d14d93...): iPadOS 17.7.11 reaches the home screen without the lock screen; GPU-composited UI renders correctly; swaps every ~15 ms, done in 10-11 ms; 326 s, 162 log rounds, 0 write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "8bd7b0d9f312ac5ade7fcacd1404a6e5b4acb7fa" },
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V58: 1638 freed BOs deferred and all reaped, 16 maps waited for one, no SMMU fault and no hang in 7 minutes of use including repeated Spotlight.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "b2a18ee8dd69c2db5781b6af82b2d2b1bd54c063" },
 ]
 
 [[area]]

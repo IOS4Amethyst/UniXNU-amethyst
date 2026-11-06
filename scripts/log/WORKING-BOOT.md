@@ -432,3 +432,27 @@ submissions, fences matched. GPU clients: backboardd s0, SpringBoard s1, Spotlig
 CollectionsPoster, PhotosPosterProvider Vulkan -3. Touch: 2035 reports / 37 downs, cn=1 at ~313 s; two more downs were delivered after
 it, but iPadOS stopped reacting to touches after the bottom-corner touch (user). The kernel side keeps delivering; next: turn off the
 iPadOS finger corner gestures (Screenshot / Quick Note) in the Data seed.
+
+### Touch, GPU free and brightness (V53-V60, 2026-11-07)
+
+All with the V52 add-on (.scratch/gpu-addon-ci-v2) except V53, packed as V52 with --touch-record-button from V55 on; results in
+.scratch/result-v5N. Frames replayed through GoodixBerlinDiff.h with the recorder export (export.bin).
+V53 (amethyst-oslog-v53, c70a240e...): SpringBoard's unified log through the export channel (springboard-oslog branch, add-on ci-v3);
+the export held 0 entries. Not pursued.
+V54 (amethyst-touchids-v54, aac4bf0a...): contact identifiers cycle 1..8 instead of 1..200. 303 touches, touch never died (it had
+after ~30 presses since V30).
+V55 (amethyst-touchrec-v55, 149232a1...): corner guard removed (swipe up to home was hard); button-stopped frame recorder. User: after
+several Search pull-downs a tap on Settings opened Search (an old touch continued).
+V56 (amethyst-inrange-v56, 257aa54c...): NativeHidInput reports In Range (patches/ShengHidInput/0001). The Search/Settings bug was gone.
+Spamming Spotlight froze the device: [gpu stall] smmu 80000402 far 31f46000 (a translation fault; every earlier boot showed 0x400),
+fence 2191 never completed, [gpu recovery] hangs 30 restarts 0 (no restart hook). Recording: swipes up from the bottom jumped back to
+the bottom line as the finger lifted (41 jumps in 42 presses), so scrolling stuttered.
+V57 (amethyst-gpufree-v57, 1e74358b...): NativeAdreno deferred BO frees. Not booted on its own.
+V58 (amethyst-follow-v58, a379a3ad...): V57 + the detector follows its finger only (0 jumps on V56's frames). [bo deferred]
+freed=1638 reaped=1637 waiting=1 map-waits=16 wait-timeouts=0; FSR 0x400 throughout; no hang in 429 s. User: taps slide a little;
+recording: 16 of 29 taps wandered 10-47 pt.
+V59 (amethyst-panel-v59, da52321c...): V58 + amethyst-panel=3 (DSI0 DCS brightness service). Not booted on its own.
+V60 (amethyst-tap-v60, fbfd6f43...; kernel kernel-tap-v60, 572f3dcc...): V59 + tap slop and depth-past-floor centroid (V58's taps
+moving >10 pt: 7 of 37). User: taps, scrolling, the brightness slider and lock/unlock all work.
+The V57-V60 kernels' NativeAdreno objects are 5e2b23e with 26c1da7's user client (26c1da7 itself is on 38227e7, which adds only
+ABI declarations).

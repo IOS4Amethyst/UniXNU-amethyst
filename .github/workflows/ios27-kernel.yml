@@ -131,6 +131,7 @@ jobs:
           def spy(ctx):
               e = orig(ctx)
               print('SPY level =', e.get('UNIXNU_XNU_CONFIG_LEVEL'), flush=True)
+              print('SPY schema_version =', ctx.schema_version, type(ctx.schema_version), flush=True)
               print('SPY device =', ctx.device, flush=True)
               print('SPY raw board kernel =', ctx.raw_board.get('kernel', {}).get('config_level'), flush=True)
               print('SPY board.kernel keys =', sorted(ctx.board.get('kernel', {})), flush=True)

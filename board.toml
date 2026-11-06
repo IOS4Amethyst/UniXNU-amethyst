@@ -101,9 +101,11 @@ title = "iPadOS for amethyst"
 # the full block tables remain a local input of the userdata image).
 root_policies = "{tree}/build/sheng-source-storage/root-policies.bin"
 dram_size = "0x1FFE00000"
-# Match hardware-working kernel87: retain native text console without binary
-# entry/MMU/panic detours (panic_screen also installs the colour-bar probes).
-panic_screen = false
+# iOS 27 i2 (2026-11-07): DarwinBoot handed off and no kernel text appeared. The entry probe
+# (panic_screen) paints blue at MMU-off entry and magenta before MMU enable; the timed reset
+# 6 s after MMU enable shows whether translation came on. kernel87 (iPadOS) ran without it.
+panic_screen = true
+entry_probe_reset_delay = 6
 kernel_args = [
   "-v",
   "serial=3",

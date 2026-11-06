@@ -109,7 +109,7 @@ jobs:
           python3 -c "
           import sys, os; sys.path.insert(0,'scripts')
           os.environ.setdefault('X',''); sys.argv=['unixnu','build','kernel','--os',os.environ['OS_PROFILE'],'-D',os.environ['GITHUB_WORKSPACE']]
-          from unixnu.config import Config
+          from unixnu.config import Context
           import unixnu.kernel as K
           orig = K.xnu_env
           def spy(ctx):

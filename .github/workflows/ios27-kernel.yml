@@ -101,6 +101,20 @@ jobs:
           PY
           echo "UNIXNU_KERNELCACHE=$GITHUB_WORKSPACE/unixnu-core/out/ipsw/24A446/kernelcache.decompressed" >> "$GITHUB_ENV"
 
+      - name: Probe kernel configuration level
+        working-directory: ./unixnu-core
+        run: |
+          python3 - <<'PY'
+          import sys, tomllib
+          from pathlib import Path
+          sys.path.insert(0, 'scripts')
+          from unixnu.profiles import merge
+          raw = tomllib.loads(Path('${{ github.workspace }}/board.toml').read_text())
+          board = merge({}, raw)
+          print('schema_version:', raw.get('schema_version'))
+          print('raw [kernel]:', raw.get('kernel'))
+          print('merged [kernel]:', board.get('kernel'))
+          PY
       - name: Build kernel
         working-directory: ./unixnu-core
         env:

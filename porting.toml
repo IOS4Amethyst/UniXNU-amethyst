@@ -26,11 +26,13 @@ inputs = [
   "SoC SM7635 (soc_source sm7635), OS profile ipados-17.7.11-21H461 (A10 iPad kernelcache, arm64 without PAC).",
   "UniXNU core branch IOS4Amethyst/UniXNU:amethyst-embedded-payload at or after 20437c1.",
   "UEFI IOS4Amethyst/uefi-amethyst:amethyst at or after 4e6782ba.",
+  "Branch ios27 instead selects iOS profile ios-27.0.1-24A446 (iPhone15,4, arm64e) and builds XNU at RELEASE: the fileset prelink keeps 256 kexts with __DATA_CONST in 0xfffffff007c18000..0xfffffff008198000 and gives com.apple.kernel the 0xd8000 slot.",
 ]
 configuration = [
   "board.toml [board] kit = \"amethyst\"; [components] include ArmDTPlatform, ArmCpu, SoftwareAES, RamBlock, XnuPrelink, DarwinBoot, AppleKeyStoreState, AdrenoFirmware, ShengUfs.",
   "configs/amethyst_defconfig with arch, sm7635 and ipados config fragments; patch_series arch, soc (xnu-12377), os and device patches/xnu/series.",
   "[payload] kernel_args keep sheng-data-persist=0 and sheng-log=0; test images enable the log explicitly.",
+  "Branch ios27: board.toml [kernel] config_level = \"RELEASE\"; scripts/policies/ios-27.0.1-24A446/prelink-regression.json bounds the allow-missing prelink.",
 ]
 procedure = [
   "./unixnu defconfig amethyst_defconfig -D ../UniXNU-amethyst",
@@ -39,6 +41,7 @@ procedure = [
 findings = [
   "Sm7635Platform is not selected: board services are provided by board-package code and test kernels instead.",
   "The board ADT keeps arm_io_base 0x01000000; a zero parent base made pe_identify_machine return early and skip clock-frequency initialisation.",
+  "iOS 27 (branch ios27): the native kernel's __DATA_CONST measures 0xb8000 at RELEASE and 0x120000 at DEVELOPMENT, so only RELEASE fits the 0xd8000 com.apple.kernel slot. Prelink run 42277592719 (map matcher 8, signature bf164371) matched 8632 of 20907 kernel functions and 1312 data objects, and left 321 unresolved closure references over 98 distinct, mostly unnamed kext data operands, with 1530 unmatched kernel functions bound to the _unixnu_fileset_unmapped reporting stub.",
 ]
 completion = [
   "All source pins resolve; every selected component has a record; status shows the intended overrides and patch order.",

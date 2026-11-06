@@ -2,7 +2,7 @@
 
 Device port of [UniXNU](https://github.com/UniXNU/UniXNU) for the Xiaomi Redmi Note 14 Pro+ 5G.
 
-> **Branch `main`:** the hardware-confirmed Apple UI checkpoint from 2026-11-02. Newer work is on the branches listed under [Branches](#branches).
+> **Branch `amethyst-touch-gpu-bringup`:** touch, SMP, CPU governor and GPU bring-up sources (V18–V44), on top of `main`.
 
 | Property | Value |
 |---|---|

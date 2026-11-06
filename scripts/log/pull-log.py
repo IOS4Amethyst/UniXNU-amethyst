@@ -86,6 +86,37 @@ def partition_bounds(name):
     return start_sectors // SECTORS_PER_BLOCK, size_sectors // SECTORS_PER_BLOCK, device
 
 
+def pull_export(log, region, skip, out):
+    """Copy the newest complete export (BootLog version 3+) beside log.bin as export.bin.
+
+    The export region is the export_below blocks directly under the log window;
+    the header names the blob's first block in it and its length. Read-only, like
+    the window itself. Amethyst's touch poller (V20) exports its frame recorder here.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('read_sheng_log', DECODER)
+    reader = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(reader)
+    h = reader.header(log.read_bytes())
+    size, below, first = h.get('export_bytes', 0), h.get('export_below', 0), h.get('export_first', 0)
+    if not size or not below or skip is None:
+        return None
+    if first * BLOCK + size > below * BLOCK:
+        sys.exit(f'export header out of range: first={first} bytes={size} region={below} blocks')
+    count = (size + BLOCK - 1) // BLOCK
+    remote = '/tmp/amethyst-export.bin'
+    adb('shell', f'dd if={region} of={remote} bs={BLOCK} skip={skip - below + first} count={count}')
+    target = out / 'export.bin'
+    adb('pull', remote, str(target))
+    adb('shell', f'rm -f {remote}', check=False)
+    data = target.read_bytes()
+    if len(data) < size:
+        sys.exit(f'export short read: {len(data)} of {size} bytes')
+    target.write_bytes(data[:size])
+    print(f'export: generation {h.get("export_generation")} {size} bytes -> {target}')
+    return target
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -149,6 +180,7 @@ def main():
     if log.stat().st_size != LOG_BLOCKS * BLOCK:
         sys.exit(f'short read: {log.stat().st_size} of {LOG_BLOCKS * BLOCK} bytes')
 
+    pull_export(log, region, skip, args.out)
     result = subprocess.run([sys.executable, str(DECODER), '--decode', str(log),
                              '--out', str(args.out)])
     if result.returncode:

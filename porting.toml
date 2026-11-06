@@ -4,7 +4,7 @@ schema_version = 1
 name = "amethyst"
 soc = "SM7635"
 os_profile = "ipados-17.7.11-21H461"
-summary = "Xiaomi Redmi Note 14 Pro+ 5G on SM7635 running iPadOS 17.7.11 from RAM. The main checkpoint reaches the Apple UI with CPU presentation; touch, SMP and GPU work is on the amethyst-touch-gpu-bringup and gpu-addon branches."
+summary = "Xiaomi Redmi Note 14 Pro+ 5G on SM7635 running iPadOS 17.7.11 from RAM. This branch adds SMP, CPU frequency, touch, buttons and GPU bring-up (V18-V44)."
 
 [[area]]
 id = "configuration"
@@ -94,7 +94,7 @@ evidence = [
 
 [[area]]
 id = "cpu"
-status = "implemented"
+status = "device-verified"
 components = ["ArmCpu"]
 paths = [
   "package/CpuFreq*",
@@ -121,13 +121,13 @@ completion = [
   "Every enabled CPU reaches its entry checkpoint and timer/IPI handling works on each enabled CPU.",
 ]
 limits = [
-  "SMP and cpufreq sources live on the amethyst-touch-gpu-bringup branch, not on main.",
+  "Idle states beyond the AmethystCpuIdle helper are not implemented.",
 ]
 next_action = [
-  "Merge the SMP and cpufreq bring-up into main.",
+  "Measure idle residency and power with the governor active.",
 ]
 evidence = [
-  { kind = "source", reference = "board.toml", result = "ArmCpu selected; secondaries enabled by test-image arguments." },
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V25: IPIs taken on all 8 cores, sigpoff=00, no cpu_signal failures. V23: governor scales d0 441-1804 MHz, d1 1286-2400 MHz, d2 1324-2304 MHz.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "3fae65e8701c70db957c701f0873fa48d9196846" },
 ]
 
 [[area]]
@@ -265,7 +265,7 @@ evidence = [
 
 [[area]]
 id = "input"
-status = "planned"
+status = "device-verified"
 components = []
 paths = [
   "drivers/ShengHidInput",
@@ -295,22 +295,28 @@ procedure = [
   "pack-log.py --touch-snapshot --touch-goodix --touch-frames --touch-hid --buttons, boot, read the AmethystTouch and AmethystHid rows in the pulled log.",
 ]
 findings = [
-  "Touch and buttons are not on main.",
+  "The grid starts 20 bytes after head+attr+log; the 18 axis is screen x (0 left), the 40 axis screen y (0 top).",
+  "Boot UI animation shifts whole drive lines by +-500 counts; the detector removes each line's shift and needs an adjacent-line neighbour, which removed all false presses.",
+  "backboardd drops digitizer events unless the driver publishes Built-In, DisplayIntegrated and PrimaryUsage 0x0D/4.",
+  "After a bottom-corner touch iPadOS stops reacting while the kernel keeps delivering reports; likely the iPadOS corner gesture (Screenshot / Quick Note).",
 ]
 completion = [
   "Touches map to the display, simultaneous contacts keep stable IDs, release events arrive, and buttons produce expected HID reports.",
 ]
 limits = [
-  "Touch and button sources live on the amethyst-touch-gpu-bringup branch.",
+  "Single contact only.",
+  "Bottom-corner touches stop iOS input.",
 ]
 next_action = [
-  "Merge the touch and button bring-up into main.",
+  "Disable the iPadOS finger corner gestures in the Data seed and retest the corners.",
 ]
-evidence = []
+evidence = [
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V29: exactly one press for one tap, none during boot. V30: IOHIDEventDriver attached, 3595 touch reports rc=0. V37: replay matches the user's taps; all 64 presses reported.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "3fae65e8701c70db957c701f0873fa48d9196846" },
+]
 
 [[area]]
 id = "gpu"
-status = "implemented"
+status = "device-verified"
 components = ["AdrenoFirmware"]
 paths = [
   "kits/AdrenoFirmware",
@@ -339,19 +345,22 @@ procedure = [
   "Build the add-on on the gpu-addon branch, pack with pack-log.py --gpu-power 19 --gpu-addon <addon> --owner-trust <bundle> --fb-gpu, boot.",
 ]
 findings = [
-  "Only AdrenoFirmware is selected on main; the GPU driver stack is compiled into the test kernels.",
+  "CX GDSC, SMMU vote and the GMU pool round trip pass once firmware reserves GMU_Pool.",
+  "Zap loads through SCM PAS 13 with amethyst's own gen80300_zap.mbn; CP init, CP_MEM_WRITE and the first IB pass.",
+  "The sandbox grant matches exact process names: it must name backboardd for the render server to open the GPU.",
 ]
 completion = [
   "GPU submissions complete, mapping/fence handling is correct, a known image renders, and the selected Metal client presents it.",
 ]
 limits = [
-  "GPU bring-up sources live on the amethyst-touch-gpu-bringup and gpu-addon branches.",
+  "Some GPU clients (mediaserverd, widget and poster renderers) report Vulkan -3.",
+  "Occasional GPU stalls are recovered by a kick.",
 ]
 next_action = [
-  "Merge the GPU bring-up into main.",
+  "Investigate the clients without a Vulkan device and the stall/kick events.",
 ]
 evidence = [
-  { kind = "source", reference = "board.toml", result = "AdrenoFirmware kit selected in [components] include." },
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "V42: modes 12-16 pass, first IB and a bar drawn into the console framebuffer (pixels read back). V43: user-client test 115/115 steps, 32/32 burst submissions matched.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "3fae65e8701c70db957c701f0873fa48d9196846" },
 ]
 
 [[area]]

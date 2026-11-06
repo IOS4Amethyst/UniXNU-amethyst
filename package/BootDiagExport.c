@@ -219,6 +219,9 @@ enum {TouchRing = 65536};
 #include "TouchTrace.h"
 _Static_assert(sizeof(struct touch_trace_row) == 48, "TPR1 row");
 extern const struct touch_trace_row *sheng_touch_trace_freeze(uint32_t *) __attribute__((weak_import));
+// sheng's touch stack (TouchProbe.cpp) defines the freezer; this board does not build it, and a static
+// kernel link cannot leave a weak import undefined. The zero value means "no frozen ring".
+__attribute__((weak, visibility("hidden"))) const struct touch_trace_row *sheng_touch_trace_freeze(uint32_t *) { return NULL; }
 extern unsigned native_legacy_prepare_report(char *,unsigned) __attribute__((weak_import));
 static const struct touch_trace_row *path_trace;
 static uint32_t path_total, path_kept;

@@ -20,6 +20,13 @@ extern int proc_pid(struct proc *);
 extern void (*sheng_user_fault_hook)(int,const int64_t *,unsigned) __attribute__((weak_import));
 extern void (*sheng_unnest_hook)(uint64_t,uint64_t) __attribute__((weak_import));
 extern void (*sheng_user_exit_hook)(int,int,uint32_t,uint64_t,const char *,const char *) __attribute__((weak_import));
+// sheng's XNU patches define these hooks (zzzzzz-sheng-latency-trace.patch and the exit/unnest trace patches).
+// amethyst carries neither those patches nor sheng's touch stack, and a static kernel link cannot leave a
+// weak import undefined, so this board provides the zero value the hooks read as "not installed". A kernel
+// built with the sheng patches still wins: these are weak.
+__attribute__((weak, visibility("hidden"))) void (*sheng_user_fault_hook)(int,const int64_t *,unsigned);
+__attribute__((weak, visibility("hidden"))) void (*sheng_unnest_hook)(uint64_t,uint64_t);
+__attribute__((weak, visibility("hidden"))) void (*sheng_user_exit_hook)(int,int,uint32_t,uint64_t,const char *,const char *);
 enum {BlCapacity=491519,BlCriticalCapacity=32768,FaultSlots=32};
 struct fault_slot {uint32_t state,pid;uint64_t id,us,tid,fp,sp,pc,lr,slide;task_t task;};
 static struct fault_slot *faults;
@@ -40,6 +47,9 @@ int boot_latency_enabled(void) {return __atomic_load_n(&store.slots,__ATOMIC_ACQ
  * receive per TID. Short calls use clock reads, but do not enter the export. */
 extern uint64_t sheng_sb_wait_tid __attribute__((weak_import));
 extern void (*sheng_sb_wait_hook)(unsigned,uint64_t,unsigned,int,uint32_t) __attribute__((weak_import));
+// Same reason as the hooks above: zero values keep the weak imports resolvable in this board's kernel link.
+__attribute__((weak, visibility("hidden"))) uint64_t sheng_sb_wait_tid;
+__attribute__((weak, visibility("hidden"))) void (*sheng_sb_wait_hook)(unsigned,uint64_t,unsigned,int,uint32_t);
 extern void proc_name(int, char *, int);
 static struct {
  uint64_t tid, start, receive;

@@ -129,6 +129,12 @@ jobs:
                   print('PROBE tree has CONFIG_LEVEL =', 'CONFIG_LEVEL' in txt, flush=True)
                   print('PROBE tree line =', [l for l in txt.splitlines() if 'CONFIG_LEVEL =' in l][:1], flush=True)
           atexit.register(check)
+          _ba = K.build_archives
+          def ba(ctx, env):
+              print('PROBE build_archives env level =', env.get('UNIXNU_XNU_CONFIG_LEVEL'), flush=True)
+              print('PROBE build_archives ctx.board level =', ctx.board.get('kernel', {}).get('config_level'), flush=True)
+              return _ba(ctx, env)
+          K.build_archives = ba
           cli.main()
           "
           ./unixnu build kernel --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"

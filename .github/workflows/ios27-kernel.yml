@@ -16,6 +16,10 @@ on:
         description: "Build Payload"
         type: boolean
         default: false
+      build_firmware:
+        description: "Build the Mu firmware (uefi-amethyst) for its DarwinBoot.efi"
+        type: boolean
+        default: false
       build_userdata:
         description: "Build Userdata (takes ~16GB disk)"
         type: boolean
@@ -70,7 +74,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check out UEFI repo
-        if: inputs.build_payload
+        if: inputs.build_payload || inputs.build_firmware
         uses: actions/checkout@v4
         with:
           repository: IOS4Amethyst/uefi-amethyst.git
@@ -154,6 +158,13 @@ jobs:
           ./unixnu build payload --os "$OS_PROFILE" --uefi uefi-amethyst --edk2 uefi-amethyst/Mu_Basecore \
             -D "$GITHUB_WORKSPACE" ${extra[@]+"${extra[@]}"}   # bash 3.2: an empty array is unbound under set -u
 
+      - name: Build firmware
+        if: inputs.build_firmware
+        working-directory: ./unixnu-core
+        # The booted firmware's DarwinBoot predates 3c75734 and refuses the arm64e kernel collection (EFI_UNSUPPORTED);
+        # this build's DarwinBoot.efi is transplanted into it (the rest of that firmware matches no source build).
+        run: ./unixnu build firmware --os "$OS_PROFILE" --uefi "$GITHUB_WORKSPACE/uefi-amethyst" -D "$GITHUB_WORKSPACE"
+
       - name: Build userdata
         if: inputs.build_userdata
         working-directory: ./unixnu-core
@@ -190,6 +201,10 @@ jobs:
               'unixnu-core/out/**/tree/build/xnu/ios-obj/**/IOPMGR.cpo',
               'unixnu-core/out/**/tree/build/xnu/ios-obj/**/IOPMGR.cpo.json',
               'unixnu-core/out/**/tree/build/xnu/ios-obj/**/IOPlatformExpert.cpo.json',
+              'uefi-amethyst/Build/**/DarwinBoot.efi',
+              'uefi-amethyst/Build/**/DarwinBoot.debug',
+              'uefi-amethyst/Build/**/FV/SILICIUM_UEFI.fd',
+              'uefi-amethyst/Build/**/BuildLog.txt',
           ]
           files = sorted({f for p in patterns for f in glob.glob(p, recursive=True) if os.path.isfile(f)})
           open(sys.argv[1], 'wb').write(b''.join(f.encode() + b'\0' for f in files))

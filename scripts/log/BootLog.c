@@ -233,6 +233,7 @@ extern unsigned native_legacy_prepare_report(char *, unsigned) __attribute__((we
 extern char native_adreno_metal_rows[48][96] __attribute__((weak_import));
 extern unsigned native_legacy_state_words(char *, unsigned) __attribute__((weak_import));
 extern volatile uint32_t native_adreno_view_diag[6] __attribute__((weak_import));
+extern volatile int32_t native_panel_stats[16] __attribute__((weak_import));
 extern int boot_reset_probe(char *, unsigned) __attribute__((weak_import));
 extern int boot_reset_bootloader(char *, unsigned) __attribute__((weak_import));
 extern int boot_reset_mark_bootloader(char *, unsigned) __attribute__((weak_import));
@@ -1513,6 +1514,14 @@ static size_t compose(char *out, size_t cap, uint32_t slot, unsigned now) {
     char row[120];
     snprintf(row, sizeof row, "[bo views] calls=%u new=%u cached=%u refused=%u last=%x inside=%u", native_adreno_view_diag[0], native_adreno_view_diag[1],
              native_adreno_view_diag[2], native_adreno_view_diag[3], native_adreno_view_diag[4], native_adreno_view_diag[5]);
+    at = put(out, at, cap, row, sizeof row);
+  }
+  if (&native_panel_stats && native_panel_stats[0]) {
+    char row[200];
+    snprintf(row, sizeof row, "[panel] stage=%d hw=%08x ctrl=%08x dma=%08x trig=%08x int=%08x activev=%08x sent=%d timeouts=%d last=%dus level=%d on=%d requests=%d err=%d line=%d",
+             native_panel_stats[0], native_panel_stats[1], native_panel_stats[2], native_panel_stats[3], native_panel_stats[4], native_panel_stats[5],
+             native_panel_stats[6], native_panel_stats[8], native_panel_stats[9], native_panel_stats[10], native_panel_stats[11], native_panel_stats[12],
+             native_panel_stats[13], native_panel_stats[14], native_panel_stats[15]);
     at = put(out, at, cap, row, sizeof row);
   }
   if (&native_adreno_import_diag && native_adreno_import_diag[0]) {

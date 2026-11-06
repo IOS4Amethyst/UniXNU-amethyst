@@ -50,7 +50,10 @@ SOURCES = [
 # object and linked alongside the rest.
 SHARED_C = ['GeniSpi.c']
 # Board sources whose object keeps its historical name in the link command (no .touch suffix).
-PLAIN = ['AmethystButtonsHid.cpp']
+PLAIN = ['AmethystButtonsHid.cpp', 'AmethystPanel.cpp', 'AmethystBacklight.cpp']
+# Board IOService classes whose static initializer must leave __mod_init_func: AmethystPanel.cpp registers them under the kext lock
+# (OSKextRegisterBoardClasses) and calls the globalized initializer itself.
+LATE = ['AmethystBacklight.cpp']
 
 
 def load_recipe(path):
@@ -81,6 +84,12 @@ def main():
         src = KIT / name
         compile_with(recipes[src.suffix], src, OUT / (Path(name).stem + '.o'))
         print('PASS: compiled', name)
+    import subprocess
+    for name in LATE:
+        stem = Path(name).stem
+        subprocess.run(['llvm-objcopy', '--remove-section=__DATA,__mod_init_func', f'--globalize-symbol=__GLOBAL__sub_I_{name}',
+                        str(OUT / f'{stem}.o'), str(OUT / f'{stem}.late.o')], check=True)
+        print('PASS: late object', f'{stem}.late.o')
     for name in SHARED_C:
         src = GENI / name
         if not src.exists():

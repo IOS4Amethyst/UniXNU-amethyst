@@ -152,6 +152,7 @@ extern "C" void amethyst_buttons_hid_start(void) __attribute__((weak_import));
 extern "C" void sheng_gpu_power_probe(void) __attribute__((weak_import));
 extern "C" void native_keystore_probe(void) __attribute__((weak_import));   // KeyStoreProbe.cpp (asteroids), V47   // GpuPowerProbe.cpp (asteroids), V42
 extern "C" void sheng_cpufreq_probe(void) __attribute__((weak_import));
+extern "C" void amethyst_panel_probe(void) __attribute__((weak_import));   // AmethystPanel.cpp: DCS brightness, amethyst-panel=N
 extern "C" void sheng_cpufreq_poll(void) __attribute__((weak_import));
 extern "C" uint32_t amethyst_sigp_disabled_mask(void) __attribute__((weak_import));
 extern "C" volatile uint32_t armcpu_core_sgi[8] __attribute__((weak_import));
@@ -218,6 +219,7 @@ extern "C" void amethyst_touch_snapshot(void) {
     if(sheng_cpufreq_probe)sheng_cpufreq_probe();
     if(sheng_cpufreq_poll)sheng_cpufreq_poll();
     if(amethyst_buttons_hid_start)amethyst_buttons_hid_start();
+    if(amethyst_panel_probe)amethyst_panel_probe();   // once; returns at once without amethyst-panel or after its first run
     // AppleKeyStore stand-in (V47): only with sheng-aks=1 here (KeyStoreProbe defaults it on otherwise).
     {unsigned aks=0;if(native_keystore_probe && PE_parse_boot_argn("sheng-aks",&aks,sizeof aks) && aks==1)native_keystore_probe();}
     // GPU (V42): asteroids' staged probe, only when sheng-gpu-power is given (the file defaults to mode 19).

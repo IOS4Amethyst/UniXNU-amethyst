@@ -78,6 +78,8 @@ parser.add_argument('--touch-hid', action='store_true',
                     help='deliver frame-detector presses to iOS (sheng-touch-hid=1: NativeHidInput digitizer); requires --touch-frames and --buttons')
 parser.add_argument('--touch-record-button', action='store_true',
                     help='record Goodix frames until a hardware button goes down, then export the ~48 s before it once')
+parser.add_argument('--panel', type=int, default=0, choices=range(0, 5),
+                    help='AMOLED panel over DSI0 DCS (amethyst-panel=N, AmethystPanel.cpp): 1 read-only, 2 brightness test, 3 iOS brightness service, 4 off/on test')
 parser.add_argument('--touch-record-press', type=int, default=0,
                     help='record Goodix frames and stop N s after the first detected press')
 parser.add_argument('--touch-frames', action='store_true',
@@ -246,6 +248,9 @@ with tempfile.TemporaryDirectory(dir=AUDIT, prefix='log-pack-') as tempdir:
     if args.touch_record_button:
         assert args.touch_frames and not args.touch_record_until and not args.touch_record_press and b'amethyst-touch-record' not in config
         config=config.replace(b'sheng-log=1',b'sheng-log=1 amethyst-touch-record=1 amethyst-touch-record-button=1')
+    if args.panel:
+        assert b'amethyst-panel=' not in config
+        config=config.replace(b'sheng-log=1',b'sheng-log=1 amethyst-panel=%d' % args.panel)
     if args.touch_record_press:
         assert args.touch_frames and not args.touch_record_until and b'amethyst-touch-record' not in config
         config=config.replace(b'sheng-log=1',b'sheng-log=1 amethyst-touch-record=1 amethyst-touch-record-press=%d' % args.touch_record_press)

@@ -107,10 +107,19 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           python3 -c "
-          import sys, inspect; sys.path.insert(0,'scripts')
+          import sys, os; sys.path.insert(0,'scripts')
+          os.environ.setdefault('X',''); sys.argv=['unixnu','build','kernel','--os',os.environ['OS_PROFILE'],'-D',os.environ['GITHUB_WORKSPACE']]
+          from unixnu.config import Config
           import unixnu.kernel as K
-          src = inspect.getsource(K.xnu_env)
-          print('PROBE xnu_env source:', repr(src))
+          orig = K.xnu_env
+          def spy(ctx):
+              e = orig(ctx)
+              print('PROBE level =', e.get('UNIXNU_XNU_CONFIG_LEVEL'), flush=True)
+              print('PROBE env key present =', 'UNIXNU_XNU_CONFIG_LEVEL' in e, flush=True)
+              return e
+          K.xnu_env = spy
+          from unixnu import cli
+          cli.main()
           "
           ./unixnu build kernel --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
 

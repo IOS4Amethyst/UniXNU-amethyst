@@ -1,6 +1,10 @@
 CONFIG_XNU_BUILD_ARCHIVES=y
 CONFIG_XNU_SOURCE_CORECRYPTO14=y
-CONFIG_XNU_CRYPTO_BOOTSTRAP="prelinked"
+# Source crypto: prng_random.c starts the corecrypto provider the kernel itself carries. The
+# prelinked alternative binds the original kernelcache's AES entry points, which also makes
+# prng_random.o drop XNU_SOURCE_CORECRYPTO14 and leaves OSKext's source-provider calls
+# undefined.
+CONFIG_XNU_CRYPTO_BOOTSTRAP="source"
 CONFIG_XNU_ARM_DT_PLATFORM=y
 CONFIG_XNU_ARMCPU=y
 CONFIG_XNU_QCOM_PMIC_RTC=y
@@ -16,7 +20,7 @@ CONFIG_XNU_OWNER_ROOT_AUDIT=y
 CONFIG_XNU_OWNER_ROOT_TRUST=y
 CONFIG_XNU_EXTRA_LD_ARCHIVES="-Wl,-force_load,{tree}/build/sheng-source-storage/libShengSourceStorage.a"
 CONFIG_XNU_NATIVE_UFS=y
-CONFIG_XNU_NATIVE_AES=y
+# CONFIG_XNU_NATIVE_AES is not set
 CONFIG_XNU_NATIVE_RAM_BLOCK=y
 CONFIG_XNU_SOURCE_MOCKFS=y
 CONFIG_XNU_OWNER_DATA_VOLUME_UUID="00000000-0000-0000-0000-000000000000"

@@ -151,13 +151,13 @@ jobs:
             test -f "$DATA_SEED" || { echo "Data seed not found: $DATA_SEED"; exit 1; }
             extra+=(--data-ramdisk "$DATA_SEED")
           fi
-          ./unixnu build payload --uefi uefi-amethyst --edk2 uefi-amethyst/Mu_Basecore \
+          ./unixnu build payload --os "$OS_PROFILE" --uefi uefi-amethyst --edk2 uefi-amethyst/Mu_Basecore \
             -D "$GITHUB_WORKSPACE" ${extra[@]+"${extra[@]}"}   # bash 3.2: an empty array is unbound under set -u
 
       - name: Build userdata
         if: inputs.build_userdata
         working-directory: ./unixnu-core
-        run: ./unixnu build userdata -D "$GITHUB_WORKSPACE"
+        run: ./unixnu build userdata --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
 
       - name: Encrypt compiled binaries and logs
         if: always()

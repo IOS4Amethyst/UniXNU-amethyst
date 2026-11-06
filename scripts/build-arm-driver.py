@@ -9,7 +9,7 @@ import tomllib
 from pathlib import Path
 import subprocess
 
-from kernel_target import ARCH, TRIPLE, check_object
+from kernel_target import ARCH, CONFIG_LEVEL, OBJECT_TREE, TRIPLE, check_object
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
@@ -50,7 +50,7 @@ if switch and os.environ.get(switch) == '0':
 if component == 'ShengUfs' and 'build-sheng-source-storage.py' in (ROOT / 'board.toml').read_text():
     print(f'build-arm-driver: {identifier} skipped (build-sheng-source-storage.py owns libShengUfs.a)')
     sys.exit(0)
-recipe = ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/IOPlatformExpert.cpo.json'
+recipe = ROOT / OBJECT_TREE / 'iokit' / CONFIG_LEVEL / 'IOPlatformExpert.cpo.json'
 record = json.loads(recipe.read_text().strip().rstrip(','))
 directory = 'GopFramebuffer' if runtime in ('NativeLegacyDisplay', 'NativeGOPPresenter') else 'AdrenoMetal' if runtime in ('NativeOfflineGPU', 'NativeOfflineAccelerator', 'NativeIOGPUProviderProbe') else identifier
 filename = next((name for name in metadata.get('source_files', []) if name.endswith('.cpp')), runtime + '.cpp')

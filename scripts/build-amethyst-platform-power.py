@@ -20,6 +20,8 @@ import struct
 import subprocess
 import sys
 
+from kernel_target import CONFIG_LEVEL, OBJECT_TREE
+
 ROOT = Path(__file__).resolve().parents[1]
 # In a resolved build tree this script is a copy under <tree>/scripts, but the device sources are reached through
 # <tree>/kits/<board kit> and the compile records through <tree>/build. The archive recipe runs with the tree as the
@@ -97,7 +99,7 @@ header += '};\nstatic_assert(sizeof(ApplePMGR)==0x4b8a8,"Original provider stora
 (OUT / 'GuardedPMGRSlots.inc').write_text(guards)
 source = device_source('kits/amethyst/ShengPlatformPower.cpp')
 obj = OUT / 'ShengPlatformPower.o'
-record = json.loads((TREE / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/IOPlatformExpert.cpo.json').read_text().strip().rstrip(','))
+record = json.loads((TREE / OBJECT_TREE / 'iokit' / CONFIG_LEVEL / 'IOPlatformExpert.cpo.json').read_text().strip().rstrip(','))
 command, i = [], 0
 arguments = record['arguments']
 while i < len(arguments):

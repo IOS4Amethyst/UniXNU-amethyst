@@ -105,45 +105,7 @@ jobs:
         working-directory: ./unixnu-core
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          python3 -c "
-          import sys, os; sys.path.insert(0,'scripts')
-          os.environ.setdefault('X',''); sys.argv=['unixnu','build','kernel','--os',os.environ['OS_PROFILE'],'-D',os.environ['GITHUB_WORKSPACE']]
-          from unixnu.config import Context
-          import unixnu.kernel as K
-          orig = K.xnu_env
-          def spy(ctx):
-              e = orig(ctx)
-              print('PROBE level =', e.get('UNIXNU_XNU_CONFIG_LEVEL'), flush=True)
-              print('PROBE env key present =', 'UNIXNU_XNU_CONFIG_LEVEL' in e, flush=True)
-              return e
-          K.xnu_env = spy
-          from unixnu import cli
-          import atexit
-          def check():
-              from pathlib import Path as P
-              f = P('out/amethyst/ios-27.0.1-24A446/amethyst/tree/scripts/kernel_target.py')
-              print('PROBE tree target exists =', f.is_file(), flush=True)
-              if f.is_file():
-                  txt = f.read_text()
-                  print('PROBE tree has CONFIG_LEVEL =', 'CONFIG_LEVEL' in txt, flush=True)
-                  print('PROBE tree line =', [l for l in txt.splitlines() if 'CONFIG_LEVEL =' in l][:1], flush=True)
-          atexit.register(check)
-          _ba = K.build_archives
-          def ba(ctx, env):
-              print('PROBE build_archives env level =', env.get('UNIXNU_XNU_CONFIG_LEVEL'), flush=True)
-              print('PROBE build_archives ctx.board level =', ctx.board.get('kernel', {}).get('config_level'), flush=True)
-              from pathlib import Path as P
-              f = P('out/amethyst/ios-27.0.1-24A446/amethyst/tree/scripts/kernel_target.py')
-              print('PROBE archive-time target:', [l for l in f.read_text().splitlines() if 'CONFIG_LEVEL =' in l][:1], flush=True)
-              import subprocess as sp
-              r = sp.run(['python3','-c','import sys;sys.path.insert(0,"out/amethyst/ios-27.0.1-24A446/amethyst/tree/scripts");import kernel_target as k;print("CHILD level =",k.CONFIG_LEVEL)'],env=env,capture_output=True,text=True)
-              print('PROBE child says:', r.stdout.strip(), '| err:', r.stderr.strip()[:100], flush=True)
-              return _ba(ctx, env)
-          K.build_archives = ba
-          cli.main()
-          "
-          ./unixnu build kernel --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
+        run: ./unixnu build kernel --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
 
       - name: Build payload
         if: inputs.build_payload

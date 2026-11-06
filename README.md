@@ -121,6 +121,9 @@ are the next steps. Kernel CI runs on GitHub `macos-26` runners.
   `payload.adt.persistent_data=false`; test images enable the log explicitly.
 - Automatic UFS controller takeover is off (`native-ufs-root=0`).
   See [UFS-AUDIT.md](UFS-AUDIT.md).
+- Branch `ios27`: selects the iOS 27 (`24A446`) profile and RELEASE; the prelink
+  baseline is bounded by
+  [`scripts/policies/ios-27.0.1-24A446/prelink-regression.json`](scripts/policies/ios-27.0.1-24A446/prelink-regression.json).
 - Proprietary firmware, IPSW-derived files and decrypted artifacts are kept out
   of git.
 

@@ -31,6 +31,8 @@ def main():
     records = tree / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT'
     record = json.loads((records / 'IOPlatformExpert.cpo.json').read_text().strip().rstrip(','))
     source = tree / 'kits/amethyst/ShengPlatformPower.cpp'
+    if not source.is_file():
+        raise SystemExit(f'{source} not found; the build tree must link the device package to kits/amethyst')
     obj = out / 'ShengPlatformPower.audit.o'
     command, i = [], 0
     arguments = record['arguments']

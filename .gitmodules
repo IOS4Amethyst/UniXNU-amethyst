@@ -13,5 +13,5 @@
 	branch = amethyst
 [submodule "drivers/Adreno740"]
 	path = drivers/Adreno740
-	url = https://github.com/rootstockos/NativeAdreno.git
-	branch = asteroids
+	url = https://github.com/IOS4Amethyst/NativeAdreno.git
+	branch = main

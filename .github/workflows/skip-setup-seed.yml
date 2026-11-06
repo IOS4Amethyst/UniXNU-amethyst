@@ -2,11 +2,6 @@ name: Temporary RAM seed with Setup skipped
 
 on:
   workflow_dispatch:
-  push:
-    branches: [skip-setup-seed]
-    paths:
-      - .github/workflows/skip-setup-seed.yml
-      - scripts/log/skip-setup-seed.py
 
 permissions:
   contents: read

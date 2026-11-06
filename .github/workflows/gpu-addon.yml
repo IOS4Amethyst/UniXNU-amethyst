@@ -12,10 +12,6 @@ name: GPU addon
 #   openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in gpu-addon.tar.gz.enc -pass file:KEYFILE | tar xz
 
 on:
-  # amethyst: also on pushes to this branch (a workflow_dispatch workflow is only dispatchable once it is on the default
-  # branch); a push run takes the inputs' defaults below.
-  push:
-    branches: [gpu-addon]
   workflow_dispatch:
     inputs:
       unixnu_ref:

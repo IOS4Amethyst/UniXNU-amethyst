@@ -1,0 +1,607 @@
+schema_version = 1
+
+[device]
+name = "amethyst"
+soc = "SM7635"
+os_profile = "ipados-17.7.11-21H461"
+summary = "Xiaomi Redmi Note 14 Pro+ 5G on SM7635 running iPadOS 17.7.11 from RAM. The main checkpoint reaches the Apple UI with CPU presentation; touch, SMP and GPU work is on the amethyst-touch-gpu-bringup and gpu-addon branches."
+
+[[area]]
+id = "configuration"
+status = "implemented"
+components = ["ArmDTPlatform"]
+paths = [
+  "board.toml",
+  "feeds.toml",
+  "configs/**",
+  ".gitmodules",
+  ".github/**",
+  ".gitignore",
+  "unixnu.lock",
+  "AGENTS.md",
+  "LICENSE",
+  "drivers/ArmDTPlatform",
+]
+inputs = [
+  "SoC SM7635 (soc_source sm7635), OS profile ipados-17.7.11-21H461 (A10 iPad kernelcache, arm64 without PAC).",
+  "UniXNU core branch IOS4Amethyst/UniXNU:amethyst-embedded-payload at or after 20437c1.",
+  "UEFI IOS4Amethyst/uefi-amethyst:amethyst at or after 4e6782ba.",
+]
+configuration = [
+  "board.toml [board] kit = \"amethyst\"; [components] include ArmDTPlatform, ArmCpu, SoftwareAES, RamBlock, XnuPrelink, DarwinBoot, AppleKeyStoreState, AdrenoFirmware, ShengUfs.",
+  "configs/amethyst_defconfig with arch, sm7635 and ipados config fragments; patch_series arch, soc (xnu-12377), os and device patches/xnu/series.",
+  "[payload] kernel_args keep sheng-data-persist=0 and sheng-log=0; test images enable the log explicitly.",
+]
+procedure = [
+  "./unixnu defconfig amethyst_defconfig -D ../UniXNU-amethyst",
+  "./unixnu status --json to confirm the resolved overrides and patch order.",
+]
+findings = [
+  "Sm7635Platform is not selected: board services are provided by board-package code and test kernels instead.",
+  "The board ADT keeps arm_io_base 0x01000000; a zero parent base made pe_identify_machine return early and skip clock-frequency initialisation.",
+]
+completion = [
+  "All source pins resolve; every selected component has a record; status shows the intended overrides and patch order.",
+]
+limits = [
+  "Hardware-tested images are packed from local, partly proprietary inputs by scripts/log/pack-log.py; a clean-checkout reproduction is not available.",
+]
+next_action = [
+  "Pin the core and UEFI revisions used by the latest hardware-tested image in this repository.",
+]
+evidence = [
+  { kind = "source", reference = "board.toml", result = "Board identity, component selection, payload and ADT settings." },
+]
+
+[[area]]
+id = "firmware"
+status = "device-verified"
+components = ["DarwinBoot"]
+paths = [
+  "proprietary-files.txt",
+  "scripts/ci-bootstrap-candidate.sh",
+  "scripts/xnu-panic-screen.c",
+]
+inputs = [
+  "Mu-Silicium UEFI for amethyst (uefi-amethyst:amethyst), stock Amethyst ClockDxe.",
+  "Android boot image header v4, pagesize 4096, kernel_offset 0x8000; the bootloader exposes the installed vendor ramdisk, so the payload is embedded in the image.",
+]
+configuration = [
+  "[bootimg.image] header_version = 4; [payload] loader = \"firmware\", size_mib = 80, dram_size 0x1FFE00000.",
+  "panic_screen = false: entry/MMU detours are not inserted.",
+]
+procedure = [
+  "./unixnu build firmware --uefi ../uefi-amethyst -D ../UniXNU-amethyst",
+  "./unixnu bootimg --uefi ../uefi-amethyst --dtb <amethyst.dtb> -D ../UniXNU-amethyst",
+  "fastboot -s <serial> boot <image>.img (never flash).",
+]
+findings = [
+  "Enlarging the FAT32 payload requires rebuilding the BootShim: the ARM64 image length and the embedded payload size passed in x2 must match the actual bytes, otherwise UEFI reports no boot entry.",
+  "GPU images use firmware whose PrePi reserves a GMU_Pool region (DXE_Heap1 entry patched in place).",
+]
+completion = [
+  "Firmware image builds, enters UniXNU, publishes the framebuffer and preserves the documented memory reservations.",
+]
+limits = [
+  "The GMU_Pool firmware patch is a local tool and not part of uefi-amethyst yet.",
+]
+next_action = [
+  "Move the GMU_Pool reservation into the uefi-amethyst platform configuration.",
+]
+evidence = [
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "Redmi Note 14 Pro+ 5G (amethyst), iPadOS 17.7.11 21H461: image amethyst-cpu-present-scale2 (SHA-256 6913b06f...) reached the Apple UI on 2026-11-02; kernel UUID E37ABB7B-1B56-31D9-9351-90EDCD61DEDB; 144 log rounds, zero write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "140c844d1118e55e570d2f0ee39113d7635bf211" },
+]
+
+[[area]]
+id = "cpu"
+status = "implemented"
+components = ["ArmCpu"]
+paths = [
+  "package/CpuFreq*",
+  "scripts/*armcpu*",
+  "scripts/log/*Cpu*",
+  "scripts/log/AmethystSmc.c",
+]
+inputs = [
+  "8 CPUs: cpu0 boots running (Cortex-A520 little core), cpu1-7 waiting in the ADT.",
+  "EPSS cpufreq domains 0x17d91000/0x17d92000/0x17d93000 with 4/3/1 CPUs (volcano.dtsi).",
+]
+configuration = [
+  "sheng-smp=1 armcpu-spi-ipi=1 armcpu-self-ipi=1 bring up and signal the secondaries.",
+  "sheng-cpufreq=4 enables the governor (16 ms windows, schedutil margin, 4-window step-down).",
+]
+procedure = [
+  "Add the SMP and cpufreq arguments (pack-log.py --smp --cpufreq 4), boot, pull the log, read the AmethystSmp and [clocks]/[cpu gov] rows.",
+]
+findings = [
+  "Without armcpu-self-ipi=1 the secondaries keep SIGPdisabled until their first IPI, so a stackshot (DebuggerXCallEnter) could not signal them and the boot hung.",
+  "Booting all 8 cores cut time to the lock screen from about 272 s to about 152 s.",
+]
+completion = [
+  "Every enabled CPU reaches its entry checkpoint and timer/IPI handling works on each enabled CPU.",
+]
+limits = [
+  "SMP and cpufreq sources live on the amethyst-touch-gpu-bringup branch, not on main.",
+]
+next_action = [
+  "Merge the SMP and cpufreq bring-up into main.",
+]
+evidence = [
+  { kind = "source", reference = "board.toml", result = "ArmCpu selected; secondaries enabled by test-image arguments." },
+]
+
+[[area]]
+id = "memory"
+status = "implemented"
+components = []
+paths = [
+  "dts/**",
+  "package/*Smmu*",
+  "package/*Memory*",
+  "scripts/*smmu*",
+  "scripts/*memory*",
+]
+inputs = [
+  "DRAM size 0x1FFE00000; owned memory 0x130000000.",
+  "GPU SMMU context bank and GMU pool reservations.",
+]
+configuration = [
+  "[payload] dram_size = \"0x1FFE00000\"; [payload.adt] owned_memory_size = \"0x130000000\".",
+  "dts/amethyst.dts describes the board memory and peripherals.",
+]
+procedure = [
+  "Build the payload and check the ADT with scripts/check-adt-spmi.py ../UniXNU <hardware.dtb>.",
+]
+findings = [
+  "PMIC/RTC SPMI-local registers cannot be flattened into MMIO, so the board omits their ADT export markers.",
+  "The GMU pool round trip (32 MiB, write-combined) passed with 0 pattern errors once firmware reserved it.",
+]
+completion = [
+  "All handoff regions are accounted for and each enabled DMA engine accesses its allocated range with the documented cache policy.",
+]
+limits = [
+  "UFS controller DMA/SMMU ownership is not taken over (native-ufs-root=0 by default).",
+]
+next_action = [
+  "Record SMMU stream ownership for UFS before enabling controller takeover.",
+]
+evidence = [
+  { kind = "source", reference = "dts/amethyst.dts", result = "Board device tree used for the ADT." },
+]
+
+[[area]]
+id = "storage"
+status = "device-verified"
+components = ["ShengUfs", "VirtioMmioBlock", "VerifiedRoot", "RamBlock", "SoftwareAES", "AppleKeyStoreState"]
+paths = [
+  "drivers/ShengUfs",
+  "drivers/NativeUfs/**",
+  "scripts/*ufs*",
+  "scripts/*storage*",
+  "scripts/*userdata*",
+  "scripts/*root*",
+  "scripts/log/*seed*",
+  "scripts/log/*KeyStore*",
+  "UFS-AUDIT.md",
+  "ROOT-BRINGUP.md",
+]
+inputs = [
+  "Dedicated unixnu partition holding the signed OS and SystemOS windows; Android userdata (F2FS) is never written.",
+  "Root volume UUID 04769D26-2CA0-4825-B443-E2E5F88300F2; pinned 21H461 Static/System trust caches.",
+]
+configuration = [
+  "[payload.adt] root_match_volume_uuid, packed_data_ramdisk = true, persistent_data = false.",
+  "Board default native-ufs-root=0 (takeover off); sheng-data-persist=0.",
+  "Data is a RAM seed packed into the image (skip-setup-seed branch).",
+]
+procedure = [
+  "Pack the image with a Data seed (pack-log.py --data-seed), fastboot boot, confirm launchd and SpringBoard in the pulled log.",
+]
+findings = [
+  "Mounting SystemOS alone did not satisfy the shared-region carrier policy; the owner cache carrier requires read-only root/cache mounts with the exact signed UUIDs.",
+  "On split devices persistent Data and log/export opens stay disabled; the log uses only the last 32 MiB of unixnu.",
+]
+completion = [
+  "Host: register, clock, link and SMMU facts match the board inventory.",
+  "Reads: SCSI capacity, GPT and known blocks are correct; OS/SystemOS windows stay within the root partition.",
+  "Root: the configured volume mounts and launchd starts. Persistence: writes survive reboot within the allocated Data region.",
+]
+limits = [
+  "No persistence: Data is rebuilt from the RAM seed on every boot.",
+  "A validated write plan for a persistent Data region does not exist.",
+]
+next_action = [
+  "Design and review a persistent Data allocation inside the unixnu partition.",
+]
+evidence = [
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "Redmi Note 14 Pro+ 5G (amethyst), iPadOS 17.7.11 21H461: image amethyst-cpu-present-scale2 (SHA-256 6913b06f...) reached the Apple UI on 2026-11-02; kernel UUID E37ABB7B-1B56-31D9-9351-90EDCD61DEDB; 144 log rounds, zero write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "140c844d1118e55e570d2f0ee39113d7635bf211" },
+  { kind = "source", reference = "ROOT-BRINGUP.md", result = "Root, SystemOS and cache-carrier bring-up record." },
+]
+
+[[area]]
+id = "display"
+status = "device-verified"
+components = []
+paths = [
+  "drivers/NativeMobileDisplay/**",
+  "package/*Display*",
+  "package/*Framebuffer*",
+  "package/*Backlight*",
+  "scripts/*display*",
+  "scripts/*gop*",
+  "scripts/*framebuffer*",
+  "scripts/log/*Display*",
+  "scripts/log/*Scanout*",
+  "scripts/check-source-console.py",
+  "patches/xnu/early-text-console.patch",
+]
+inputs = [
+  "1220x2712 panel exposed by UEFI GOP; IOMobileFramebufferLegacy ABI of 21H461.",
+]
+configuration = [
+  "offline-mobile-graphics-load=1 offline-legacy-register=1 offline-legacy-phase=4 offline-legacy-gop=1 offline-legacy-pm=1 offline-legacy-unit-scale=2 offline-legacy-validate=1 offline-legacy-transfer=1 offline-legacy-cpu-present=1.",
+]
+procedure = [
+  "pack-log.py --display-probe --display-pm --display-unit-scale 2 --display-validate --display-cpu-present, then boot.",
+]
+findings = [
+  "NativeLegacyDisplay rejects pipeline-disabled swaps and keeps accepted requests in its tracking table.",
+  "validateSwap accepts plain BGRA or one-plane &BGA only; Apple-compressed two-plane framebuffers are refused, so the Data seed disables CA framebuffer compression.",
+  "Presenting by CPU copy costs about 170 ms per frame; the GPU hand-off presenter (sheng-fb-gpu=1, sheng-vsync=120) brings swaps to about 10 ms.",
+]
+completion = [
+  "A known frame appears with correct geometry and colors, then userland presentation and backlight controls work.",
+]
+limits = [
+  "Backlight control is not implemented.",
+  "The GPU hand-off presenter path is not on main yet.",
+]
+next_action = [
+  "Commit the GPU hand-off configuration and implement backlight control.",
+]
+evidence = [
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "Redmi Note 14 Pro+ 5G (amethyst), iPadOS 17.7.11 21H461: image amethyst-cpu-present-scale2 (SHA-256 6913b06f...) reached the Apple UI on 2026-11-02; kernel UUID E37ABB7B-1B56-31D9-9351-90EDCD61DEDB; 144 log rounds, zero write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "140c844d1118e55e570d2f0ee39113d7635bf211" },
+]
+
+[[area]]
+id = "input"
+status = "planned"
+components = []
+paths = [
+  "drivers/ShengHidInput",
+  "package/*Touch*",
+  "package/*Button*",
+  "scripts/*touch*",
+  "scripts/*hid*",
+  "scripts/log/*Touch*",
+  "scripts/log/*touch*",
+  "scripts/log/*Goodix*",
+  "scripts/log/*goodix*",
+  "scripts/log/*Button*",
+  "scripts/log/*button*",
+  "scripts/log/*Input*",
+  "scripts/log/*input*",
+  "scripts/log/QcomRpmh*",
+  "scripts/log/check-home-once.py",
+]
+inputs = [
+  "Goodix Berlin touch controller on a GENI SPI bus; 18x40 sensor grid.",
+  "Volume and power keys on the PMIC (SPMI).",
+]
+configuration = [
+  "sheng-touch-hid=1 publishes touches as a HID digitizer; amethyst-touch-corner=N moves points out of the corners (0 off).",
+]
+procedure = [
+  "pack-log.py --touch-snapshot --touch-goodix --touch-frames --touch-hid --buttons, boot, read the AmethystTouch and AmethystHid rows in the pulled log.",
+]
+findings = [
+  "Touch and buttons are not on main.",
+]
+completion = [
+  "Touches map to the display, simultaneous contacts keep stable IDs, release events arrive, and buttons produce expected HID reports.",
+]
+limits = [
+  "Touch and button sources live on the amethyst-touch-gpu-bringup branch.",
+]
+next_action = [
+  "Merge the touch and button bring-up into main.",
+]
+evidence = []
+
+[[area]]
+id = "gpu"
+status = "implemented"
+components = ["AdrenoFirmware"]
+paths = [
+  "kits/AdrenoFirmware",
+  "package/*Gpu*",
+  "package/*Gmu*",
+  "package/*Adreno*",
+  "scripts/*adreno*",
+  "scripts/*gpu*",
+  "scripts/*metal*",
+  "scripts/*turnip*",
+  "scripts/*air*",
+  "scripts/log/*Gpu*",
+  "scripts/log/*gpu*",
+  "scripts/log/*Gmu*",
+  "scripts/log/GPU-BRINGUP.md",
+]
+inputs = [
+  "Adreno 810 (chip 44010000, gen80300): gen80300_sqe.fw and gen80300_gmu.bin match UniXNU-asteroids; gen80300_zap.mbn is the OEM-signed amethyst copy.",
+  "GMU_Pool reserved by firmware.",
+]
+configuration = [
+  "sheng-gpu-power=19 sheng-gpu-addon=1 sheng-gpu-irq=0 sheng-fb-gpu=1 sheng-vsync=120.",
+  "GPU add-on (Metal plugin + Turnip) and owner trust bundle built by the gpu-addon branch CI.",
+]
+procedure = [
+  "Build the add-on on the gpu-addon branch, pack with pack-log.py --gpu-power 19 --gpu-addon <addon> --owner-trust <bundle> --fb-gpu, boot.",
+]
+findings = [
+  "Only AdrenoFirmware is selected on main; the GPU driver stack is compiled into the test kernels.",
+]
+completion = [
+  "GPU submissions complete, mapping/fence handling is correct, a known image renders, and the selected Metal client presents it.",
+]
+limits = [
+  "GPU bring-up sources live on the amethyst-touch-gpu-bringup and gpu-addon branches.",
+]
+next_action = [
+  "Merge the GPU bring-up into main.",
+]
+evidence = [
+  { kind = "source", reference = "board.toml", result = "AdrenoFirmware kit selected in [components] include." },
+]
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = [
+  "drivers/Ath12kWifi",
+  "package/*Wifi*",
+  "package/MhiBoot*",
+  "scripts/*wifi*",
+  "scripts/*mhi*",
+]
+inputs = [
+  "Wi-Fi and Bluetooth hardware, bus and firmware are not inventoried yet.",
+]
+configuration = [
+  "No network component is selected.",
+]
+procedure = [
+  "Inventory the Wi-Fi/Bluetooth chip, bus and firmware from the Android device tree and vendor partitions.",
+]
+findings = [
+  "No network work has been started.",
+]
+completion = [
+  "Scanning, association, address configuration and sustained receive/transmit traffic pass with the selected firmware.",
+]
+limits = [
+  "Not implemented.",
+]
+next_action = [
+  "Identify the Wi-Fi chip and its bus from the Android DTB.",
+]
+evidence = []
+
+[[area]]
+id = "cellular"
+status = "planned"
+components = []
+paths = [
+  "package/*Modem*",
+  "package/*Qmi*",
+  "scripts/*modem*",
+  "scripts/*qmi*",
+]
+inputs = [
+  "The device has a modem; firmware, EFS/NV and QRTR/QMI interfaces are not inventoried.",
+]
+configuration = [
+  "No cellular component is selected.",
+]
+procedure = [
+  "Inventory the modem firmware and the remoteproc/QRTR path on Android.",
+]
+findings = [
+  "No cellular work has been started.",
+]
+completion = [
+  "The modem boots, the SIM is identified, the network registers and a data session carries traffic.",
+]
+limits = [
+  "Not implemented.",
+]
+next_action = [
+  "Record the modem firmware files and remoteproc layout from the Android vendor partitions.",
+]
+evidence = []
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = [
+  "package/*Adsp*",
+  "package/*Audio*",
+  "package/*Gpr*",
+  "package/QcomGlink*",
+  "package/QcomMdt*",
+  "package/QcomSmem*",
+  "package/QcomSmp2p*",
+  "scripts/*adsp*",
+  "scripts/*audio*",
+  "scripts/*gpr*",
+  "scripts/log/ShengAudioAbi.h",
+]
+inputs = [
+  "ADSP firmware, codec and routes are not inventoried.",
+]
+configuration = [
+  "No audio component is selected.",
+]
+procedure = [
+  "Inventory the ADSP firmware and codec from the Android device tree.",
+]
+findings = [
+  "Only the sheng audio ABI header is carried for log tooling.",
+]
+completion = [
+  "Each declared route carries the selected audio format through playback or capture and handles start/stop correctly.",
+]
+limits = [
+  "Not implemented.",
+]
+next_action = [
+  "Identify the codec and ADSP firmware.",
+]
+evidence = []
+
+[[area]]
+id = "power"
+status = "implemented"
+components = []
+paths = [
+  "package/*Battery*",
+  "package/*Battmgr*",
+  "package/*Power*",
+  "package/*PlatformPower*",
+  "package/QcomQmp*",
+  "package/QcomRpmh*",
+  "package/QcomScm.h",
+  "scripts/*power*",
+  "scripts/*battery*",
+  "scripts/*pmgr*",
+]
+inputs = [
+  "ApplePMGR provider required by AMFI; RPMh votes for touch and GPU clocks.",
+]
+configuration = [
+  "sheng-pmgr=2; package/ShengPlatformPower.cpp built by scripts/build-amethyst-platform-power.py.",
+]
+procedure = [
+  "Build the kernel; the platform power archive is linked from board.toml archives.",
+]
+findings = [
+  "The guarded ApplePMGR provider only publishes what AMFI needs; unimplemented power operations panic rather than touch unqualified registers.",
+  "watchdogd traps without a backend, so the Data seed disables it.",
+]
+completion = [
+  "Declared power controls and battery readings match observations; each claimed sleep/resume transition restores its dependent peripherals.",
+]
+limits = [
+  "No battery, charging, suspend or watchdog backend.",
+]
+next_action = [
+  "Inventory the battery manager interface and add a watchdog backend.",
+]
+evidence = [
+  { kind = "source", reference = "package/ShengPlatformPower.cpp", result = "Guarded ApplePMGR provider." },
+]
+
+[[area]]
+id = "packaging"
+status = "device-verified"
+components = ["XnuPrelink"]
+paths = [
+  "scripts/*payload*",
+  "scripts/*image*",
+  "scripts/*flash*",
+  "patches/**",
+  "package/Kit.toml",
+  "package/.gitkeep",
+  "package/ShengPlatformPower.cpp",
+  "scripts/build-*.py",
+  "scripts/check-adt-spmi.py",
+  "OBJECT-BUILD.md",
+  "scripts/log/pack-log.py",
+  "scripts/log/kernel-uuid.py",
+  "scripts/log/adt-add-gpuaddon.py",
+  "scripts/log/compile-*.py",
+  "scripts/log/*.patch",
+]
+inputs = [
+  "XNU xnu-12377 with arch, soc, os and device patch series; iPadOS 17.7.11 21H461 kernelcache for prelink.",
+]
+configuration = [
+  "Payload FAT32, 80 MiB; embedded in the Android v4 boot image.",
+]
+procedure = [
+  "./unixnu build kernel -D ../UniXNU-amethyst",
+  "./unixnu build payload --unique-chip-id <hex> --uefi ../uefi-amethyst --edk2 ../uefi-amethyst/Mu_Basecore -D ../UniXNU-amethyst",
+  "For test images: compile -> link -> prelink -> scripts/log/pack-log.py.",
+]
+findings = [
+  "Test kernels use the unchanged original pe_init.o object; hand-assembled pe_init flags caused an earlier regression.",
+]
+completion = [
+  "Kernel and prelink succeed, payload contains all declared inputs, and the boot image matches the bootloader format and size limit.",
+]
+limits = [
+  "pack-log.py needs the local owner-union baseline and firmware shim; this is packaging replay, not a portable build.",
+]
+next_action = [
+  "Make the hardware-tested image reproducible from a clean checkout plus documented local inputs.",
+]
+evidence = [
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "Redmi Note 14 Pro+ 5G (amethyst), iPadOS 17.7.11 21H461: image amethyst-cpu-present-scale2 (SHA-256 6913b06f...) reached the Apple UI on 2026-11-02; kernel UUID E37ABB7B-1B56-31D9-9351-90EDCD61DEDB; 144 log rounds, zero write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "140c844d1118e55e570d2f0ee39113d7635bf211" },
+]
+
+[[area]]
+id = "diagnostics"
+status = "device-verified"
+components = []
+paths = [
+  "scripts/check-*",
+  "scripts/probe-*",
+  "scripts/audit-*",
+  "scripts/read-*",
+  "scripts/prepare-*",
+  "scripts/data/**",
+  "package/tests/**",
+  "package/*Tests*",
+  "package/*Diagnostic*",
+  "package/*Probe*",
+  "package/Boot*",
+  "package/linux-log/**",
+  "scripts/log/BootLog*",
+  "scripts/log/pull-log.py",
+  "scripts/log/build-log.py",
+  "scripts/log/build-stubs.py",
+  "scripts/log/gen-standins.py",
+  "scripts/log/check-*",
+  "scripts/log/sheng/**",
+  "scripts/log/*.md",
+  "scripts/log/.gitignore",
+  "scripts/log/BoardClasses.h",
+  "scripts/log/analyze-*.py",
+]
+inputs = [
+  "LineageOS Recovery with adb; the last 32 MiB of the unixnu partition as the log window.",
+]
+configuration = [
+  "sheng-log=1 (test images) writes the message buffer and periodic snapshot slots to the log window.",
+]
+procedure = [
+  "Boot the image, reboot to recovery, run python3 scripts/log/pull-log.py --out <dir> --serial <serial>, read latest.txt, slots.txt and msgbuf.txt.",
+]
+findings = [
+  "The panic hook does not write UFS; periodic writes continue during normal operation.",
+  "The log is found by partition name in recovery because this device keeps its root image in a split partition.",
+]
+completion = [
+  "Each claimed milestone has a reproducible command, a matching source/image revision and an accessible result.",
+]
+limits = [
+  "Raw boot logs are kept locally and are not published as artifacts.",
+]
+next_action = [
+  "Publish redacted boot logs for each milestone as release or CI artifacts.",
+]
+evidence = [
+  { kind = "device", reference = "scripts/log/WORKING-BOOT.md", result = "Redmi Note 14 Pro+ 5G (amethyst), iPadOS 17.7.11 21H461: image amethyst-cpu-present-scale2 (SHA-256 6913b06f...) reached the Apple UI on 2026-11-02; kernel UUID E37ABB7B-1B56-31D9-9351-90EDCD61DEDB; 144 log rounds, zero write errors.", command = "fastboot -s <serial> boot <image>.img (RAM only); in LineageOS Recovery: python3 scripts/log/pull-log.py --out <result-dir> --serial <serial>", revision = "140c844d1118e55e570d2f0ee39113d7635bf211" },
+]

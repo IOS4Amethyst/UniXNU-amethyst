@@ -14,8 +14,12 @@ python3 $S/id/pmgrfix.py $S/k$N.macho
 python3 $S/id/pmgrprobe.py $S/k$N.macho
 if [ -n "$VBV" ]; then python3 $S/id/vbvprobe.py $S/k$N.macho; fi
 if [ -n "$HANG" ]; then python3 $S/id/hang.py $S/k$N.macho $HANG; fi
+if [ -n "$TRUST" ]; then python3 $S/id/tcfix.py $S/k$N.macho; fi
+if [ -n "$MXPROBE" ]; then python3 $S/id/mxprobe.py $S/k$N.macho; fi
+if [ -n "$CEPROBE" ]; then python3 $S/id/ceprobe.py $S/k$N.macho; fi
 cp $R/.scratch/ios27-run5/payload-probe-root27.img payload-i$N.img
 mcopy -o -i payload-i$N.img $S/k$N.macho ::/EFI/UniXNU/Payloads/kernel.macho
+if [ -n "$TRUST" ]; then mtype -i payload-i$N.img ::/EFI/UniXNU/Payloads/kernel.macho.adt > $S/adt$N; python3 $S/id/adtaddtc.py $S/adt$N $S/adt$N.tc; mcopy -o -i payload-i$N.img $S/adt$N.tc ::/EFI/UniXNU/Payloads/kernel.macho.adt; mcopy -o -i payload-i$N.img $TRUST ::/EFI/UniXNU/Payloads/kernel.macho.trustcache; rm $S/adt$N $S/adt$N.tc; mdir -i payload-i$N.img ::/EFI/UniXNU/Payloads; fi
 if [ -n "$EXTRA_ARGS" ]; then mtype -i payload-i$N.img ::/EFI/UniXNU/unixnu.toml | sed "0,/^args = \"/s//args = \"$EXTRA_ARGS /" > $S/toml$N; grep -q "$EXTRA_ARGS" $S/toml$N; mcopy -o -i payload-i$N.img $S/toml$N ::/EFI/UniXNU/unixnu.toml; rm $S/toml$N; fi
 mtype -i payload-i$N.img ::/EFI/UniXNU/Payloads/kernel.macho | cmp - $S/k$N.macho
 cd $R && TMPDIR=$R/.scratch/tmp python3 UniXNU-amethyst-ios27/scripts/pack-ios27.py --container staging/amethyst-tap-v60/Mu-amethyst-tap-v60.img --payload .scratch/ios27-run5/payload-i$N.img --uefi-fd .scratch/uefi-darwinboot/amethyst-gmu-pool-db3c75734.fd --out staging/amethyst-ios27-i$N 2>&1 | tail -1

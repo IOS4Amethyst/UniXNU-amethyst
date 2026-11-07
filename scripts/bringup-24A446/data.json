@@ -72,5 +72,6 @@
  "0xfffffff00aed56a8": "_vnop_copyfile_desc",
  "0xfffffff00aed54e8": "_vnop_mkdir_desc",
  "0xfffffff00aed51b0": "_vnop_access_desc",
- "0xfffffff007cc9668": "__ZN8OSString9metaClassE"
+ "0xfffffff007cc9668": "__ZN8OSString9metaClassE",
+ "0xfffffff00af40768": "_decmpfs_ctx"
 }

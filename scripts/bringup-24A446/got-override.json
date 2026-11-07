@@ -1,1 +1,6 @@
-{"0xfffffff00a405c60":"_thread_wakeup_prim","0xfffffff00aabceac":"_IOSimpleLockFree"}
+{
+ "0xfffffff00a405c60": "_thread_wakeup_prim",
+ "0xfffffff00aabceac": "_IOSimpleLockFree",
+ "0xfffffff00a8a62b0": "_csblob_get_teamid",
+ "0xfffffff00a8a5f7c": "_cs_system_require_lv"
+}

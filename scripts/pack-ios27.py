@@ -54,6 +54,7 @@ with tempfile.TemporaryDirectory() as tempdir:
     for path in files:
         local = temp / Path(path).name
         mtools('mcopy', '-n', '-i', str(source), path, str(local))
+        assert local.read_bytes() == mtools('mtype', '-i', str(source), path, capture=True), f'{path}: short copy (is TMPDIR full?)'
         if path.endswith('/unixnu.toml') and args.args:
             config = local.read_text()
             assert config.count('type = "xnu"') == 1 and '\nargs = "' in config, 'one xnu entry with args expected'

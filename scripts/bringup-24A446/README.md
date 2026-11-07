@@ -9,64 +9,13 @@ similarity-score alone; the window-similarity ranker has produced at least one c
 match, see `bind.json` note below). Inputs are a local 24A446 kernelcache, the `ios27-run5` prelinked
 kernel, and the iOS 27 IPSW's trust-cache files; none of these are in git.
 
-## Current state: boot reaches AMFI's entitlement parser, then stops
+## Current state
 
-Progress, in order:
-
-1. Storage, APFS container, and the root volume (`Rave24A446.D370S`, UUID
-   `E89DE0E4-B66C-425D-BCD1-90F637F43F1F`) mount; devfs mounts.
-2. `/sbin/launchd` is found, decompressed, and parsed as a Mach-O.
-3. The iOS 27 trust caches load and the trust-cache lookup succeeds (launchd's cdhash is found).
-4. AMFI validates and extracts launchd's code signature, including its DER-encoded entitlements.
-5. **Blocked here:** AMFI's own CoreEntitlements parser fails while iterating that DER entitlements
-   data (`AMFI: failed to create OSDictionary copy: 14` at `OSEntitlements.cpp:863`), launchd is
-   killed (`namespace 9 code 0x8`, `EXEC_EXIT_REASON_SECURITY_POLICY`).
-
-This is **not** a missing-binding problem: every kernel function AMFI's entitlement-conversion path
-calls is bound, the libkern constructors it uses (`OSDictionary`/`OSArray`/`OSString`/`OSSymbol`/
-`OSData`/`OSNumber`/`OSBoolean`) match native code and vtable offsets exactly, no retained-kext
-`metaClass` data pointer is left dangling, the `amfi_t` interface struct layout is correct (the
-failure is a clean error return, not a crash), and our XNU's DER-entitlements extraction
-(`ubc_subr.c`, `csb_der_entitlements_blob`) is unmodified from upstream and was read end-to-end — it
-validates magic/bounds and stores a subrange of the validated superblob with no copy or truncation.
-A probe (see `ceprobe.py` below) narrowed the failure to AMFI's own DER *iterator* returning error 2,
-before any dictionary-entry callback runs.
-
-**The shipped blob was then extracted from the 24A446 IPSW and measured (see `HANDOFF.md`, Task 2):
-it is 0x627 payload bytes and wraps exactly — 0x62f for the whole DER slot — and it is well formed.**
-
-**A runtime length of "0x620" was previously reported here and is retracted.** It was an artefact of a
-varargs bug in `ceprobe.py`: the probe stored the values on the stack but never loaded them into
-`x1`–`x7`, and `IOLog` reads its first seven conversions from those registers, so a six-conversion
-format printed leftover registers and never read the stored values. Every number from those probes was
-garbage. `ceprobe.py` is fixed but has not been re-run on hardware, so **there is currently no
-measured runtime truncation** — the on-disk blob is sound and the runtime length is unmeasured.
-
-One concrete thing *is* established, by disassembling the shipped kernel rather than probing it:
-`csblob_get_der_entitlements` (`0xa93fd50`) stores `cs_blob->csb_der_entitlements_blob` — read from
-struct offset 200 — as `*out_start`, and `ntohl(blob->length)` as `*out_length`. So AMFI is handed the
-whole `CS_GenericBlob` **including** its 8-byte `fade7172` + length header, with length `0x62f`. Apple's
-kernel does exactly the same, so the header is expected, and `0x62f` — not `0x627` — is the correct
-number to expect at runtime. CE strips those 8 bytes itself: its DER container constructor
-(`0x8f73930`) is called from `0x8f7779c` with `w1 = 8`, the header length to skip. The framing then
-closes exactly — 8 header + 4 DER tag/len + 0x623 content = 0x62f — so there is no room for truncation
-in it.
-
-**Two bypass attempts were tried and are confirmed dead ends — do not repeat them:**
-forcing `_mac_vnode_check_signature` to always succeed, or disabling AMFI's exec-time checks, both
-just move the failure: AMFI's other hook (`cred_label_update_execve`) then kills launchd anyway for
-"dyld signature cannot be verified", because skipping the signature hook also skips setting the
-platform-binary flags AMFI's other checks depend on. There is no shortcut around AMFI here; the DER
-iteration failure is the real, single blocker.
-
-**What's needed to go further** (not available in this environment): the actual DER entitlements blob
-extracted from launchd's signature on the phone's root volume, byte-compared against what the kernel
-hands AMFI, to rule out a 24A446-specific difference in blob framing; and/or the 24A446 XNU source
-tree (this bring-up was done against the iPadOS 17.7.11 tree for reference, since no 24A446 tree is
-present locally) to check whether the extraction code differs in that version. Also worth checking:
-whether the equivalent boot path for iPadOS 17 / V60 (which does boot) hands AMFI a similarly-shaped
-DER blob successfully — a structural diff of the two blobs would localize this without touching any
-verification code.
+Resolved: the AMFI/CoreEntitlements entitlement-dict blocker described in earlier revisions of this
+file is fixed (`stackshift.py`). `/sbin/launchd` now runs and starts loading kernel extensions. The
+current blocker is a crash during a dynamic kext load, reached only after that fix. **See
+`HANDOFF.md` for the full story and the current task** — this file covers the binding/patch
+inventory, not day-to-day status.
 
 ## Files
 
@@ -103,6 +52,12 @@ verification code.
   The tell for both is the `how` column in `kernel.map.json`: `pac-checked-shape` and `pure-leaf`,
   i.e. shape-similarity guesses, not call-graph evidence. When a binding's `how` is anything other
   than `calls`, check the disassembly before trusting the name.
+- `stackshift.py`: kernel binary patch, **required**. AppleMobileFileIntegrity's GOT slot for Apple's
+  `PAGE_SHIFT_CONST` was bound to Apple's 16 KiB-page value (14); CoreEntitlements' DER iterator uses
+  it as a stack-depth check (`sp & mask < 0x80`) that assumes that page size, which false-positives on
+  our 4 KiB-page kernel's stack layout. This was the actual cause of `AMFI: failed to create
+  OSDictionary copy: 14` at exec — see `HANDOFF.md`. Rebinds the slot to the value `15` instead. Found
+  via `UniXNU/XnuPrelink`'s `fixtures/fileset-24A446-symbols.json`, not derived independently here.
 - `tcfix.py`: kernel binary patch. The RELEASE-build check in `arm_vm_prot_init` panics
   (`TrustCache region is in an unexpected place`) because it requires the trust-cache region to sit
   below `segLOWEST`, but DarwinBoot always places it above the kernel. This patches the check to do

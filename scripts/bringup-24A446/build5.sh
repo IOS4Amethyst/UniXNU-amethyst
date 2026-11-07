@@ -15,6 +15,8 @@ python3 $S/id/pmgrprobe.py $S/k$N.macho
 if [ -n "$VBV" ]; then python3 $S/id/vbvprobe.py $S/k$N.macho; fi
 if [ -n "$HANG" ]; then python3 $S/id/hang.py $S/k$N.macho $HANG; fi
 if [ -n "$TRUST" ]; then python3 $S/id/tcfix.py $S/k$N.macho; fi
+if [ -n "$STACKSHIFT" ]; then python3 $S/id/stackshift.py $S/k$N.macho; fi
+if [ -n "$CSBYPASS" ]; then python3 $S/id/csbypass.py $S/k$N.macho; fi
 if [ -n "$MXPROBE" ]; then python3 $S/id/mxprobe.py $S/k$N.macho; fi
 if [ -n "$CEPROBE" ]; then python3 $S/id/ceprobe.py $S/k$N.macho; fi
 cp $R/.scratch/ios27-run5/payload-probe-root27.img payload-i$N.img

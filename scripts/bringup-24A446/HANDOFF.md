@@ -10,16 +10,97 @@ dictionary-entry callback runs. `launchd` is killed (`namespace 9 code 0x8`). Tw
 AMFI's other exec hook, which then kills launchd for `dyld signature cannot be verified`. Do not
 repeat those; see README.md.
 
-**The "0x620 bytes" figure is retracted. It was never a measurement.** It came from the freeze probes
-in `ceprobe.py`, which stored the values they wanted to print on the stack and never loaded them into
-`x1`–`x7`. `IOLog` is variadic: with the format in `x0`, the first seven conversions are read from
-`x1`–`x7` and only the eighth onwards come from the stack. A six-conversion format therefore read six
-*leftover caller-saved registers* and never touched the stored values at all. Every number those
-probes printed was uninitialised garbage, including 0x620.
+## Where the investigation stands
 
-`ceprobe.py` is fixed (it now loads the values into `x1`–`x6` in order) but has not been run on
-hardware yet. There is currently **no runtime evidence of truncation**. Task 2's measurement stands:
-the shipped blob is `0x627` payload bytes in a `0x62f` slot and is structurally sound.
+Three separate claims have been made and retracted about this blocker. Only the static evidence
+survives, so read this section before proposing anything.
+
+1. **Retracted: "the kernel was built from iPadOS 17's XNU."** CI resolves XNU from the OS profile;
+   the running kernel is `xnu-12377.121.6` (`ac9718fb…`). See "Retracted lead" under Task 1.
+2. **Retracted: "AMFI is handed a 0x620-byte blob, 7 short."** `ceprobe.py` stored its values on the
+   stack and never loaded them into `x1`–`x7`, and `IOLog` reads its first seven conversions from
+   those registers. The six-conversion format read leftover registers and never touched the stack
+   slots. **Every number those probes printed was uninitialised garbage** — including 0x620 and the
+   "walker-null type" value. The probe is fixed but has not been run on hardware.
+3. **Retracted: "our code-signing path truncates the blob."** Disassembly of the shipped kernel shows
+   the data hand-off is exact end to end (below). There is no measured truncation and no structural
+   room for one.
+
+What *is* established, from the shipped kernelcache rather than from a probe:
+
+- `csblob_get_der_entitlements` (`0xa93fd50`) hands AMFI the **whole `CS_GenericBlob`**, 8-byte
+  `fade7172` header included, with length `ntohl(blob->length)` = **`0x62f`**. That is what Apple's
+  kernel does too.
+- CoreEntitlements skips that header explicitly: the DER container constructor
+  `0xfffffff008f73930` is called from `0xfffffff008f7779c` with `w0=6, w1=8`, and `w1` is the header
+  length to skip.
+- The framing closes exactly: `8` (generic header) + `4` (DER tag/long-form length) + `0x623`
+  (content) = `0x62f` = the slot length. Nothing is missing.
+
+**So the open question is no longer "is the blob the right length".** It is "what does
+CoreEntitlements do with a correctly-delivered blob that makes it return 2".
+
+## The single next action: one hardware run to get a real measurement
+
+Everything static that can be settled has been settled. The next step needs real numbers, and that
+means one RAM-only boot. This is the main agent's job — do not flash, erase or `set_active`.
+
+The probe is fixed, validated offline (all four sites assert, each `bl` resolves to `_IOLog` at
+`0xfffffff00a93a004`, formats land where the `adrp`/`add` pairs point), and **already synced** to the
+copy the build script actually invokes (`$S/id/ceprobe.py`). Verify before building — if this
+`diff` is not silent, the run will print garbage again:
+
+```sh
+diff /tmp/claude-1000/-home-bluekyeet-SmallProject/6bef58f5-6d21-489e-b4c5-0ae037cad119/scratchpad/id/ceprobe.py \
+     UniXNU-amethyst-ios27/scripts/bringup-24A446/ceprobe.py
+```
+
+Build and boot (next free index is **i84**; i83 is the last one built):
+
+```sh
+cd /home/bluekyeet/SmallProject
+TRUST=<bundle> GOT_OVERRIDE=over-i72.json CEPROBE=1 \
+  HANG="0xfffffff00a1c1604 0xfffffff00a7a6b70" \
+  <scratchpad>/id/build5.sh 84 <BIND> <DATA>
+```
+
+`build5.sh` writes `staging/amethyst-ios27-i84/`, containing
+`Mu-amethyst-ios27-i84.img`, `BUILD.txt` and `SHA256SUMS` — that image is what gets booted. Then,
+RAM-only, never flash, and give the user the UNC path:
+
+```
+fastboot boot -s 42fe0af2 ...\staging\amethyst-ios27-i84\Mu-amethyst-ios27-i84.img
+```
+
+Confirm the kernel actually in the image matches what the probe patched before booting — `build5.sh`
+already does this internally (`mtype … ::/EFI/UniXNU/Payloads/kernel.macho | cmp - <kernel>`), so a
+silent build means the probe is in. Never add `CSBYPASS=1`. The four cave addresses
+(`0xab13400`–`0xab13700`) sit inside the panic cave and were verified empty (0 non-zero bytes) before
+patching, and `hang.py` only writes the addresses explicitly passed to it, so the two do not collide.
+
+### Reading the result — the log decides which branch you are on
+
+The fixed probe prints one line per site. Format:
+`CEIT err %llx p8 %llx p16 %llx p24 %llx p32 %llx p40 %llx`, where the six values are the iterate
+return code and then the five words at `x21+8…x21+40` of the CE pod.
+
+```
+p8    must be 0x9000000000000017 or 0x9000000000000010
+p24/p32   the pod's span/pointer; expect it to describe a 0x62f-byte object
+err   the iterate return code; 2 is what has been reported (by the buggy probe, so re-confirm)
+```
+
+- **`err == 2` and the length describes `0x62f`** → the blob was delivered correctly and
+  CoreEntitlements rejected it on its own terms. Stop looking at the code-signing path. The next
+  question becomes what CE does with that padding/header convention — see Task 3 below.
+- **`p8` is neither of the two values** → the iterator never ran the worker; the object AMFI was
+  handed is the wrong *type*. That is a different bug, and the `CEFAIL A/B/C` lines say which of the
+  three exits it took.
+- **The length is not `0x62f`** → only then is delivery still in question, and the earlier
+  length-hunting work becomes relevant again.
+
+Do not accept a `0x620` or any other value without checking it is `0x62f`-consistent: the whole
+earlier dead end came from trusting a number that no register ever actually held.
 
 ## Task 1 — read the actual 24A446 XNU source (not the 17.7.11 tree), highest priority
 
@@ -141,14 +222,11 @@ coincidences with an uninitialised value, not derived facts.
 **Conclusion so far: the blob on disk is well formed and there is no measured runtime truncation.**
 The open question is what the runtime length actually is, and what the iterator's error 2 means.
 
-### Task 2b — re-measure the runtime blob with the fixed probe (next action)
+### Task 2b — re-measure the runtime blob with the fixed probe
 
-`ceprobe.py` is fixed and validated offline against a symbol-bearing kernel copy: the four patch
-sites assert, the cave code loads `x1`–`x6`, and each `bl` resolves to `_IOLog`
-(`0xfffffff00a93a004`) with the format string placed at the expected address. It has **not** been run
-on hardware.
-
-The call chain to watch, all addresses verified by decoding the instruction word (not by trusting
+Run procedure, cave-address notes and the branch table for reading the log are in
+**"The single next action"** at the top of this file. What follows here is only the call chain the
+probe's patch sites sit in, all addresses verified by decoding the instruction word (not by trusting
 `llvm-mc`'s printed `#±N`, which is relative to the input buffer):
 
 ```
@@ -162,13 +240,8 @@ DER primitive   0xfffffff008f777ec  (mid-function; error 2 path is at 0xfffffff0
 ```
 
 The worker reads the CE pod at `[x0+24]`; it never sees a bare length, so the length it parses comes
-out of the pod's own DER header. Once the probe runs, `CEIT err … p8 … p40` gives the real error code
-and the five words of the pod at `x21`. Expect `p24`/`p32` to describe a `0x62f`-byte object — see the
-next section for why, and do not read `0x62f` there as a truncation.
-
-`p8` is the field the wrapper type-checks (`0x9000_0000_0000_0017` / `…_0010`). If `p8` is neither,
-the wrapper rejects the object before the worker runs and the "DER error 2" story needs revising
-toward "the entitlements object AMFI was handed is the wrong type". Log that field first.
+out of the pod's own DER header. `p24`/`p32` should describe a `0x62f`-byte object — see the next
+section for why, and do not read `0x62f` there as a truncation.
 
 ### What the kernel actually hands AMFI (read out of the running image, not inferred)
 

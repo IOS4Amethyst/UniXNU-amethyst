@@ -87,6 +87,22 @@ verification code.
   `_proc_get_task_raw` at one point; that was wrong (different struct field, different semantics) and
   was only caught by comparing actual disassembly. Treat any future similarity-only match as a
   candidate to verify, not a binding to trust directly.
+
+  Both of those re-mappings were re-verified from disassembly, and the teamid one now has a clean
+  proof rather than a judgement call. `0xa8a62b0` is `ldr x0,[x0,#184]; ret`, a one-field getter.
+  `cs_blob.csb_der_entitlements_blob` is at offset 200 (read as `[x0,#200]` by
+  `csblob_get_der_entitlements`), and the fields before it step back by 8:
+  `192` = `csb_entitlements_blob`, **`184` = `csb_teamid`**, `176` = `csb_cd`. So `0xa8a62b0` returns
+  the team-id pointer, and the map's `auxiliary_info` label is impossible: that field sits far later in
+  the struct, past the flag bitfields. (That chain holds with `CONFIG_SUPPLEMENTAL_SIGNATURES`
+  disabled, which is the layout the runtime offset 200 confirms; if it were enabled,
+  `csb_supplement_teamid` would sit between them and 184 would still be `csb_teamid`, so the
+  conclusion does not depend on the option.) `0xa8a5f7c` is `mov w0,#1; ret` — an unconditional-success
+  stub, which matches `cs_system_require_lv` and cannot be a filter-tap event handler.
+
+  The tell for both is the `how` column in `kernel.map.json`: `pac-checked-shape` and `pure-leaf`,
+  i.e. shape-similarity guesses, not call-graph evidence. When a binding's `how` is anything other
+  than `calls`, check the disassembly before trusting the name.
 - `tcfix.py`: kernel binary patch. The RELEASE-build check in `arm_vm_prot_init` panics
   (`TrustCache region is in an unexpected place`) because it requires the trust-cache region to sit
   below `segLOWEST`, but DarwinBoot always places it above the kernel. This patches the check to do

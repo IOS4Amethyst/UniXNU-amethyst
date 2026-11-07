@@ -42,6 +42,13 @@ format printed leftover registers and never read the stored values. Every number
 garbage. `ceprobe.py` is fixed but has not been re-run on hardware, so **there is currently no
 measured runtime truncation** — the on-disk blob is sound and the runtime length is unmeasured.
 
+One concrete thing *is* established, by disassembling the shipped kernel rather than probing it:
+`csblob_get_der_entitlements` (`0xa93fd50`) stores `cs_blob->csb_der_entitlements_blob` — read from
+struct offset 200 — as `*out_start`, and `ntohl(blob->length)` as `*out_length`. So AMFI is handed the
+whole `CS_GenericBlob` **including** its 8-byte `fade7172` + length header, with length `0x62f`. Apple's
+kernel does exactly the same, so the header is expected, and `0x62f` — not `0x627` — is the correct
+number to expect at runtime. CE strips those 8 bytes itself.
+
 **Two bypass attempts were tried and are confirmed dead ends — do not repeat them:**
 forcing `_mac_vnode_check_signature` to always succeed, or disabling AMFI's exec-time checks, both
 just move the failure: AMFI's other hook (`cred_label_update_execve`) then kills launchd anyway for

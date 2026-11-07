@@ -163,13 +163,47 @@ DER primitive   0xfffffff008f777ec  (mid-function; error 2 path is at 0xfffffff0
 
 The worker reads the CE pod at `[x0+24]`; it never sees a bare length, so the length it parses comes
 out of the pod's own DER header. Once the probe runs, `CEIT err … p8 … p40` gives the real error code
-and the five words of the pod at `x21`. Compare `p24`/`p32` (the pod's span/pointer fields) against
-0x627 from the on-disk measurement — that comparison is the actual test of whether the runtime blob is
-short, and it has not been made yet.
+and the five words of the pod at `x21`. Expect `p24`/`p32` to describe a `0x62f`-byte object — see the
+next section for why, and do not read `0x62f` there as a truncation.
 
 `p8` is the field the wrapper type-checks (`0x9000_0000_0000_0017` / `…_0010`). If `p8` is neither,
 the wrapper rejects the object before the worker runs and the "DER error 2" story needs revising
 toward "the entitlements object AMFI was handed is the wrong type". Log that field first.
+
+### What the kernel actually hands AMFI (read out of the running image, not inferred)
+
+This was established by disassembling the shipped kernelcache, so it does not depend on any probe.
+
+`csblob_get_der_entitlements` is `0xfffffff00a93fd50` (`.scratch/ios27-run4` function map). Its
+success path is:
+
+```
+93fddc ldr  x19, [x0, #200]      ; x19 = cs_blob->csb_der_entitlements_blob
+93fe88 str  x19, [x22]           ; *out_start  = the generic blob (magic at +0)
+93fe8c ldr  w8,  [x19, #4]       ; read the LENGTH field at offset 4
+93fe90 rev  w8,  w8              ; ntohl
+93fe94 str  x8,  [x21]           ; *out_length = generic blob's length  == 0x62f
+```
+
+Offset 200 is confirmed from `bsd/sys/ubc_internal.h`: `csb_der_entitlements_blob` follows
+`csb_entitlements_blob`, and with 8-byte alignment it lands exactly on 0xc8 = 200. The field's own
+comment there says it is the "**raw blob**".
+
+So AMFI receives **the whole `CS_GenericBlob`, including its 8-byte `fade7172` + length header**, with
+length `0x62f` — *not* a pointer to the DER payload and *not* `0x627`. This is what Apple's kernel does
+too, so it is correct behaviour, not our bug. It also explains `0xfffffff008f7871c ldrb w26,[x19,#4]`
+in the AMFI builder: offset 4 is the length field, so AMFI knows it holds a generic blob.
+
+Consequences for the diagnosis:
+
+- **`p24`/`p32` will legitimately read `0x62f`, not `0x627`.** Do not treat that as a 8-byte
+  truncation; the header is part of what AMFI is given, by design.
+- The DER parser inside CE must therefore be skipping those 8 bytes itself. If the runtime length
+  comes back as `0x62f` and the error is still 2, the failure is *after* the header hand-off, in CE's
+  own parsing or in the object it builds — not a length our code-signing path got wrong.
+- The earlier "0x627 vs 0x620" framing was comparing the wrong two numbers (payload size vs a garbage
+  register). The real pair to compare is **`0x62f` (what AMFI gets) vs `0x62f` (what ships)** — and
+  those already match on paper.
 
 Reproduce the measurement:
 

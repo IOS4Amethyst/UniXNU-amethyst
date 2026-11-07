@@ -194,13 +194,37 @@ length `0x62f` — *not* a pointer to the DER payload and *not* `0x627`. This is
 too, so it is correct behaviour, not our bug. It also explains `0xfffffff008f7871c ldrb w26,[x19,#4]`
 in the AMFI builder: offset 4 is the length field, so AMFI knows it holds a generic blob.
 
+CE strips the header itself, and the mechanism is explicit in the binary. The DER container
+constructor is `0xfffffff008f73930`, and its call site at `0xfffffff008f7779c` passes:
+
+```
+f7779c mov w0, #6        ; container kind
+f777a0 mov w1, #8        ; <-- header length to skip
+f777a4 mov x2, x24       ; pointer
+f777a8 mov x3, x23
+...
+f777bc bl  #-16012       ; -> 0xfffffff008f73930
+```
+
+That `w1 = 8` is the only such setup in the iterate worker (`0xfffffff008f7c7dc`), so every parse on
+this path skips exactly the generic-blob header. The on-disk layout confirms the arithmetic closes:
+
+```
+offset 0     fa de 71 72        CSMAGIC_EMBEDDED_DER_ENTITLEMENTS
+offset 4     00 00 06 2f        CS_GenericBlob length == 0x62f
+offset 8     70 82 06 23        DER: SEQUENCE, long-form len, 0x623 content
+8 (header) + 4 (DER tag/len) + 0x623 = 0x62f   <- equals the slot length exactly
+```
+
+There is no room for truncation in this framing: every number closes.
+
 Consequences for the diagnosis:
 
-- **`p24`/`p32` will legitimately read `0x62f`, not `0x627`.** Do not treat that as a 8-byte
+- **`p24`/`p32` will legitimately read `0x62f`, not `0x627`.** Do not treat that as an 8-byte
   truncation; the header is part of what AMFI is given, by design.
-- The DER parser inside CE must therefore be skipping those 8 bytes itself. If the runtime length
-  comes back as `0x62f` and the error is still 2, the failure is *after* the header hand-off, in CE's
-  own parsing or in the object it builds — not a length our code-signing path got wrong.
+- Since CE demonstrably skips the 8 bytes and the framing closes exactly, a runtime length of `0x62f`
+  with error 2 still present means the failure is *after* the hand-off — in CE's own parsing or in the
+  object it builds — not a length our code-signing path got wrong.
 - The earlier "0x627 vs 0x620" framing was comparing the wrong two numbers (payload size vs a garbage
   register). The real pair to compare is **`0x62f` (what AMFI gets) vs `0x62f` (what ships)** — and
   those already match on paper.

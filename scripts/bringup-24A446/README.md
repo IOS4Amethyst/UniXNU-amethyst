@@ -47,7 +47,10 @@ One concrete thing *is* established, by disassembling the shipped kernel rather 
 struct offset 200 — as `*out_start`, and `ntohl(blob->length)` as `*out_length`. So AMFI is handed the
 whole `CS_GenericBlob` **including** its 8-byte `fade7172` + length header, with length `0x62f`. Apple's
 kernel does exactly the same, so the header is expected, and `0x62f` — not `0x627` — is the correct
-number to expect at runtime. CE strips those 8 bytes itself.
+number to expect at runtime. CE strips those 8 bytes itself: its DER container constructor
+(`0x8f73930`) is called from `0x8f7779c` with `w1 = 8`, the header length to skip. The framing then
+closes exactly — 8 header + 4 DER tag/len + 0x623 content = 0x62f — so there is no room for truncation
+in it.
 
 **Two bypass attempts were tried and are confirmed dead ends — do not repeat them:**
 forcing `_mac_vnode_check_signature` to always succeed, or disabling AMFI's exec-time checks, both

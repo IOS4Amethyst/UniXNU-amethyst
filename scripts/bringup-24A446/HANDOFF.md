@@ -78,29 +78,47 @@ silent build means the probe is in. Never add `CSBYPASS=1`. The four cave addres
 (`0xab13400`–`0xab13700`) sit inside the panic cave and were verified empty (0 non-zero bytes) before
 patching, and `hang.py` only writes the addresses explicitly passed to it, so the two do not collide.
 
-### Reading the result — the log decides which branch you are on
+### Reading the result — what has actually been confirmed on hardware, run by run
 
-The fixed probe prints one line per site. Format:
-`CEIT err %llx p8 %llx p16 %llx p24 %llx p32 %llx p40 %llx`, where the six values are the iterate
-return code and then the five words at `x21+8…x21+40` of the CE pod.
+The probe prints one line per site. Format: `CEIT err %llx p8 %llx p16 %llx p24 %llx p32 %llx p40
+%llx`, where the six values are the iterate return code and then the five words at `x21+8…x21+40` of
+the CE pod.
 
-```
-p8    must be 0x9000000000000017 or 0x9000000000000010
-p24/p32   the pod's span/pointer; expect it to describe a 0x62f-byte object
-err   the iterate return code; 2 is what has been reported (by the buggy probe, so re-confirm)
-```
+**Confirmed real, on two independent builds (i84, i85), both landing on this exact line:**
+`err == 1`, not `2`. The earlier `2` was the unfixed probe reading leftover registers — see the
+retracted-lead note above. `1` is real: it survived both before and after a later change (see below)
+that should have had no effect on it if it were also garbage.
 
-- **`err == 2` and the length describes `0x62f`** → the blob was delivered correctly and
-  CoreEntitlements rejected it on its own terms. Stop looking at the code-signing path. The next
-  question becomes what CE does with that padding/header convention — see Task 3 below.
-- **`p8` is neither of the two values** → the iterator never ran the worker; the object AMFI was
-  handed is the wrong *type*. That is a different bug, and the `CEFAIL A/B/C` lines say which of the
-  three exits it took.
-- **The length is not `0x62f`** → only then is delivery still in question, and the earlier
-  length-hunting work becomes relevant again.
+**Still not read: `p8`/`p16`/`p24`/`p32`/`p40`.** Every attempt so far prints the literal text
+`<ptr>` for all five, confirmed by direct photo (not a blurry-photo misread — the device prints
+that string). Two things were tried and both are now closed:
 
-Do not accept a `0x620` or any other value without checking it is `0x62f`-consistent: the whole
-earlier dead end came from trusting a number that no register ever actually held.
+- **Masking each value to its low 32 bits before the call** (on the theory that `IOLog`/`os_log`
+  redacts values that look like canonical kernel addresses): did not change anything. Still `<ptr>`.
+  Rules out a value-magnitude heuristic.
+- **Calling `_kprintf` instead of `_IOLog`** (a different, lower-level console-print function with no
+  `os_log`-style composition step, already enabled by this bring-up's own `-enable_kprintf_spam` boot
+  arg): **DO NOT retry this.** It did stop the `<ptr>` redaction for what little could be read before
+  the next problem, but it also caused a new, *reproducible* freeze much earlier in boot — confirmed
+  on two independent boots of the identical built image, same freeze point both times, right after
+  root volume mounts, well before launchd's own exec. AMFI's kext logs lines from very early boot
+  (before root volume even mounts), so the CE iterate function this probe patches is plausibly
+  reached for some other purpose earlier than launchd's exec too, and something about reaching it
+  through `_kprintf` there behaves differently than through `_IOLog`. The cause was not fully
+  diagnosed before reverting — it wasn't worth another round of guessing against live hardware.
+  `ceprobe.py` is back to `_IOLog` + masking (the configuration proven to reach the real blocker
+  reliably), and that revert is committed. If you want the `p8`–`p40` values, you need either a
+  different way to defeat `IOLog`'s redaction that doesn't touch `_kprintf`, or to read them some
+  other way entirely (e.g. have the cave write them to a fixed, unused memory address instead of
+  printing them, and read that address back out via a different mechanism after the freeze — not yet
+  attempted).
+
+**What `err == 1` alone is enough to do:** check `kCEAPIMisuse`/`kCEInvalidArgument`/etc. in
+`EXTERNAL_HEADERS/CoreEntitlements/Errors.h` against whatever small-integer code the *internal*
+iterate helper (not the public `CEError_t`-returning API — this is a different, lower-level function,
+and its return value is a plain integer, not a `CEError_t` pointer) uses for its own internal result
+codes, which likely needs the actual CE source or at least its header's internal result enum, not
+just the public `Errors.h`. That's additive to Task 2 below, not a replacement for it.
 
 ## Task 1 — read the actual 24A446 XNU source (not the 17.7.11 tree), highest priority
 

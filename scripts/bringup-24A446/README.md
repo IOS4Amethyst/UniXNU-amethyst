@@ -30,8 +30,13 @@ failure is a clean error return, not a crash), and our XNU's DER-entitlements ex
 (`ubc_subr.c`, `csb_der_entitlements_blob`) is unmodified from upstream and was read end-to-end — it
 validates magic/bounds and stores a subrange of the validated superblob with no copy or truncation.
 A probe (see `ceprobe.py` below) narrowed the failure to AMFI's own DER *iterator* returning error 2
-on a 0x620-byte blob, before any dictionary-entry callback runs — i.e. real Apple code is rejecting
-data that the extraction path handed over intact and unmodified.
+on a 0x620-byte blob, before any dictionary-entry callback runs.
+
+**The shipped blob was then extracted from the 24A446 IPSW and measured (see `HANDOFF.md`, Task 2):
+it is 0x627 payload bytes and wraps exactly — 0x62f for the whole DER slot — and it is well formed.
+Real Apple code is not rejecting valid data; the kernel is handing AMFI a blob truncated by 7 bytes,
+which cuts the last entitlement string in half.** The remaining work is finding where that length
+comes from in our code-signature path.
 
 **Two bypass attempts were tried and are confirmed dead ends — do not repeat them:**
 forcing `_mac_vnode_check_signature` to always succeed, or disabling AMFI's exec-time checks, both

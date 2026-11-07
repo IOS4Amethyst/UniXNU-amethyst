@@ -10,9 +10,37 @@ runs. `launchd` is killed (`namespace 9 code 0x8`). Two bypass attempts (forcing
 to succeed) are confirmed dead ends — they just move the failure to AMFI's other exec hook, which then
 kills launchd for `dyld signature cannot be verified`. Do not repeat those; see README.md.
 
+**Task 2 is done and it changes the diagnosis: the shipped blob is intact and is 0x627 bytes, not
+0x620.** The booted kernel is handing AMFI a blob truncated by 7 bytes, which cuts the last
+entitlement string mid-way and cannot parse as DER. That is a length bug on our side. Jump to
+"Task 2 — DONE" below.
+
 ## Task 1 — read the actual 24A446 XNU source (not the 17.7.11 tree), highest priority
 
-**This was a real mistake in the earlier investigation, now corrected, and it's an easy fix.**
+**Status: done for the parts that matter; see "Retracted lead" below before redoing anything.**
+
+### Retracted lead — do not repeat
+
+A later session claimed the iOS 27 kernel had been *built* from `xnu-10063.141.1` (17.7) because
+`unixnu.lock` in the device repo pins `[source."xnu"] commit = "d8b80295…"`, and concluded the whole
+blocker was an `OSEntitlementsInterface_t` field-shift between XNU revisions. **That was wrong.** The
+lock is a local convenience record; CI resolves XNU from the OS profile. The CI log proves the kernel
+on the phone was built from the right tree:
+
+```
+git -C .../out/feeds/xnu-3199e8bc fetch -q --depth 1 origin ac9718fb1af618d5ce8678d0dc6e8a58f252216f
+git clone --quiet --shared --no-checkout .../out/feeds/xnu-3199e8bc .../tree/.cache/xnu-work
+```
+
+(`.scratch/ios27/run-41976267912.log`, from run 41976267912.) So the running kernel is 12377 and its
+AMFI interface struct matches the shipped AMFI. Do **not** re-lock or rebuild XNU on the strength of
+the lock file alone.
+
+What *is* true and verified from source: `OSEntitlementsInterface_t` did gain an `adjustContext` field
+between 10063 and 12377 (`OSENTITLEMENTS_INTERFACE_VERSION` 1u → 2u). That is a real difference and it
+is why the 17.7 feed tree must not be used to reason about the 24A446 kernel — but it is not this bug.
+
+### The original task, still valid
 Every "our XNU does X correctly" claim in README.md (DER-entitlements extraction in `ubc_subr.c`,
 `cs_validate_csblob`, etc.) was checked against `UniXNU/out/feeds/xnu-b7545ced`. That tree is
 **`xnu-10063.141.1`**, iPadOS 17's kernel — confirm with:
@@ -60,7 +88,82 @@ fork (`UniXNU/out/feeds/...` or wherever the actually-running kernel's source li
 the fork that built the running kernelcache, not just upstream), that's the bug, and it's a source fix,
 not a binary patch.
 
-## Task 2 — get launchd's on-disk DER entitlements blob and diff it
+## Task 2 — DONE. Result: the on-disk blob is intact and does NOT match 0x620
+
+Extracted the real 24A446 `/sbin/launchd` from SystemOS and measured its DER slot:
+
+```
+launchd            639,376 bytes  sha256 c640246d38aaeb2d2372aff1e5aa0de59dec267f53c0dfc155f7837e717af68b
+LC_CODE_SIGNATURE  dataoff 0x95700, datasize 0x6a90
+SuperBlob          6 entries:
+  0x0      CSSLOT_CODEDIRECTORY                   len 0x144e
+  0x2      CSSLOT_REQUIREMENTS                    len 0x0c
+  0x5      CSSLOT_ENTITLEMENTS          (fade7171) len 0x915   (2325)
+  0x7      CSSLOT_DER_ENTITLEMENTS      (fade7172) len 0x62f   (1583)
+  0x9      (fade8181)                             len 0x4f
+  0x10000  CSSLOT_ALTERNATE_CODEDIRECTORIES[0]    len 0x08
+```
+
+The DER slot lays the payload out as magic + length BE (`0x62f`) followed by a standalone DER blob:
+
+```
+70 82 06 23 ...          tag 0x70 (SEQUENCE-ish), long-form length 0x623
+payload total            4 + 0x623 = 0x627  (1575 bytes)  -- wraps exactly, well formed
+last entitlement         "com.apple.security.script-restrictions"  value 01 01 ff
+```
+
+So the shipped blob is **0x627 payload bytes inside a 0x62f slot**, and it is structurally sound:
+the outer length field matches the file byte-for-byte. `ceprobe.py`'s `CEIT` probe, by contrast,
+reports the runtime blob as **0x620**. That is 7 bytes short of the real payload, and 0x620 would
+cut the final entry mid-string:
+
+```
+...  2e 73 63 72 69 70 74 2d 72 65 73 74 72 69 63 74   " . s c r i p t - r e s t r i c t "
+...  (0x620 ends here, string unfinished, no 01 01 ff terminator)
+```
+
+That is unparseable as DER, which is exactly consistent with the iterator returning error 2 before
+any dict-entry callback: the last TLV fails its length check. **The blob on disk is fine; whatever
+we hand AMFI is truncated by 7 bytes.**
+
+**Conclusion — this is a kernel-side length bug in our port, not a packaging bug and not an AMFI
+parser bug.** Next step is to find where the 0x620 (rather than 0x627) comes from: the candidate is
+a length derived from the code directory rather than the blob's own length field, or a hardcoded
+size in the port's cs_blob construction. Compare against the native kernel's path from
+`csblob_find_blob_bytes()` (returns a pointer; consumers must use `ntohl(blob->length)`) through
+`ubc_cs_reconstitute_code_signature()` (`bsd/kern/ubc_subr.c:3333-3541`, copies
+`ntohl(der_entitlements_blob->length)` bytes) to whatever passes the blob into AMFI's
+`OSEntitlements` interface. A 0x62f-vs-0x627 confusion (slot length vs payload length) and a
+0x627-vs-0x620 off-by-7 are both worth checking.
+
+Reproduce the measurement:
+
+```
+python3 csslot.py /path/to/launchd --list
+python3 csslot.py /path/to/launchd --slot 0x7 --raw der-full.bin --plist der-payload.bin
+```
+
+### How the file was obtained (for the record)
+
+`ipsw extract --files` only reaches SystemOS through `apfs-fuse`, and `ipsw`'s pure-Go AEA
+decryption needs a writable temp large enough for the 2.35 GB decrypted DMG — it fails with
+`no space left on device` on the 24 GB `/tmp` tmpfs once the 11.3 GB IPSW is also there. Set
+`TMPDIR` to real disk:
+
+```
+ipsw extract --fcs-key -o /tmp/fcs iPhone15,4_27.0.1_24A446_Restore.ipsw
+ipsw extract --files --pem-db <pem-json> --pattern '.*/sbin/launchd$' -o <out> <ipsw>
+
+# pem-json is {"043-69467-710.dmg.aea": "<PEM text with \n escapes>"}
+TMPDIR=<disk-backed-dir> ipsw extract ...
+```
+
+The AppOS DMG (`043-69297-793.dmg`) is tried first and is only the Safari cryptex — no `/sbin`; the
+file comes from SystemOS (`043-69467-710.dmg.aea`). `apfs-fuse` itself is not needed for portability
+now that it is installed at `/usr/local/bin/apfs-fuse`, but it must be on `PATH` or in
+`IPSW_APFS_FUSE_PATH` for `ipsw` to find it.
+
+<details><summary>Original task text (kept for reference)</summary>
 
 Need launchd's signed Mach-O (as shipped) to extract its `CSSLOT_DER_ENTITLEMENTS` sub-blob from the
 `LC_CODE_SIGNATURE` superblob, and compare that against what AMFI receives at boot (structurally —
@@ -106,6 +209,8 @@ reported for the booted blob). If option 1's IPSW copy differs in size or struct
 alone tells you the on-device copy differs from stock and narrows this to a packaging/corruption bug
 somewhere in how this specific root volume was populated — a different, more tractable problem than an
 AMFI parser bug.
+
+</details>
 
 ## Task 3 — structural comparison against the working path (lower priority, a sanity check)
 

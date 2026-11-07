@@ -4,9 +4,20 @@ schema_version = 2
 name = "amethyst"
 soc = "SM7635"
 soc_source = "sm7635"
+# The default profile is the working iPadOS 17 fallback: a bare `unixnu build` (macos.yml,
+# local runs) keeps producing that image. The iOS 27 port is selected per command with
+# --os ios-27.0.1-24A446, which is what ios27-kernel.yml and ios27-root-policies.yml do.
+# Do not change this default to ios-27.0.1-24A446 without also passing --os to the fallback
+# workflows: it would silently repoint the working iPadOS 17 build at the iOS 27 kernel.
 os_profile = "ipados-17.7.11-21H461"
 description = "Xiaomi Redmi Note 14 Pro+"
 kit = "amethyst"
+
+# Both profiles build the same defconfig; the kernel config level is a defconfig concern, not a
+# per-OS one. Declared explicitly so the --os pairing is visible rather than implicit.
+[package.defconfig]
+"ipados-17.7.11-21H461" = "amethyst_defconfig"
+"ios-27.0.1-24A446" = "amethyst_defconfig"
 
 [components]
 include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "RamBlock", "XnuPrelink", "DarwinBoot", "AppleKeyStoreState", "AdrenoFirmware", "ShengUfs"]#, "Sm7635Platform"]

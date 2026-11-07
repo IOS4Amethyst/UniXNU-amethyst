@@ -3,17 +3,23 @@
 Read `README.md` in this directory first for full context. This file is the task list — what to
 actually go do next, in priority order, with the exact commands already checked for this handoff.
 
-Current state (commit `dc8855a` on branch `ios27`, pushed to origin): `/sbin/launchd` reaches AMFI,
-decompresses, and its code signature validates. AMFI's own DER-entitlements iterator then returns
-error 2 while walking launchd's entitlements blob (0x620 bytes), before any dictionary-entry callback
-runs. `launchd` is killed (`namespace 9 code 0x8`). Two bypass attempts (forcing the signature check
-to succeed) are confirmed dead ends — they just move the failure to AMFI's other exec hook, which then
-kills launchd for `dyld signature cannot be verified`. Do not repeat those; see README.md.
+Current state (branch `ios27`, pushed to origin): `/sbin/launchd` reaches AMFI, decompresses, and its
+code signature validates. AMFI's own DER-entitlements iterator then returns error 2 before any
+dictionary-entry callback runs. `launchd` is killed (`namespace 9 code 0x8`). Two bypass attempts
+(forcing the signature check to succeed) are confirmed dead ends — they just move the failure to
+AMFI's other exec hook, which then kills launchd for `dyld signature cannot be verified`. Do not
+repeat those; see README.md.
 
-**Task 2 is done and it changes the diagnosis: the shipped blob is intact and is 0x627 bytes, not
-0x620.** The booted kernel is handing AMFI a blob truncated by 7 bytes, which cuts the last
-entitlement string mid-way and cannot parse as DER. That is a length bug on our side. Jump to
-"Task 2 — DONE" below.
+**The "0x620 bytes" figure is retracted. It was never a measurement.** It came from the freeze probes
+in `ceprobe.py`, which stored the values they wanted to print on the stack and never loaded them into
+`x1`–`x7`. `IOLog` is variadic: with the format in `x0`, the first seven conversions are read from
+`x1`–`x7` and only the eighth onwards come from the stack. A six-conversion format therefore read six
+*leftover caller-saved registers* and never touched the stored values at all. Every number those
+probes printed was uninitialised garbage, including 0x620.
+
+`ceprobe.py` is fixed (it now loads the values into `x1`–`x6` in order) but has not been run on
+hardware yet. There is currently **no runtime evidence of truncation**. Task 2's measurement stands:
+the shipped blob is `0x627` payload bytes in a `0x62f` slot and is structurally sound.
 
 ## Task 1 — read the actual 24A446 XNU source (not the 17.7.11 tree), highest priority
 
@@ -88,7 +94,7 @@ fork (`UniXNU/out/feeds/...` or wherever the actually-running kernel's source li
 the fork that built the running kernelcache, not just upstream), that's the bug, and it's a source fix,
 not a binary patch.
 
-## Task 2 — DONE. Result: the on-disk blob is intact and does NOT match 0x620
+## Task 2 — DONE. Result: the on-disk blob is intact at 0x627 payload bytes
 
 Extracted the real 24A446 `/sbin/launchd` from SystemOS and measured its DER slot:
 
@@ -113,28 +119,57 @@ last entitlement         "com.apple.security.script-restrictions"  value 01 01 f
 ```
 
 So the shipped blob is **0x627 payload bytes inside a 0x62f slot**, and it is structurally sound:
-the outer length field matches the file byte-for-byte. `ceprobe.py`'s `CEIT` probe, by contrast,
-reports the runtime blob as **0x620**. That is 7 bytes short of the real payload, and 0x620 would
-cut the final entry mid-string:
+the outer length field matches the file byte-for-byte. There is no evidence of truncation on disk.
+
+### Retraction — the 0x620 runtime measurement was an artefact
+
+An earlier revision of this file claimed the probe "reports the runtime blob as 0x620", 7 bytes short
+of the real payload, and built a root cause on top of it. **That was wrong and is retracted.**
+
+`ceprobe.py` stored the values it wanted to print on the stack (`str x0,[sp,#0]`,
+`stp x9,x10,[sp,#8]`, …) and never loaded them into `x1`–`x7`. `IOLog` is variadic: with the format
+string in `x0`, the first seven conversions are read from `x1`–`x7` and only the eighth onwards come
+from the stack. The `CEIT` format had six conversions, so all six read leftover caller-saved
+registers and the stack slots were never read. Every printed number, including 0x620, was garbage.
+
+Do not treat `0x62f - 0x0f == 0x620` or `0x627 - 7 == 0x620` as corroboration; both are numerical
+coincidences with an uninitialised value, not derived facts.
+
+`ceprobe.py` now loads the values into `x1`–`x6` in the format's order
+(`err, p8, p16, p24, p32, p40`), so the next hardware run produces a real measurement.
+
+**Conclusion so far: the blob on disk is well formed and there is no measured runtime truncation.**
+The open question is what the runtime length actually is, and what the iterator's error 2 means.
+
+### Task 2b — re-measure the runtime blob with the fixed probe (next action)
+
+`ceprobe.py` is fixed and validated offline against a symbol-bearing kernel copy: the four patch
+sites assert, the cave code loads `x1`–`x6`, and each `bl` resolves to `_IOLog`
+(`0xfffffff00a93a004`) with the format string placed at the expected address. It has **not** been run
+on hardware.
+
+The call chain to watch, all addresses verified by decoding the instruction word (not by trusting
+`llvm-mc`'s printed `#±N`, which is relative to the input buffer):
 
 ```
-...  2e 73 63 72 69 70 74 2d 72 65 73 74 72 69 63 74   " . s c r i p t - r e s t r i c t "
-...  (0x620 ends here, string unfinished, no 01 01 ff terminator)
+converter       0xfffffff008f7dc58  bti c / pacibsp   (CE -> OSObject)
+  iterate call  0xfffffff008f7dd4c  bl -> 0xfffffff008f7ca10
+  result check  0xfffffff008f7dd50  cbnz w0, #92      <- CEIT patch site
+iterate wrapper 0xfffffff008f7ca10  checks [x0,#16] == 0x9000_0000_0000_0017 or …_0010
+  bl            0xfffffff008f7ca60  -> 0xfffffff008f7c7dc
+worker entry    0xfffffff008f7c7dc  ldr x8,[x0,#16]; add x0,x0,#24; bl 0xfffffff008f777ec
+DER primitive   0xfffffff008f777ec  (mid-function; error 2 path is at 0xfffffff008f777f8)
 ```
 
-That is unparseable as DER, which is exactly consistent with the iterator returning error 2 before
-any dict-entry callback: the last TLV fails its length check. **The blob on disk is fine; whatever
-we hand AMFI is truncated by 7 bytes.**
+The worker reads the CE pod at `[x0+24]`; it never sees a bare length, so the length it parses comes
+out of the pod's own DER header. Once the probe runs, `CEIT err … p8 … p40` gives the real error code
+and the five words of the pod at `x21`. Compare `p24`/`p32` (the pod's span/pointer fields) against
+0x627 from the on-disk measurement — that comparison is the actual test of whether the runtime blob is
+short, and it has not been made yet.
 
-**Conclusion — this is a kernel-side length bug in our port, not a packaging bug and not an AMFI
-parser bug.** Next step is to find where the 0x620 (rather than 0x627) comes from: the candidate is
-a length derived from the code directory rather than the blob's own length field, or a hardcoded
-size in the port's cs_blob construction. Compare against the native kernel's path from
-`csblob_find_blob_bytes()` (returns a pointer; consumers must use `ntohl(blob->length)`) through
-`ubc_cs_reconstitute_code_signature()` (`bsd/kern/ubc_subr.c:3333-3541`, copies
-`ntohl(der_entitlements_blob->length)` bytes) to whatever passes the blob into AMFI's
-`OSEntitlements` interface. A 0x62f-vs-0x627 confusion (slot length vs payload length) and a
-0x627-vs-0x620 off-by-7 are both worth checking.
+`p8` is the field the wrapper type-checks (`0x9000_0000_0000_0017` / `…_0010`). If `p8` is neither,
+the wrapper rejects the object before the worker runs and the "DER error 2" story needs revising
+toward "the entitlements object AMFI was handed is the wrong type". Log that field first.
 
 Reproduce the measurement:
 
@@ -204,11 +239,9 @@ cave-patching pattern to copy).
 
 Once you have the file: parse `LC_CODE_SIGNATURE`, walk the `CS_SuperBlob` index for
 `CSSLOT_DER_ENTITLEMENTS` (magic `CSMAGIC_EMBEDDED_DER_ENTITLEMENTS` = `0xfade7172`), and check its DER
-tag/length framing is well-formed and its length matches `0x620` (what `ceprobe.py`'s `CEIT` probe
-reported for the booted blob). If option 1's IPSW copy differs in size or structure from `0x620`, that
-alone tells you the on-device copy differs from stock and narrows this to a packaging/corruption bug
-somewhere in how this specific root volume was populated — a different, more tractable problem than an
-AMFI parser bug.
+tag/length framing is well-formed. (This has since been done for the stock IPSW copy — 0x627 payload
+in a 0x62f slot, well formed. The old "compare against the 0x620 the probe reported" instruction is
+void: that figure was a varargs-bug artefact, not a measurement.)
 
 </details>
 

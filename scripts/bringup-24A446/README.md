@@ -29,14 +29,18 @@ calls is bound, the libkern constructors it uses (`OSDictionary`/`OSArray`/`OSSt
 failure is a clean error return, not a crash), and our XNU's DER-entitlements extraction
 (`ubc_subr.c`, `csb_der_entitlements_blob`) is unmodified from upstream and was read end-to-end — it
 validates magic/bounds and stores a subrange of the validated superblob with no copy or truncation.
-A probe (see `ceprobe.py` below) narrowed the failure to AMFI's own DER *iterator* returning error 2
-on a 0x620-byte blob, before any dictionary-entry callback runs.
+A probe (see `ceprobe.py` below) narrowed the failure to AMFI's own DER *iterator* returning error 2,
+before any dictionary-entry callback runs.
 
 **The shipped blob was then extracted from the 24A446 IPSW and measured (see `HANDOFF.md`, Task 2):
-it is 0x627 payload bytes and wraps exactly — 0x62f for the whole DER slot — and it is well formed.
-Real Apple code is not rejecting valid data; the kernel is handing AMFI a blob truncated by 7 bytes,
-which cuts the last entitlement string in half.** The remaining work is finding where that length
-comes from in our code-signature path.
+it is 0x627 payload bytes and wraps exactly — 0x62f for the whole DER slot — and it is well formed.**
+
+**A runtime length of "0x620" was previously reported here and is retracted.** It was an artefact of a
+varargs bug in `ceprobe.py`: the probe stored the values on the stack but never loaded them into
+`x1`–`x7`, and `IOLog` reads its first seven conversions from those registers, so a six-conversion
+format printed leftover registers and never read the stored values. Every number from those probes was
+garbage. `ceprobe.py` is fixed but has not been re-run on hardware, so **there is currently no
+measured runtime truncation** — the on-disk blob is sound and the runtime length is unmeasured.
 
 **Two bypass attempts were tried and are confirmed dead ends — do not repeat them:**
 forcing `_mac_vnode_check_signature` to always succeed, or disabling AMFI's exec-time checks, both

@@ -1,4 +1,17 @@
-"""Bring-up probe: at the three 'mov w0,#14' failure exits of AMFI's CE->OSObject converter, IOLog a tag and spin."""
+"""Bring-up probe: at the three 'mov w0,#14' failure exits of AMFI's CE->OSObject converter, IOLog a tag and spin.
+
+BUG FIX (this revision): every earlier version of this file stored the values it wanted to print
+on the stack (`str x0,[sp,#0]`, `stp x9,x10,[sp,#8]`, ...) and never loaded them into x1..x7.
+`IOLog` is variadic: with the format string in x0, the first seven conversions are read from
+x1..x7 and only the eighth onwards come from the stack. So a six-conversion format like
+`'CEIT err %llx ctx %llx %llx %llx %llx %llx'` read six *leftover* registers and never touched
+the stack slots at all. Everything those probes printed was uninitialised garbage.
+
+That is where the widely quoted "0x620-byte DER blob" came from: it was never a length, it was
+whatever happened to be in a caller-saved register. Do not build on that number.
+
+This version loads the values into x1..x6 in order before the call.
+"""
 import struct,subprocess,re,sys
 k=sys.argv[1]; d=bytearray(open(k,'rb').read())
 n=struct.unpack_from('<I',d,16)[0]; p=32; segs=[]
@@ -22,17 +35,38 @@ bl=lambda frm,to:0x94000000|(((to-frm)>>2)&0x3ffffff)
 def adrp(rd,frm,to):
     imm=((to&~0xfff)-(frm&~0xfff))>>12; return 0x90000000|((imm&3)<<29)|(((imm>>2)&0x7ffff)<<5)|rd
 MOV14=0x528001c0   # mov w0,#14
-IT=(0xfffffff008f7dd50,0xfffffff00ab13700,b'CEIT err %llx ctx %llx %llx %llx %llx %llx\n\0',
-    'str x0,[sp,#0]\nldp x9,x10,[x21,#8]\nstp x9,x10,[sp,#8]\nldp x9,x10,[x21,#24]\nstp x9,x10,[sp,#24]\nldr x9,[x21,#40]\nstr x9,[sp,#40]\n')
-sites=[IT,(0xfffffff008f7dc44,0xfffffff00ab13400,b'CEFAIL A walker-null type %llx\n\0','ldr w9,[sp,#96]\nstr x9,[sp,#0]\n'),
-       (0xfffffff008f7deb0,0xfffffff00ab13500,b'CEFAIL B dict-entry\n\0',''),
-       (0xfffffff008f7df10,0xfffffff00ab13600,b'CEFAIL C array-elem\n\0','')]
-for SITE,CAVE,fmt,extra in sites:
+
+# Each site is (site_va, cave_va, format, setup_code).
+#
+# For the IT site the six values are: iterate error code, then five words of the CE context at
+# x21 (the OSEntitlements/CE pod held in the converter's arg0). We load them straight into
+# x1..x6 because that is where IOLog reads them.
+#
+# NOTE: at the IT site x0 still holds the iterate return code, so capture it first and use x9/x10
+# as scratch -- they are caller-saved and IOLog may clobber them.
+IT=(0xfffffff008f7dd50,0xfffffff00ab13700,
+    b'CEIT err %llx p8 %llx p16 %llx p24 %llx p32 %llx p40 %llx\n\0',
+    # x0 = error code from the iterate call. Park it, then load x1..x6.
+    'mov w9, w0\n'
+    'ldp x1,x2,[x21,#8]\n'
+    'ldp x3,x4,[x21,#24]\n'
+    'ldr x5,[x21,#40]\n'
+    'mov x6, x9\n')
+
+# The three 'mov w0,#14' exits. CEFAIL A is the walker-returned-null case: the walker type word
+# lives in the converter's local frame, but the frame offset depends on where we patch, so only
+# log the context pointer here and read the type from the caller's own trace if needed.
+CEA=(0xfffffff008f7dc44,0xfffffff00ab13400,b'CEFAIL A walker-null\n\0','')
+CEB=(0xfffffff008f7deb0,0xfffffff00ab13500,b'CEFAIL B dict-entry\n\0','')
+CEC=(0xfffffff008f7df10,0xfffffff00ab13600,b'CEFAIL C array-elem\n\0','')
+sites=[IT,CEA,CEB,CEC]
+
+for SITE,CAVE,fmt,setup in sites:
     FMT=CAVE+0xc0
     assert W(SITE)==(0x350002e0 if SITE==0xfffffff008f7dd50 else MOV14), (hex(SITE),hex(W(SITE)))   # cbnz w0,+92 at the IT site
     assert not any(d[off(CAVE):off(CAVE)+0x100]), 'cave not empty'
     code=[0x35000040,0xd65f03c0] if SITE==0xfffffff008f7dd50 else []   # IT: cbnz w0,+8 ; ret  (success path returns to the original 'b' after the call)
-    code+=enc("sub sp,sp,#96\nstp x0,x30,[sp,#64]\n"+extra)
+    code+=enc("sub sp,sp,#96\nstp x0,x30,[sp,#64]\n"+setup)
     code.append(('ADRP',)); code+=enc(f"add x0,x0,#{FMT&0xfff}\n"); code.append(('BL',))
     code.append(0x14000000)      # b .  (keep the log on screen)
     for i,x in enumerate(code):

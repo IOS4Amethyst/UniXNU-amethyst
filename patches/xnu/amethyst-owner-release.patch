@@ -1,0 +1,51 @@
+# Owner SystemOS cryptex mount at RELEASE (amethyst iOS 27).
+#
+# offline-owner-systemos-mount.patch mounts the SystemOS cryptex volume as a union over / before launchd runs (so /usr/lib,
+# /System and the dyld shared cache are visible) and, with CONFIG_XNU_OWNER_CACHE_STARTUP, selects "no ignition" in the dyld
+# flags. Its owner patches are written for DEVELOPMENT kernels: they #error on anything else, and CONFIG_UNION_MOUNTS is only in
+# FILESYS_DEV/FILESYS_DEBUG. This board must build RELEASE (only RELEASE fits com.apple.kernel's 0xd8000 __DATA_CONST slot, see
+# board.toml [kernel]), so this patch, applied last, removes the two development-only #error guards behind the options this board
+# enables (XNU_OWNER_CACHE_MOUNT in kern_exec.c, XNU_OWNER_BOOT_MANIFEST in IOKitBSDInit.cpp) and adds config_union_mounts to
+# FILESYS_RELEASE. The independent cache carrier (vm_unix.c) and Cryptex-file guards stay, those options are not enabled.
+# Hardware (i126): without this mount launchd stops with "Library not loaded: /usr/lib/libSystem.B.dylib (no dyld cache)".
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+index 0a1186e..eb184b0 100644
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -7944,9 +7944,6 @@ create_unix_stack(vm_map_t map, load_result_t* load_result,
+  *		initproc might be different.
+  */
+ #if defined(XNU_OWNER_CACHE_MOUNT) && XNU_OWNER_CACHE_MOUNT
+-#if !DEVELOPMENT && !DEBUG
+-#error The offline owner cache mount is a development instrument
+-#endif
+ extern int native_verified_block_volume_device(const char *, dev_t *, char *, size_t);
+ #if defined(XNU_OWNER_BOOT_MANIFEST) && XNU_OWNER_BOOT_MANIFEST
+ extern int native_owner_publish_boot_manifest(dev_t, const char *, dev_t, const char *);
+diff --git a/config/MASTER.arm64.bcm2837 b/config/MASTER.arm64.bcm2837
+index fa3d43f..3d3fd6d 100644
+--- a/config/MASTER.arm64.bcm2837
++++ b/config/MASTER.arm64.bcm2837
+@@ -29,7 +29,7 @@
+ #  BSD_DEV =        [ BSD_BASE config_netboot config_imgsrc_access pgo config_vnguard rosetta BSD_EXTRAS_DEV ]
+ #  BSD_DEBUG =      [ BSD_BASE config_netboot config_imgsrc_access pgo config_vnguard rosetta BSD_EXTRAS_DEBUG ]
+ #  FILESYS_BASE =   [ devfs fifo fs_compression config_protect config_mnt_rootsnap config_triggers config_fse routefs namedstreams config_dataless_files bindfs]
+-#  FILESYS_RELEASE= [ FILESYS_BASE ]
++#  FILESYS_RELEASE= [ FILESYS_BASE config_union_mounts ]
+ #  FILESYS_DEV =    [ FILESYS_BASE fdesc config_union_mounts ]
+ #  FILESYS_DEBUG =  [ FILESYS_BASE fdesc config_union_mounts ]
+ #  SKYWALK_BASE =   [ skywalk config_nexus_user_pipe config_nexus_kernel_pipe config_nexus_flowswitch config_nexus_netif ]
+diff --git a/iokit/bsddev/IOKitBSDInit.cpp b/iokit/bsddev/IOKitBSDInit.cpp
+index 2b49e3c..3dfa404 100644
+--- a/iokit/bsddev/IOKitBSDInit.cpp
++++ b/iokit/bsddev/IOKitBSDInit.cpp
+@@ -573,9 +573,6 @@ IOGetBootManifestHash(char *hash_data, size_t *hash_data_size)
+ }
+ 
+ #if defined(XNU_OWNER_BOOT_MANIFEST) && XNU_OWNER_BOOT_MANIFEST
+-#if !DEVELOPMENT && !DEBUG
+-#error Owner image-set metadata is an offline development instrument
+-#endif
+ #include <libkern/crypto/sha2.h>
+ extern "C" int native_verified_block_manifest_sha384(dev_t, const char *, uint8_t[48]);
+ extern "C" int native_owner_publish_boot_manifest(dev_t, const char *, dev_t, const char *);

@@ -34,7 +34,15 @@ cur=struct.unpack_from('<Q',d,off(SLOT))[0]
 assert cur==0x10000000c29988, ('slot not at the expected original Apple binding', hex(cur))
 assert struct.unpack_from('<I',d,off(SCRATCH))[0]==0, 'scratch word not empty'
 struct.pack_into('<I',d,off(SCRATCH),15)                              # the real allocation-alignment shift
-new=0x1000000 | ((SCRATCH-BASE)&0x7ffffffff)                           # non-auth rebase encoding
+# Retarget the low-30-bit rebase target to SCRATCH but PRESERVE the original high bits, above all
+# the format-8 `next` field (bits 62:51). The earlier `0x1000000|offset` zeroed `next`, which
+# TRUNCATED DarwinBoot's chained-fixup walk at this slot: every fixup after it on this page
+# (e.g. 0xfffffff007ef0dc8) was then never applied and stayed a raw packed rebase. OSKext
+# bootstrap dereferenced one such orphan -> the 0xfffffff00a8d5ddc data abort (i88..i107).
+# Same mask idiom as patch-got.py/patch-data.py, which keep `next` intact.
+orig_next=(cur>>51)&0xFFF
+new=(cur & ~0x3fffffff) | ((SCRATCH-BASE)&0x3fffffff)                  # keep next/high bits, retarget low 30
+assert ((new>>51)&0xFFF)==orig_next==2 and (new>>63)==0, ('chain-preserving encode failed',hex(new))
 struct.pack_into('<Q',d,off(SLOT),new)
 open(K,'wb').write(d)
-print('stackshift: PAGE_SHIFT_CONST slot',hex(SLOT),'-> scratch',hex(SCRATCH),'= 15 (was Apple-16KiB-page shift 14)')
+print('stackshift: PAGE_SHIFT_CONST slot',hex(SLOT),'-> scratch',hex(SCRATCH),'= 15 (was Apple-16KiB-page shift 14); next=%d preserved, slot=%s'%(orig_next,hex(new)))

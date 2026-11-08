@@ -12,7 +12,23 @@ Three blockers cleared this session, each verified in the shipped image and on t
 2. **launchd killed — Launch Constraint Violation — FIXED in i109.** Boot-arg **`sheng-no-lc=1`**
    (core already ships `zzyc-owner-skip-launch-constraints.patch`, compiled in; `UniXNU/UniXNU-sheng`
    uses the same arg to reach SpringBoard). Added via `EXTRA_ARGS="sheng-no-lc=1"` on `build5.sh`.
-3. **NEW blocker (i109): `_upl_page_present+0x8` data abort**, `esr=0x96000007` (translation fault,
+3. **`_upl_page_present+0x8` data abort (i109) — FIXED in i111.** `PAGE_SHIFT_CONST` is 0 (the SPTM
+   `arm_init_sptm.c` assignment is never run; `native-4k-user-abi.patch` only patched the non-SPTM
+   `arm_init.c`). The pager reads it as the runtime page shift, so `(0x8000>>0)-1 = 0x7fff` overran
+   the UPL page-list. Its storage `0xfffffff007c2d988` is clobbered at runtime, so `pageshift.py`
+   redirects all 64 `PAGE_SHIFT_CONST` GOT slots to a scratch word = 12 (AMFI's slot stays on
+   stackshift's scratch = 15). Build with `PAGESHIFT=1`. **On hardware this boots fully into
+   userspace: Darwin Ignition Sequence v1.0.0 runs (ignition level 0x5).**
+4. **NEW blocker (i111): unmatched prelink functions in Darwin Ignition.** `logstub.py` makes
+   `_unixnu_fileset_unmapped` log-and-return-0, so the console fills with `UNMAPPED +<lr-BASE> …`
+   (not fatal). Boot wedges: a caller at `0xfffffff00a148a74` (`+0x3144a74`) loops calling an
+   unmapped original function (`x0=0x806c`) that returns 0. This is the predicted "1530 unmatched
+   functions" measurement. Use `site.py`/`unbound.py` on LR `0xfffffff00a148a74` to get the GOT
+   slot + original target + owning fileset entry, bind it (patch-got/BIND json) or extend the
+   matcher. nm5 does NOT map these running addresses — symbolize against the original kernelcache.
+
+Superseded detail (kept for addresses): the original "NEW blocker (i109)" write-up —
+`_upl_page_present+0x8` data abort, `esr=0x96000007` (translation fault,
    level 3 — not PAC). Backtrace: `… handle_user_abort → vm_fault → vm_fault_internal →
    vm_fault_page → vnode_pager_data_request → vnode_pager_cluster_read → vnode_pagein →
    upl_page_present`. A userspace process page-faulted on a file-backed (APFS) page; `upl_page_present(upl=x0,idx=x1)`

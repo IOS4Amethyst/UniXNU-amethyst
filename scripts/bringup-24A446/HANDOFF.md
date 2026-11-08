@@ -50,44 +50,90 @@ build, and check whether another UniXNU device repo (e.g. `UniXNU/UniXNU-sheng`)
 the same OS build successfully — their patches, prelink inputs and reports are often the fastest path
 to a real fix, faster than re-deriving one independently.
 
-## Current blocker: crash loading a kext, during/after launchd startup
+## Current blocker: OSKext::recordIdentifierRequest crashes on a corrupted global, loading com.apple.kpi.bsd
 
-With `STACKSHIFT=1`, i88 reached a new kernel data abort:
+With `STACKSHIFT=1`, boot reaches very early kext bootstrap (before launchd, in fact —
+`KLDBootstrap::readStartupExtensions` is one of the first things that runs) and crashes in
+`OSMetaClassBase::safeMetaCast`, dereferencing an object pointer that's garbage
+(`0xdc008005` -- not null, not a valid kernel address, which are always `0xfffffff0xxxxxxxx`).
 
+Call chain:
 ```
-pc  0xfffffff00a8d5ddc   __ZN11OSMetaClass11postModLoadEPv +0x2e4
-lr  (PAC-signed, not yet stripped in the dump)
-```
-
-Call chain (from the panic's frame list, symbolized):
-
-```
-OSKext::loadKextWithIdentifier(const char*, ...)   0xfffffff00a8e9ad4 +0x54
-OSKext::loadKextWithIdentifier(OSString*, ...)     0xfffffff00a8e9bf4 +0xd8
-OSKext::load(...)                                   0xfffffff00a8ead68 +0x18c
-OSKext::start(bool)                                 0xfffffff00a8ee03c +0x364
-OSRuntimeInitializeCPP(...)                         0xfffffff00a901d70 +0xe0
-OSMetaClass::postModLoad(void*)                     0xfffffff00a8d5ddc +0x2e4   <- fault
+KLDBootstrap::readStartupExtensions      0xfffffff00ab102fc +0xac
+KLDBootstrap::loadKernelComponentKexts   0xfffffff00ab10ad0 +0xa4
+OSKext::loadKextWithIdentifier(OSString*,...)  0xfffffff00a8e9b1c +0x6c
+OSKext::recordIdentifierRequest(OSString*)     0xfffffff00a8e9fec +0x30
+OSMetaClassBase::safeMetaCast                  0xfffffff00a8d4e10 +0x1c   <- fault (x0 == 0xdc008005)
 ```
 
-This is a **dynamically loaded kext** (not one of the prelinked/retained kexts this whole bring-up has
-been binding GOT slots for) being loaded fresh from disk and running its own C++ static-initializer
-registration (`OSRuntimeInitializeCPP` → `OSMetaClass::postModLoad`). That's a different code path
-from everything addressed so far: there's no GOT-slot stub to rebind here, this is the kernel's kext
-loader processing a Mach-O it just mapped in, and something about that processing is faulting.
+**The identifier being loaded, read directly off the device: `com.apple.kpi.bsd`** (a `kextnameprobe.py`
++ `badcastfreeze.py` pair stashed it at the real `loadKextWithIdentifier` entry and rendered it as
+plain hex-digit text at the crash site — see "How this was found" below; getting a readable string
+out of a frozen panic screen took three iterations because `IOLog`'s `%llx`/`%s` handling is
+unreliable here, also documented below).
+
+**Root cause, from reading `libkern/c++/OSKext.cpp` in the reference XNU tree (caveat: this is the
+17.7/`xnu-10063` tree, not 24A446's `xnu-12377` — re-check against the real one if it's available,
+same caveat as everywhere else in this bring-up):** `recordIdentifierRequest` reads a static global,
+`sAllKextLoadIdentifiers` (an `OSSharedPtr<OSSet>`), set exactly once, in `OSKext::initialize()`
+(`iokit/Kernel/IOStartIOKit.cpp`, `StartIOKit` → `OSKext::initialize()`), via
+`sAllKextLoadIdentifiers = OSSet::withCapacity(kOSKextTypicalLoadCount);`. If that assignment had
+simply never run, the pointer would still read as null, `recordIdentifierRequest`'s own
+`if (!sAllKextLoadIdentifiers || ...) goto finish;` guard would catch it safely, and there would be
+no crash. A **non-null but invalid** value (`0xdc008005`) means something did write to that global's
+storage — just not a valid `OSSet*` — which points at either: `OSKext::initialize()` running with
+something already broken underneath it (e.g. the allocator it calls through), or a different global
+aliasing/overwriting this one's storage (the kind of prelink/binding mistake this bring-up has found
+several times already, though this is plain native `com.apple.kernel` code, not a retained-kext GOT
+slot, so it wouldn't be the *same* class of bug as the earlier ones).
 
 **Not yet investigated:**
-- Which kext is being loaded (`OSKext::loadKextWithIdentifier` took a name/identifier argument —
-  worth reading `x0`/register state at one of the outer frames, or adding a probe at
-  `loadKextWithIdentifier`'s entry to log the identifier string, the same IOLog-cave technique used
-  throughout this bring-up).
-- Whether this is a kext our board's own patch set introduces (check `patches/xnu-12377/` and
-  `board.toml`/`porting.toml` for anything that causes a non-prelinked kext load this early) or a
-  stock iOS 27 kext that fails because of something still missing in our bring-up (e.g. a missing
-  retained-kext dependency it links against).
-- Whether `UniXNU/UniXNU-sheng` hit the same crash — worth checking their `reports/` directory and
-  `UniXNU/XnuPrelink`'s fixture for a 24A446-area `postModLoad`/kext-loading fix the same way the
-  stack-shift bug was found, before re-deriving one from scratch.
+- Whether `OSKext::initialize()` (called from `StartIOKit`) actually runs to completion before
+  `loadKernelComponentKexts` does, in our build specifically — add a probe right after
+  `OSKext::initialize()` returns that reads `sAllKextLoadIdentifiers`'s value directly and logs it
+  (same hex-render-to-text technique as `badcastfreeze.py`). If it's already garbage there, the bug
+  is in `initialize()` or something it calls; if it's still correctly null/fine there and only
+  becomes `0xdc008005` later, something *else* overwrites it in between, which is a very different
+  (and probably more interesting) bug.
+- Whether `UniXNU/UniXNU-sheng` (which did boot this exact OS build to SpringBoard) hit the same
+  thing — their build succeeded, so whatever's different about their `OSKext::initialize()` path is
+  worth a direct comparison. Nothing specific was found in their patches on a first pass (`git grep`
+  for `OSKext::initialize`/`sAllKextLoadIdentifiers`/`sKernelComponentNames` across `upstream-unixnu`,
+  `UniXNU-sheng`, and `XnuPrelink` came up empty), but that doesn't rule out a difference in ordinary
+  (unpatched) native kernel behavior between their build and ours.
+
+### How this was found: getting a readable string out of a frozen panic screen
+
+Three real dead ends on the way here, each worth knowing about before trying again:
+1. **`%llx`/`%s` through `IOLog` is unreliable for this kind of value.** Pointer-shaped arguments
+   printed as the literal string `<ptr>` (confirmed on-device, not a blurry photo). Masking to 32 bits
+   first didn't help (rules out a magnitude heuristic). A 4-argument attempt came back completely
+   scrambled — one slot showed a *different* argument's real value, i.e. redaction here can break
+   argument correspondence itself, not just blank one value.
+2. **Calling `_kprintf` instead of `_IOLog`** did stop the redaction for what little could be read,
+   but caused a reproducible crash much earlier in boot (confirmed on two identical boots). Root
+   cause not found; not worth re-attempting without a specific new reason to.
+3. **Writing data into the `__TEXT_EXEC` panic-cave region at runtime faults.** That region is r-x
+   only even though it's where every *build-time*-baked probe (format strings, patched instructions)
+   lives safely — the difference is build-time bytes vs. a runtime `str`. Needed an actual writable
+   scratch location: the last 64–128 bytes of `__DATA` (zero-fill padding at the segment's page-aligned
+   tail) works.
+4. **Pre-filling that writable scratch buffer with literal text at *build* time hung the boot before
+   even the first kernel log line** (`iBoot version:` / `iBoot Stage 2 version:`, far earlier than
+   any previous failure in this bring-up). Something very early in boot doesn't tolerate pre-set
+   content in that `__DATA` tail. Fix: leave the buffer entirely zero at build time (same as every
+   other scratch location used successfully elsewhere) and have the probe's own runtime code copy the
+   static text in too, from a small literal embedded in its own (read-only) code cave.
+
+What worked, and is the pattern worth reusing for the next probe: `kextnameprobe.py` patches
+`loadKextWithIdentifier`'s real entry, calls `OSString::getCStringNoCopy()` on the incoming
+identifier, and silently copies 20 raw bytes into a writable `__DATA` scratch buffer on *every* kext
+load attempt (cheap, no printing, too fast to ever photograph anyway). `badcastfreeze.py` patches the
+exact instruction that's known to fault, *conditionally* — only when the pointer being dereferenced
+has zero upper 32 bits (real kernel pointers never do), so it doesn't trip on the thousands of
+legitimate uses of the same function elsewhere in the kernel — and on that path, hex-renders the
+stashed identifier as plain ASCII text entirely at runtime (no `%`-conversions reach `IOLog` at all)
+before hanging so the screen stays readable.
 
 ## Build state to resume from
 

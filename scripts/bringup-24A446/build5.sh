@@ -19,6 +19,8 @@ if [ -n "$STACKSHIFT" ]; then python3 $S/id/stackshift.py $S/k$N.macho; fi
 if [ -n "$CSBYPASS" ]; then python3 $S/id/csbypass.py $S/k$N.macho; fi
 if [ -n "$MXPROBE" ]; then python3 $S/id/mxprobe.py $S/k$N.macho; fi
 if [ -n "$CEPROBE" ]; then python3 $S/id/ceprobe.py $S/k$N.macho; fi
+if [ -n "$KEXTPROBE" ]; then python3 $S/id/kextnameprobe.py $S/k$N.macho; fi
+if [ -n "$KEXTPROBE" ]; then python3 $S/id/badcastfreeze.py $S/k$N.macho; fi
 cp $R/.scratch/ios27-run5/payload-probe-root27.img payload-i$N.img
 mcopy -o -i payload-i$N.img $S/k$N.macho ::/EFI/UniXNU/Payloads/kernel.macho
 if [ -n "$TRUST" ]; then mtype -i payload-i$N.img ::/EFI/UniXNU/Payloads/kernel.macho.adt > $S/adt$N; python3 $S/id/adtaddtc.py $S/adt$N $S/adt$N.tc; mcopy -o -i payload-i$N.img $S/adt$N.tc ::/EFI/UniXNU/Payloads/kernel.macho.adt; mcopy -o -i payload-i$N.img $TRUST ::/EFI/UniXNU/Payloads/kernel.macho.trustcache; rm $S/adt$N $S/adt$N.tc; mdir -i payload-i$N.img ::/EFI/UniXNU/Payloads; fi

@@ -20,10 +20,24 @@ REVISION HISTORY, why this version renders hex text itself instead of using IOLo
   targets as unresolved relocations rather than concrete bytes, so every branch here uses a
   hand-computed literal immediate displacement instead, verified against llvm-mc individually.
 
-On the bad-pointer path: hex-renders the stashed 20-byte kext identifier (written by
-kextnameprobe.py) into a template buffer in __DATA (writable at runtime -- the panic cave is
-__TEXT_EXEC, r-x only; writing there faulted on the first attempt of this probe, see git history),
-calls IOLog with zero conversions, then hangs (b .).
+THIS REVISION renders three values together, all from the SAME boot/crash, to localize exactly
+when sAllKextLoadIdentifiers turns from a real pointer into the crash's garbage (0xdc008005):
+  - ENTRY: lkcentrystash.py's loop-entry snapshot (before com.apple.kernel, the first entry in
+    sKernelComponentNames[], is even processed).
+  - CALL:  kextnameprobe.py's per-call snapshot, overwritten on every loadKextWithIdentifier call
+    and so holding the value as of the START of the crashing call itself (processing
+    com.apple.kpi.bsd, the second entry, right after com.apple.kernel) -- recordIdentifierRequest
+    reads the same global moments later, as the first statement in the function, in source.
+  ENTRY != CALL would mean the stray write happens during com.apple.kernel's own processing (the
+  only thing between those two points); ENTRY == CALL would push the search into the sliver of
+  loadKextWithIdentifier's own body between kextnameprobe.py's hook and recordIdentifierRequest's
+  read, which source shows should be a negligible window.
+
+On the bad-pointer path: hex-renders the stashed 20-byte kext identifier (kextnameprobe.py), the
+entry-stash value (lkcentrystash.py) and the per-call stash value (kextnameprobe.py) into a
+template buffer in __DATA (writable at runtime -- the panic cave is __TEXT_EXEC, r-x only; writing
+there faulted on the first attempt of this probe, see git history), calls IOLog with zero
+conversions, then hangs (b .).
 """
 import struct,subprocess,re,sys
 k=sys.argv[1]; d=bytearray(open(k,'rb').read())
@@ -41,12 +55,14 @@ for l in subprocess.run(['llvm-nm',k],capture_output=True,text=True).stdout.spli
     t=l.split()
     if len(t)==3 and all(c in '0123456789abcdef' for c in t[0]): names.setdefault(t[2],int(t[0],16))
 IOLOG=names['_IOLog']
-STASH=0xfffffff00b0d7fc0    # last 64 (zero-fill) bytes of __DATA: raw 20-byte identifier (kextnameprobe.py)
-RENDER=0xfffffff00b0d6fc0   # a second, separate zero-fill 128-byte region: hex-text render buffer
+STASH=0xfffffff00b0d7fc0       # last 64 (zero-fill) bytes of __DATA: raw 20-byte identifier (kextnameprobe.py)
+ENTRYSTASH=0xfffffff00b0d7f80  # 8 bytes, 64 bytes before STASH: loop-entry global value (lkcentrystash.py)
+CALLSTASH=0xfffffff00b0d7f70   # 8 bytes, 16 before ENTRYSTASH: per-call global value (kextnameprobe.py)
+RENDER=0xfffffff00b0d6fc0      # a second, separate zero-fill 128-byte region: hex-text render buffer
 SITE=0xfffffff00a8d4e2c; CAVE=0xfffffff00ab12d00
 assert W(SITE)==0xf9400010, ('site not ldr x16,[x0]',hex(W(SITE)))
-assert not any(d[off(CAVE):off(CAVE)+0x600]), 'cave not empty'
-assert not any(d[off(RENDER):off(RENDER)+64]), 'render buffer not empty'
+assert not any(d[off(CAVE):off(CAVE)+0xa00]), 'cave not empty'
+assert not any(d[off(RENDER):off(RENDER)+112]), 'render buffer not empty'
 def enc(s):
     o=subprocess.run(['llvm-mc','-triple=aarch64','-mattr=+v8.5a,+pauth','-show-encoding'],input=s,capture_output=True,text=True)
     r=o.stdout.splitlines()
@@ -76,27 +92,51 @@ add w10,w10,#{ord('0')}
 strb w10,[x6],#1
 """
 
-ID_OFF = 8   # "KEXTNAME" (no trailing space) is 8 bytes; hex digits start right after
+# RENDER layout, all written at runtime only (see note below on why nothing is pre-filled):
+#   0..8    "KEXTNAME" literal
+#   8..48   40 hex chars: the 20-byte stashed kext identifier
+#   48..56  " ENTRY= " literal
+#   56..72  16 hex chars: the 8-byte loop-entry global value (lkcentrystash.py)
+#   72..80  "  CALL= " literal
+#   80..96  16 hex chars: the 8-byte per-call global value (kextnameprobe.py)
+#   96      '\n'
+ID_OFF = 8
+SEP_OFF = ID_OFF + 40
+ENTRY_OFF = SEP_OFF + 8
+SEP2_OFF = ENTRY_OFF + 16
+CALL_OFF = SEP2_OFF + 8
 
 # The RENDER buffer in __DATA must stay entirely zero at build time (like STASH) -- a prior
 # revision pre-filled its literal text at build time and the boot hung before even FIPSPOST,
 # consistent with an early boot-time check over __DATA not tolerating pre-set content there.
-# So "KEXTNAME" and the trailing newline are written by the cave itself at runtime too, copied
-# from a literal embedded in the cave's own (read-only, build-time-baked, never written-to)
-# __TEXT_EXEC bytes -- the same thing every format string in this whole bring-up already does.
+# So every literal below is copied in by the cave itself at runtime, from literals embedded in
+# the cave's own (read-only, build-time-baked, never written-to) __TEXT_EXEC bytes -- the same
+# thing every format string in this whole bring-up already does.
 
 body = "mov x5,x11\nadd x6,x12,#{}\n".format(ID_OFF)
 for _ in range(20):
     body += hex_byte_block("ldrb w8,[x5],#1\n")
-body += "mov x0,#0x0a\nstrb w0,[x12,#{}]\n".format(ID_OFF+40)   # trailing '\n'
+body += "mov x5,x15\nadd x6,x12,#{}\n".format(ENTRY_OFF)
+for _ in range(8):
+    body += hex_byte_block("ldrb w8,[x5],#1\n")
+body += "mov x5,x19\nadd x6,x12,#{}\n".format(CALL_OFF)
+for _ in range(8):
+    body += hex_byte_block("ldrb w8,[x5],#1\n")
+body += "mov x0,#0x0a\nstrb w0,[x12,#{}]\n".format(CALL_OFF+16)   # trailing '\n'
 body += "mov x0,x12\n"
 
 code = enc("lsr x9,x0,#32\n")
 code.append(('CBNZ_REPLAY',))
-code.append(('STASH_ADRP',)); code.append(('STASH_ADD',))      # -> x11
-code.append(('RENDER_ADRP',)); code.append(('RENDER_ADD',))    # -> x12
-code.append(('LIT_ADRP',)); code.append(('LIT_ADD',))          # -> x13, points at "KEXTNAME" literal
-code += enc("ldr x14,[x13]\nstr x14,[x12]\n")                 # copy the 8-byte literal into RENDER
+code.append(('STASH_ADRP',)); code.append(('STASH_ADD',))        # -> x11
+code.append(('RENDER_ADRP',)); code.append(('RENDER_ADD',))      # -> x12
+code.append(('LIT_ADRP',)); code.append(('LIT_ADD',))            # -> x13, "KEXTNAME" literal
+code.append(('LIT2_ADRP',)); code.append(('LIT2_ADD',))          # -> x16, " ENTRY= " literal
+code.append(('ENTRYSTASH_ADRP',)); code.append(('ENTRYSTASH_ADD',))  # -> x15
+code.append(('LIT3_ADRP',)); code.append(('LIT3_ADD',))          # -> x20, "  CALL= " literal
+code.append(('CALLSTASH_ADRP',)); code.append(('CALLSTASH_ADD',))    # -> x19
+code += enc("ldr x14,[x13]\nstr x14,[x12]\n")                    # copy "KEXTNAME" into RENDER[0:8]
+code += enc("ldr x17,[x16]\nadd x18,x12,#{}\nstr x17,[x18]\n".format(SEP_OFF))   # " ENTRY= " into RENDER[48:56]
+code += enc("ldr x17,[x20]\nadd x18,x12,#{}\nstr x17,[x18]\n".format(SEP2_OFF))  # "  CALL= " into RENDER[72:80]
 code += enc(body)
 code.append(('BL',))
 code.append(0x14000000)   # b .  (hang here on the bad-pointer path)
@@ -104,10 +144,16 @@ REPLAY_IDX=len(code)
 code.append(0xf9400010)   # replay: ldr x16,[x0]
 code.append(bl(0,0))      # placeholder -> plain b SITE+4
 LIT_IDX=len(code)
-code += list(struct.unpack('<2I', b'KEXTNAME'))   # the literal itself, as two raw words appended to the cave
+code += list(struct.unpack('<2I', b'KEXTNAME'))
+LIT2_IDX=len(code)
+code += list(struct.unpack('<2I', b' ENTRY= '))
+LIT3_IDX=len(code)
+code += list(struct.unpack('<2I', b'  CALL= '))
 
 LIT_ADDR=CAVE+4*LIT_IDX
-for i,x in enumerate(code):
+LIT2_ADDR=CAVE+4*LIT2_IDX
+LIT3_ADDR=CAVE+4*LIT3_IDX
+for i,x in enumerate(code[:LIT_IDX]):
     va=CAVE+4*i
     if x==('CBNZ_REPLAY',):
         target=CAVE+4*REPLAY_IDX
@@ -118,11 +164,20 @@ for i,x in enumerate(code):
     elif x==('RENDER_ADD',): x=0x91000000|((RENDER&0xfff)<<10)|(12<<5)|12
     elif x==('LIT_ADRP',): x=adrp(13,va,LIT_ADDR)
     elif x==('LIT_ADD',): x=0x91000000|((LIT_ADDR&0xfff)<<10)|(13<<5)|13
+    elif x==('LIT2_ADRP',): x=adrp(16,va,LIT2_ADDR)
+    elif x==('LIT2_ADD',): x=0x91000000|((LIT2_ADDR&0xfff)<<10)|(16<<5)|16
+    elif x==('LIT3_ADRP',): x=adrp(20,va,LIT3_ADDR)
+    elif x==('LIT3_ADD',): x=0x91000000|((LIT3_ADDR&0xfff)<<10)|(20<<5)|20
+    elif x==('ENTRYSTASH_ADRP',): x=adrp(15,va,ENTRYSTASH)
+    elif x==('ENTRYSTASH_ADD',): x=0x91000000|((ENTRYSTASH&0xfff)<<10)|(15<<5)|15
+    elif x==('CALLSTASH_ADRP',): x=adrp(19,va,CALLSTASH)
+    elif x==('CALLSTASH_ADD',): x=0x91000000|((CALLSTASH&0xfff)<<10)|(19<<5)|19
     elif x==('BL',): x=bl(va,IOLOG)
     put(va,x)
+for i in range(LIT_IDX,len(code)): put(CAVE+4*i,code[i])
 tailva=CAVE+4*(LIT_IDX-1)
 put(tailva,(bl(tailva,SITE+4) & ~0xfc000000) | 0x14000000)
-assert 4*len(code) < 0x600, ('cave overflow', 4*len(code))
+assert 4*len(code) < 0xa00, ('cave overflow', 4*len(code))
 put(SITE,bl(SITE,CAVE))
 open(k,'wb').write(d)
 print('badcastfreeze',hex(SITE),'-> cave',hex(CAVE),len(code),'insns ('+hex(4*len(code))+' bytes), render buf',hex(RENDER))

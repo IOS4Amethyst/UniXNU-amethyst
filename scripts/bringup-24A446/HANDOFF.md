@@ -57,14 +57,20 @@ With `STACKSHIFT=1`, boot reaches very early kext bootstrap (before launchd, in 
 `OSMetaClassBase::safeMetaCast`, dereferencing an object pointer that's garbage
 (`0xdc008005` -- not null, not a valid kernel address, which are always `0xfffffff0xxxxxxxx`).
 
-Call chain:
+Call chain (addresses are `k.macho`, the kernel we build and boot — see the two-binary warning below
+the chain):
 ```
-KLDBootstrap::readStartupExtensions      0xfffffff00ab102fc +0xac
-KLDBootstrap::loadKernelComponentKexts   0xfffffff00ab10ad0 +0xa4
-OSKext::loadKextWithIdentifier(OSString*,...)  0xfffffff00a8e9b1c +0x6c
-OSKext::recordIdentifierRequest(OSString*)     0xfffffff00a8e9fec +0x30
-OSMetaClassBase::safeMetaCast                  0xfffffff00a8d4e10 +0x1c   <- fault (x0 == 0xdc008005)
+KLDBootstrap::readStartupExtensions            0xfffffff00ab0d2c0-ish (from IOCatalogue block invoke)
+OSKext::loadKextWithIdentifier(OSString*,...)  0xfffffff00a8e9b1c
+OSKext::recordIdentifierRequest(OSString*)     0xfffffff00a8e9fec  +0x30  <- virtual call through [x0,#272]
+OSMetaClassBase::safeMetaCast                  0xfffffff00a8d4e10  +0x1c  <- fault (x0 == 0xdc008005)
 ```
+
+The faulting operation is a **virtual call, not a `safeMetaCast` call site**: `recordIdentifierRequest`
+does `ldr x0,[x22,#1312]` (the global), null-checks it, then `ldr x16,[x0]` / `autda` / `ldr x8,[x16,#272]`
+/ `blraa`. With `x0 == 0xdc008005` the `ldr x16,[x0]` itself faults. The global's own null guard
+(`cbz x8, <finish>` at `0xa8ea010`) is present and correct, so by the time we get there the slot holds a
+**non-null garbage** value, not null.
 
 **The identifier being loaded, read directly off the device: `com.apple.kpi.bsd`** (a `kextnameprobe.py`
 + `badcastfreeze.py` pair stashed it at the real `loadKextWithIdentifier` entry and rendered it as
@@ -86,6 +92,60 @@ something already broken underneath it (e.g. the allocator it calls through), or
 aliasing/overwriting this one's storage (the kind of prelink/binding mistake this bring-up has found
 several times already, though this is plain native `com.apple.kernel` code, not a retained-kext GOT
 slot, so it wouldn't be the *same* class of bug as the earlier ones).
+
+**Read the addresses in this file section with care.** Everything above this line was traced against
+the wrong binary. There are two completely different kernels in this bring-up and they do not share a
+layout:
+
+| | Apple's `kernelcache.decompressed` (24A446, from the IPSW) | **`k.macho`** (built in `.scratch/ios27-run5`, and the thing `build5.sh` actually patches) |
+| --- | --- | --- |
+| `OSKext::recordIdentifierRequest` | `0xfffffff00aa787ec` | **`0xfffffff00a8e9fec`** |
+| `OSKext::initialize` | `0xfffffff00aa7440c` | **`0xfffffff00a8e0480`** |
+| `OSMetaClassBase::safeMetaCast` | `0xfffffff00aa4ebc0` | **`0xfffffff00a8d4e10`** |
+| `sAllKextLoadIdentifiers` | `0xfffffff00af99ed0` | **`0xfffffff00af67520`** |
+| `__TEXT_EXEC` size | `0x2a44000` | `0x2930000` |
+
+The probes patch `k.macho` (`patch-got.py`/`patch-data.py` produce it from the kc, but every probe
+edits `k.macho` afterwards), so **all probe `SITE`/`GLOBAL`/`CAVE` addresses must be `k.macho`
+addresses**. The per-probe `assert W(SITE)==<expected instruction>` guards are what catch this: all
+six probes' asserts match `k.macho` and all six fail against the kc. If an assert ever fires, check
+which binary you decoded from before changing the constant — the constant is probably right and the
+disassembly you did it from was of the other kernel.
+
+Cross-check that settles it, without needing to trust either address: in `k.macho`,
+`OSKext::recordIdentifierRequest` (`0xa8e9fec`) is `adrp x22, <page>` + `ldr x8, [x22, #1312]` →
+`0xfffffff00af67520`, and inside `OSKext::initialize` (`0xa8e0480`) the instruction at
+`0xfffffff00a8e0664` is `str x19, [x22, #1312]`, storing the `OSSet` that `OSSet::withCapacity(150)`
+just returned (`mov x19, x0` at `0xa8e0638`). Same slot, written once, read by the crashing function —
+that is `sAllKextLoadIdentifiers`, in the binary we build.
+
+**Both binaries are internally consistent; neither address is "wrong".** A register-tracking scan
+(`adrp` target propagated until that register is clobbered, then an `ldr`/`str` with the matching
+offset) gives, for `k.macho` on `0xaf67520`, exactly six references, all credible:
+
+```
+0xfffffff00a8e0640  ldr x0  OSKext::initialize +0x1c0        (the null check before re-creating)
+0xfffffff00a8e0664  str x19 OSKext::initialize +0x1e4        (the single assignment)
+0xfffffff00a8ea00c  ldr x8  OSKext::recordIdentifierRequest +0x20   (the guard -- the crash's source)
+0xfffffff00a8ea030  ldr x0  OSKext::recordIdentifierRequest +0x44
+0xfffffff00a8ea060  ldr x0  OSKext::recordIdentifierRequest +0x74
+0xfffffff00a8f2c94  ldr x27 OSKext::handleRequest +0x1250
+```
+
+and for the kc on `0xaf99ed0`, exactly four, the same functions at the kc's own addresses
+(`OSKext::initialize +0x4e4`, `recordIdentifierRequest +0x24`, etc.); each address has zero
+references in the other binary. So 0xaf67520 is `k.macho`'s slot and 0xaf99ed0 is the kc's slot, and
+a probe must use the one for the binary it edits. The bare-address scans done earlier in this
+bring-up (looking for a raw `<Q` pointer, or for any `adrp`+`offset` pair) were unreliable in both
+directions: they cannot see `adrp`-plus-register-offset addressing, and without register tracking they
+report unrelated instructions that happen to share a page.
+
+**`OSKext::initialize()` does get called in our build, so the global is not simply never set.** In
+`k.macho` the only caller is `_iokit_post_constructor_init +0x28` (`0xfffffff00a93b450`), which calls
+`OSKext::initialize` (`0xa8e0480`) unconditionally as part of IOKit's constructor init. That rules out
+the "the assignment never ran, so the slot is uninitialised" theory outright — and it means the
+`0xdc008005` in the crash is a *later* corrupting write (or a bogus pointer being stored), which is
+the more interesting branch of the fork this section has been narrowing.
 
 **Not yet investigated:**
 - Whether `OSKext::initialize()` (called from `StartIOKit`) actually runs to completion before

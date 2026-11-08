@@ -142,6 +142,17 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: ./unixnu build kernel --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
 
+      # The kernel logs are only uploaded encrypted (the outputs hold the prelinked Apple kernelcache), so a failed build is opaque.
+      # Print just the compiler and linker error lines: diagnostics about the open XNU sources, nothing derived from the kernelcache.
+      - name: Show kernel build errors
+        if: failure()
+        run: |
+          for f in unixnu-core/out/*/*/*/logs/kernel-bootstrap.log unixnu-core/out/*/*/*/logs/kernel.log; do
+            [ -f "$f" ] || continue
+            echo "=== $f: $(wc -l < "$f") lines, error lines:"
+            grep -n -E "error:|fatal error|Error [0-9]+$|\*\*\* |undefined symbol|ld: |Undefined symbols" "$f" | head -80 | cut -c1-420 || true
+          done
+
       - name: Build payload
         if: inputs.build_payload
         working-directory: ./unixnu-core

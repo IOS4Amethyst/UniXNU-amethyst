@@ -34,7 +34,8 @@ with tempfile.TemporaryDirectory(dir=args.output.parent) as directory:
             stream.write(blob)
     mount.mkdir()
     attached = plistlib.loads(subprocess.check_output([
-        'hdiutil', 'attach', '-plist', '-nobrowse', '-mountpoint', str(mount), str(raw)]))
+        'hdiutil', 'attach', '-imagekey', 'diskimage-class=CRawDiskImage',
+        '-plist', '-nobrowse', '-mountpoint', str(mount), str(raw)]))
     volumes = [v for v in attached['system-entities'] if v.get('mount-point') == str(mount)]
     assert len(volumes) == 1
     device = volumes[0]['dev-entry']

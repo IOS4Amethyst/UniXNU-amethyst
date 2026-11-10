@@ -117,7 +117,24 @@ jobs:
 
       - name: Select the device
         working-directory: ./unixnu-core
-        run: ./unixnu defconfig "$DEFCONFIG" --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
+        run: |
+          # Explicit --os reselects package.defconfig on every command. Keep this
+          # disposable CI checkout's mapping aligned with the requested config.
+          python3 - <<'PY'
+          import os, re, tomllib
+          from pathlib import Path
+          device = Path(os.environ['GITHUB_WORKSPACE'])
+          selected = os.environ['DEFCONFIG']
+          if not re.fullmatch(r'[A-Za-z0-9_]+_defconfig', selected) or not (device/'configs'/selected).is_file():
+              raise SystemExit('Invalid or missing requested defconfig')
+          path = device/'board.toml'
+          text = path.read_text()
+          old = tomllib.loads(text)['package']['defconfig'][os.environ['OS_PROFILE']]
+          needle = '"' + os.environ['OS_PROFILE'] + '" = "' + old + '"'
+          assert text.count(needle) == 1
+          path.write_text(text.replace(needle, '"' + os.environ['OS_PROFILE'] + '" = "' + selected + '"'))
+          PY
+          ./unixnu defconfig "$DEFCONFIG" --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
 
       - name: Prepare pinned PMGR kernelcache
         working-directory: ./unixnu-core

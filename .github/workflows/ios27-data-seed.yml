@@ -1,0 +1,77 @@
+name: iOS 27 RAM Data seed
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    runs-on: macos-15-intel
+    environment: ARTIFACT_PASSPHRASE
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: IOS4Amethyst/UniXNU
+          ref: ios27-iphone15
+          path: unixnu-core
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install image tools
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v3.1.741 -R blacktop/ipsw -p 'ipsw_3.1.741_macOS_x86_64.tar.gz' -D "$RUNNER_TEMP/ipsw"
+          tar -xzf "$RUNNER_TEMP/ipsw/ipsw_3.1.741_macOS_x86_64.tar.gz" -C "$RUNNER_TEMP/ipsw"
+          echo "$RUNNER_TEMP/ipsw" >> "$GITHUB_PATH"
+      - name: Prepare RAM-only Data from the selected iPhone OS
+        working-directory: unixnu-core
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, plistlib, subprocess, sys, tomllib
+          from pathlib import Path
+          from types import SimpleNamespace
+          sys.path.insert(0, 'scripts')
+          from unixnu.ipsw import Ipsw
+          sys.path.insert(0, 'drivers/DarwinBoot/Test')
+          import packed_ramdisk
+          profile = tomllib.loads(Path('profiles/os/ios-27.0.1-24A446/profile.toml').read_text())
+          assert profile['ipsw']['product'] == 'iPhone15,4' and profile['ipsw']['build'] == '24A446'
+          source = Ipsw(SimpleNamespace(board=profile, out_root=Path('out')), spec=profile['ipsw']['url'])
+          image = source.disk_image('OS')
+          mount = Path('out/data-source').resolve()
+          mount.mkdir(parents=True)
+          attached = plistlib.loads(subprocess.check_output(['hdiutil', 'attach', '-readonly', '-nobrowse', '-plist', '-mountpoint', str(mount), str(image)]))
+          volumes = [v for v in attached['system-entities'] if v.get('mount-point') == str(mount)]
+          assert len(volumes) == 1
+          output = Path('out/ios27-data-seed')
+          output.mkdir()
+          try:
+              assert hashlib.sha256((mount/'sbin/launchd').read_bytes()).hexdigest() == 'c640246d38aaeb2d2372aff1e5aa0de59dec267f53c0dfc155f7837e717af68b'
+              subprocess.run([sys.executable, 'scripts/make-data-seed.py', str(mount), str(output/'data.dbr'), '--gib', '3', '--build', '24A446'], check=True)
+              report, _ = packed_ramdisk.inspect(output/'data.dbr')
+              report.update(os_build='24A446', product='iPhone15,4', source_launchd_sha256=hashlib.sha256((mount/'sbin/launchd').read_bytes()).hexdigest(), ram_only=True, hardware_tested=False)
+              (output/'seed.json').write_text(json.dumps(report, indent=2)+'\n')
+              print(json.dumps(report, indent=2))
+          finally:
+              subprocess.run(['hdiutil', 'detach', volumes[0]['dev-entry']], check=True)
+          PY
+      - name: Encrypt seed
+        env:
+          ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          test -n "$ARTIFACT_PASSPHRASE"
+          tar -czf - -C unixnu-core/out/ios27-data-seed data.dbr seed.json |
+            openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:ARTIFACT_PASSPHRASE -out ios27-data-seed.tar.gz.enc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios27-data-seed-encrypted
+          path: ios27-data-seed.tar.gz.enc
+          if-no-files-found: error
+          retention-days: 7

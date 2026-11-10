@@ -54,7 +54,8 @@ for offset, blob in extents:
     for at in range(0, len(blob), 4096):
         page = blob[at:at + 4096]
         if bytes(page[32:36]) == b'APSB' and str(uuid.UUID(bytes=bytes(page[0xf0:0x100]))).upper() == expected:
-            superblocks.append((struct.unpack_from('<Q', page, 16)[0], struct.unpack_from('<H', page, 0x3bc)[0]))
+            # apfs_next_doc_id is at 0x3c0; the following uint16_t apfs_role is 0x3c4.
+            superblocks.append((struct.unpack_from('<Q', page, 16)[0], struct.unpack_from('<H', page, 0x3c4)[0]))
 assert superblocks and max(superblocks)[1] == 0x40, superblocks
 assert report['bytes'] == logical
 report.update(volume_uuid=expected, apfs_role='Data', ram_only=True, hardware_tested=False,

@@ -1,0 +1,55 @@
+CONFIG_XNU_BUILD_ARCHIVES=y
+CONFIG_XNU_SOURCE_CORECRYPTO14=y
+# Source crypto: prng_random.c starts the corecrypto provider the kernel itself carries. The
+# prelinked alternative binds the original kernelcache's AES entry points, which also makes
+# prng_random.o drop XNU_SOURCE_CORECRYPTO14 and leaves OSKext's source-provider calls
+# undefined.
+CONFIG_XNU_CRYPTO_BOOTSTRAP="source"
+CONFIG_XNU_ARM_DT_PLATFORM=y
+CONFIG_XNU_ARMCPU=y
+CONFIG_XNU_QCOM_PMIC_RTC=y
+CONFIG_XNU_SOURCE_PTHREAD=y
+CONFIG_XNU_SHENG_PMGR=y
+# Source storage: build-sheng-source-storage.py compiles the UFS driver, the source IOBlockStorageDevice
+# and the owner-policy runtime into one archive that bsd_init starts and links with -force_load. The
+# catalog's standalone NativeUfs personality is skipped by build-arm-driver.py on this path, and the
+# RAM disk comes from the source archive too.
+CONFIG_XNU_SOURCE_STORAGE=y
+CONFIG_XNU_SOURCE_STORAGE_TABLES="userdata"
+CONFIG_XNU_OWNER_ROOT_AUDIT=y
+CONFIG_XNU_OWNER_ROOT_TRUST=y
+# Owner SystemOS cryptex mount, as sheng's iPadOS 27 defconfig: the kernel mounts the SystemOS volume as a union over / before
+# launchd (so /usr/lib/libSystem.B.dylib and the dyld shared cache exist) and publishes the boot manifest; CACHE_STARTUP also
+# selects "no ignition" in the dyld flags, so the Darwin Ignition sequence and the ignition_blob sysctl are not used. The volume
+# UUIDs come from the OS profile ([root] os_volume_uuid -> ROOT_VOLUME_UUID, systemos_volume_uuid -> CACHE_VOLUME_UUID).
+# These owner patches are DEVELOPMENT-only upstream; patches/xnu/amethyst-owner-release.patch makes them build at RELEASE.
+# Paired only with encrypted iPhone Data seed run 42899327883; not the fallback configuration.
+CONFIG_XNU_OWNER_DATA_MOUNT=y
+CONFIG_XNU_OWNER_CACHE_MOUNT=y
+CONFIG_XNU_OWNER_CACHE_STARTUP=y
+CONFIG_XNU_OWNER_BOOT_MANIFEST=y
+CONFIG_XNU_OWNER_UNION_SYSTEMOS=y
+CONFIG_XNU_EXTRA_LD_ARCHIVES="-Wl,-force_load,{tree}/build/sheng-source-storage/libShengSourceStorage.a"
+# The standalone UFS personality would force-load build/sheng-ufs/libShengUfs.a, which the source
+# storage builder fills with a copy of libShengSourceStorage.a: the same objects enter the link twice
+# and every symbol is a duplicate. The source archive owns the driver on this path.
+# CONFIG_XNU_NATIVE_UFS is not set
+# CONFIG_XNU_NATIVE_AES is not set
+CONFIG_XNU_NATIVE_RAM_BLOCK=y
+CONFIG_XNU_SOURCE_MOCKFS=y
+CONFIG_XNU_OWNER_DATA_VOLUME_UUID="072899DE-BA32-4875-B776-41C1929F4002"
+CONFIG_XNU_WATCHDOG_POLICY=y
+CONFIG_XNU_NATIVE_LEGACY_DISPLAY=n
+CONFIG_XNU_NATIVE_ARCH_TIMER=y
+CONFIG_XNU_NATIVE_PAN=y
+CONFIG_XNU_DT_PANIC_REGION=y
+CONFIG_XNU_TRUST_CACHE_RUNTIME=y
+CONFIG_XNU_NATIVE_CS_HASH_CACHE=y
+CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
+CONFIG_XNU_ARMVIRT_PLATFORM=n
+
+# CONFIG_XNU_ZONE_PGZ_ALIGNMENT_PROBE is not set
+# CONFIG_XNU_NATIVE_VIRTIO_BLOCK is not set
+# CONFIG_XNU_VERIFIED_ROOT_PROBE is not set
+# CONFIG_XNU_BOOT_PROGRESS is not set
+# CONFIG_XNU_NATIVE_ADRENO is not set

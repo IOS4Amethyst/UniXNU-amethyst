@@ -1,0 +1,42 @@
+# Ported from UniXNU-sheng: native hardware PAC keys remain active for software JOP identifier zero.
+# Preserve explicit arm_user_jop_disabled policy; sign authenticated pointers with the existing signer.
+--- a/osfmk/vm/vm_dyld_pager.c
++++ b/osfmk/vm/vm_dyld_pager.c
+@@ -585,7 +585,7 @@
+ 	switch (key) {
+ 	case ptrauth_key_asia:
+ 	case ptrauth_key_asda:
+-		if (pager->dyld_a_key == 0 || arm_user_jop_disabled()) {
++		if (arm_user_jop_disabled()) {
+ 			*signedAddr = unsignedAddr;
+ 		} else {
+ 			*signedAddr = (uintptr_t)pmap_sign_user_ptr((void *)unsignedAddr, key, extendedDiscriminator, pager->dyld_a_key);
+--- a/osfmk/vm/vm_shared_region.c
++++ b/osfmk/vm/vm_shared_region.c
+@@ -3335,7 +3335,7 @@
+ 				discriminator = __builtin_ptrauth_blend_discriminator((void*)(((uintptr_t)uservaddr) + pageOffset), discriminator);
+ 			}
+ 
+-			if (jop_key != 0 && si->si_ptrauth && !arm_user_jop_disabled()) {
++			if (si->si_ptrauth && !arm_user_jop_disabled()) {
+ #if CONFIG_SPTM
+ 				pmap_batch_sign_user_ptr(rebaseLocation, (void *)value, key, discriminator, jop_key);
+ #else /* CONFIG_SPTM */
+@@ -3554,7 +3554,7 @@
+ 				discriminator = __builtin_ptrauth_blend_discriminator((void*)(((uintptr_t)uservaddr) + pageOffset), discriminator);
+ 			}
+ 
+-			if (jop_key != 0 && si->si_ptrauth && !arm_user_jop_disabled()) {
++			if (si->si_ptrauth && !arm_user_jop_disabled()) {
+ #if CONFIG_SPTM
+ 				pmap_batch_sign_user_ptr(rebaseLocation, (void *)value, key, discriminator, jop_key);
+ #else /* CONFIG_SPTM */
+@@ -3644,7 +3644,7 @@
+ 					uintptr_t pageOffset = rebaseLocation - page_content;
+ 					discriminator = __builtin_ptrauth_blend_discriminator((void*)(((uintptr_t)uservaddr) + pageOffset), discriminator);
+ 				}
+-				if (jop_key != 0 && si->si_ptrauth && !arm_user_jop_disabled()) {
++				if (si->si_ptrauth && !arm_user_jop_disabled()) {
+ #if CONFIG_SPTM
+ 					pmap_batch_sign_user_ptr(rebaseLocation, (void *)value, key, discriminator, jop_key);
+ #else /* CONFIG_SPTM */

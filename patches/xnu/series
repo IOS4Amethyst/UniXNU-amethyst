@@ -6,3 +6,4 @@ early-text-console.patch
 # build without build-sheng-source-storage.py links unchanged. Copied from UniXNU/UniXNU-sheng.
 source-storage-runtime.patch
 amethyst-owner-release.patch
+native-zero-key-user-signing.patch

@@ -54,6 +54,8 @@ jobs:
           assert len(volumes) == 1
           output = Path('out/ios27-data-seed')
           output.mkdir()
+          # seed-data-grow.py creates its temporary workspace under the core build directory.
+          Path('build').mkdir(exist_ok=True)
           try:
               assert hashlib.sha256((mount/'sbin/launchd').read_bytes()).hexdigest() == 'c640246d38aaeb2d2372aff1e5aa0de59dec267f53c0dfc155f7837e717af68b'
               subprocess.run([sys.executable, 'scripts/make-data-seed.py', str(mount), str(output/'data.dbr'), '--gib', '3', '--build', '24A446'], check=True)

@@ -33,6 +33,7 @@ configuration = [
   "configs/amethyst_defconfig with arch, sm7635 and ipados config fragments; patch_series arch, soc (xnu-12377), os and device patches/xnu/series.",
   "[payload] kernel_args keep sheng-data-persist=0 and sheng-log=0; test images enable the log explicitly.",
   "Branch ios27: board.toml [kernel] config_level = \"RELEASE\"; scripts/policies/ios-27.0.1-24A446/prelink-regression.json bounds the allow-missing prelink; IOS27-BRINGUP.md records the state and gaps.",
+  "2026-11-10 i135: SystemOS union mount reports stage 6/status 0/auth 1/union 1, but AMFI rejects dyld_shared_cache_arm64e. All three shipped trust modules match the iPhone15,4 24A446 IPSW. RELEASE second-static-cache configuration added so module 1 uses the static loader; real doconf check passes. Rebuild blocked in firehose by host clang rejecting four-argument __ptrauth; no image or hardware validation of this configuration change yet.",
 ]
 procedure = [
   "./unixnu defconfig amethyst_defconfig -D ../UniXNU-amethyst",

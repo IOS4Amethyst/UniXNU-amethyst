@@ -43,9 +43,20 @@ with tempfile.TemporaryDirectory(dir=args.output.parent) as directory:
         info = plistlib.loads(subprocess.check_output(['diskutil', 'info', '-plist', device]))
         assert str(uuid.UUID(info['VolumeUUID'])).upper() == expected
         subprocess.run(['diskutil', 'apfs', 'changeVolumeRole', device, 'D'], check=True)
+        # RamBlock's >2 GiB seed path requires persistent backing and refuses
+        # volatile writes. Keep this installation in its supported RAM-only path.
+        container = info['APFSContainerReference']
+        subprocess.run(['diskutil', 'apfs', 'resizeContainer', container, str(2 * 1024**3)], check=True)
         subprocess.run(['sync'], check=True)
     finally:
         subprocess.run(['hdiutil', 'detach', device], check=True)
+    with raw.open('r+b') as stream:
+        header = stream.read(4096)
+        assert header[32:36] == b'NXSB'
+        block_size, blocks = struct.unpack_from('<IQ', header, 36)
+        assert block_size == 4096 and blocks * block_size == 2 * 1024**3
+        stream.truncate(blocks * block_size)
+    logical = 2 * 1024**3
     packed_ramdisk.pack(raw, args.output)
 report, _ = packed_ramdisk.inspect(args.output)
 _, extents = packed_ramdisk.regions(args.output.read_bytes())

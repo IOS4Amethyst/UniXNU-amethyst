@@ -9,8 +9,22 @@ from pathlib import Path
 import subprocess
 import sys
 import re
+import time
 import tomllib
+import urllib.error
 from types import SimpleNamespace
+
+
+def connect_ipsw(factory):
+    """Retry CDN connection setup only; never retry identity/verification errors."""
+    for attempt in range(3):
+        try:
+            return factory()
+        except (urllib.error.URLError, TimeoutError, ConnectionError):
+            if attempt == 2:
+                raise
+            print(f'IPSW connection failed; retry {attempt + 1}/2', flush=True)
+            time.sleep(2 ** attempt)
 
 
 def whole_image_disks(entities, inspect):
@@ -48,7 +62,7 @@ def main():
     output.mkdir(parents=True)
     sys.path.insert(0, str(core / 'scripts'))
     from unixnu.ipsw import Ipsw
-    source = Ipsw(SimpleNamespace(board=profile, out_root=output / 'cache'), spec=profile['ipsw']['url'])
+    source = connect_ipsw(lambda: Ipsw(SimpleNamespace(board=profile, out_root=output / 'cache'), spec=profile['ipsw']['url']))
     for name, component in (('OS', 'OS'), ('SystemOS', 'Cryptex1,SystemOS')):
         dmg = source.disk_image(component)
         attached = plistlib.loads(subprocess.check_output([

@@ -1,0 +1,29 @@
+{
+  "inputs": {
+    "kernelcache_sha256": "fa07057bf34f33af1ec26681ad0c87c13e5aaa548a300740eddb0e92876e5f95",
+    "entry": "com.apple.kernel"
+  },
+  "functions": [
+    {
+      "original": "0xfffffff00ac2534c",
+      "original_size": 16,
+      "original_sha256": "1c23dd0d199a6667df99e692549ba9ca0545d7469b1a667b5cc85ebdc21734a0",
+      "native_symbol": "_thread_tid",
+      "evidence": "NULL-safe uint64 thread_id getter; donor offset0x4e8 versus native0x4e0. Thread allocation writers and thread_identifier_info consumer confirm thread_id, not another thread field. Source thread.c thread_tid. Audited exact D94 and fresh amethyst native from43192925885."
+    }
+  ],
+  "data": [
+    {
+      "original": "0xfffffff00b739538",
+      "native_symbol": "_audio_active",
+      "addend": 0,
+      "evidence": "Sandbox import b982180. Original task resource-exception consumer ac0da38 reads this int conditionally on disable_exc_resource_during_audio before EXC_RESOURCE11. Native named equivalent reads audio_active with same semantics; task.c defines and uses int audio_active. Exact donor consumer230-byte SHA41c8b9e0475ab4ab23c80de1cfaf1f5c52a7eb7e62a13b3e05dd993676fb7baa."
+    },
+    {
+      "original": "0xfffffff00b72fce8",
+      "native_symbol": "_kext_assertions_enable",
+      "addend": 0,
+      "evidence": "IOHID import82c1850 gates assert(data) in OSValueObject getRef; failure metadata82c06ec decodes OSValueObject.h/data and BRK bffc. assert.h gates kext assertions on this global int; native debug.c defines named symbol. Exact donor consumer a0b53bc sizebc SHA f60555b02f8b460ca82ff57a88e5344c20b52ccaf0609c2af295f42710c64abf."
+    }
+  ]
+}

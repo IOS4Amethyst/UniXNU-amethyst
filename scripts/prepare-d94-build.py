@@ -51,6 +51,11 @@ f['functions'] = [x for x in f['functions'] if x['original'] != '0xfffffff00ac11
 bad = {'0xfffffff007ec40c0', '0xfffffff007ec40c8', '0xfffffff007ec4150', '0xfffffff007ef16c8'}
 f['data'] = [x for x in f['data'] if x['original'] not in bad]
 assert (len(f['functions']), len(f['data'])) == (171, 18)
+additions = json.loads(Path(__file__).with_name('d94-reviewed-additions.json').read_text())
+assert additions['inputs'] == f['inputs']
+for kind in ('functions', 'data'):
+    assert not ({x['original'] for x in f[kind]} & {x['original'] for x in additions[kind]})
+    f[kind].extend(additions[kind])
 (a.core / 'kits/XnuPrelink/fixtures/fileset-24A446-d94ap-symbols.json').write_text(json.dumps(f, indent=2) + '\n')
 board = a.device / 'board.toml'
 t = board.read_text()
@@ -72,5 +77,5 @@ series = a.device / 'patches/xnu/series'
 text = series.read_text()
 assert 'native-kernel-stack-shift.patch' not in text
 series.write_text(text.rstrip() + '\nnative-kernel-stack-shift.patch\n')
-print('PASS: D94 kernel-only checkout;171function/18data anchors; SM7635/RAM-only retained')
+print(f'PASS: D94 kernel-only checkout;{len(f["functions"])}function/{len(f["data"])}data anchors; SM7635/RAM-only retained')
 print('NOT PAYLOAD READY: existing compiled root policies are iPhone15,4; donor signing remains required')

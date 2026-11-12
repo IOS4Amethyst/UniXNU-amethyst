@@ -34,5 +34,14 @@ assert 'attr_size ==' not in patch
 assert '+\treturn task->unixnu_sanitizer_config;' in patch
 assert '+\t\treturn ENOTSUP;' in patch
 assert '+_unixnu_task_get_sanitizer_config' in patch
+header = patch.split('--- a/osfmk/kern/task.h\n', 1)[1].split('--- a/osfmk/kern/task.c\n', 1)[0]
+api = header.split(' #ifdef KERNEL_PRIVATE\n', 1)[1]
+assert '+#define UNIXNU_D94_DARWIN26_SPAWN_ABI 1' in api
+assert '+extern uint8_t unixnu_task_get_sanitizer_config(task_t task);' in api
+assert '+extern void unixnu_task_set_sanitizer_config(task_t task, uint8_t value);' in api
+exec_patch = patch.split('--- a/bsd/kern/kern_exec.c\n', 1)[1].split('--- a/config/Private.exports\n', 1)[0]
+assert '+\tunixnu_task_set_sanitizer_config(new_task, sanitizer_config);' in exec_patch
+assert 'new_task->unixnu_sanitizer_config' not in exec_patch
 print('PASS: 65539 security words,1024 sanitizer cases,bit8 transport and source guards')
+print('PASS: BSD-visible API declarations and no opaque task dereference in exec')
 print('NOT TESTED: kernel compilation,copyin faults,task layout,LTO retention,hardware')

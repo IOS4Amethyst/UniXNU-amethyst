@@ -57,9 +57,7 @@ env:
 
 jobs:
   build:
-    # D94 cross-compiles arm64e with the same Xcode26.6 on Intel while the
-    # hosted arm64 pool repeatedly fails to acquire runners. Default unchanged.
-    runs-on: ${{ inputs.donor == 'd94ap' && 'macos-26-intel' || 'macos-26' }}
+    runs-on: macos-26
     # ARTIFACT_PASSPHRASE is a secret of the environment of the same name (as gpu-addon.yml): the outputs hold the prelinked
     # Apple kernelcache, so they are only uploaded encrypted. This repository is public.
     environment: ARTIFACT_PASSPHRASE

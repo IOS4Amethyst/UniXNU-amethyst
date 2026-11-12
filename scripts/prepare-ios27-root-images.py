@@ -31,13 +31,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--core', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--profile', default='ios-27.0.1-24A446')
     args = parser.parse_args()
     if platform.system() != 'Darwin':
         parser.error('AEA decryption and read-only image attachment require macOS')
     core = args.core.resolve()
-    profile = tomllib.loads((core / 'profiles/os/ios-27.0.1-24A446/profile.toml').read_text())
-    if (profile['ipsw']['product'], profile['ipsw']['build']) != ('iPhone15,4', '24A446'):
-        parser.error('Require the iPhone15,4 24A446 profile')
+    if args.profile not in ('ios-27.0.1-24A446', 'ios-27.0.1-24A446-d94ap'):
+        parser.error('Unsupported root-policy profile')
+    profile = tomllib.loads((core / 'profiles/os' / args.profile / 'profile.toml').read_text())
+    expected = 'iPhone17,2' if args.profile.endswith('-d94ap') else 'iPhone15,4'
+    if (profile['ipsw']['product'], profile['ipsw']['build']) != (expected, '24A446'):
+        parser.error('Root-policy product/build mismatch')
     output = args.output.resolve()
     if output.exists():
         parser.error('Output already exists; choose a new directory')

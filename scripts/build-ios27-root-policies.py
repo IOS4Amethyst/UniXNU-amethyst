@@ -21,8 +21,8 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     profile = tomllib.loads(args.profile.read_text())
-    if (profile['ipsw']['product'], profile['ipsw']['build']) != ('iPhone15,4', '24A446'):
-        parser.error('Require the iPhone15,4 24A446 profile')
+    if profile['ipsw']['product'] not in ('iPhone15,4', 'iPhone17,2') or profile['ipsw']['build'] != '24A446':
+        parser.error('Require a qualified iPhone15,4 or iPhone17,2 24A446 profile')
     # Validate both inputs before creating any policies; never overwrite a prior bundle.
     if args.output.exists():
         parser.error('Output already exists; choose a new directory')

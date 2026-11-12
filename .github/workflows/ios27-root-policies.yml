@@ -2,6 +2,12 @@ name: iOS 27 iPhone root policies
 
 on:
   workflow_dispatch:
+    inputs:
+      donor:
+        description: Root-policy donor
+        type: choice
+        options: ["iphone15,4", d94ap]
+        default: "iphone15,4"
   push:
     branches: [ios27]
     paths:
@@ -16,6 +22,8 @@ jobs:
   policies:
     runs-on: macos-15-intel
     timeout-minutes: 180
+    env:
+      OS_PROFILE: ${{ inputs.donor == 'd94ap' && 'ios-27.0.1-24A446-d94ap' || 'ios-27.0.1-24A446' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -31,6 +39,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - name: Prepare pinned D94 profile
+        if: inputs.donor == 'd94ap'
+        run: |
+          git -C unixnu-core submodule update --init --recursive kits/XnuPrelink
+          python3 scripts/prepare-d94-build.py --core unixnu-core --device .
       - name: Provision owner signing key
         env:
           OWNER_KEY: ${{ secrets.IOS27_ROOT_OWNER_KEY }}
@@ -53,18 +66,18 @@ jobs:
             verified-root/src/verified_root.c verified-root/tests/openssl_provider.c \
             -L "$(brew --prefix openssl@3)/lib" -lcrypto -o "$RUNNER_TEMP/verified-root.dylib"
       - name: Prepare exact raw images
-        run: python3 scripts/prepare-ios27-root-images.py --core unixnu-core --output "$RUNNER_TEMP/ios27-images"
+        run: python3 scripts/prepare-ios27-root-images.py --core unixnu-core --profile "$OS_PROFILE" --output "$RUNNER_TEMP/ios27-images"
       - name: Sign and verify every image block
         run: |
           python3 scripts/build-ios27-root-policies.py \
-            --profile unixnu-core/profiles/os/ios-27.0.1-24A446/profile.toml \
+            --profile "unixnu-core/profiles/os/$OS_PROFILE/profile.toml" \
             --verified-root verified-root --library "$RUNNER_TEMP/verified-root.dylib" \
             --private-key "$RUNNER_TEMP/ios27-owner/owner.pem" --public-key "$RUNNER_TEMP/ios27-owner/public.pem" \
             --os-image "$RUNNER_TEMP/ios27-images/OS.raw" --systemos-image "$RUNNER_TEMP/ios27-images/SystemOS.raw" \
             --output "$RUNNER_TEMP/ios27-policies"
       - uses: actions/upload-artifact@v4
         with:
-          name: ios27-iphone15-root-policies
+          name: ios27-${{ inputs.donor == 'd94ap' && 'd94ap' || 'iphone15' }}-root-policies
           path: |
             ${{ runner.temp }}/ios27-policies/*/manifest.bin
             ${{ runner.temp }}/ios27-policies/*/manifest.header.bin

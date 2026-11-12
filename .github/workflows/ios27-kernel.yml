@@ -13,6 +13,10 @@ on:
         type: choice
         options: ["iphone15,4", d94ap]
         default: "iphone15,4"
+      donor_policy_run:
+        description: Successful D94 root-policy run ID (required for D94)
+        required: false
+        default: ""
       defconfig:
         description: Defconfig name
         required: true
@@ -130,6 +134,24 @@ jobs:
           test "$PAYLOAD" != true && test "$FIRMWARE" != true && test "$USERDATA" != true
           git -C unixnu-core submodule update --init --recursive kits/XnuPrelink
           python3 scripts/prepare-d94-build.py --core unixnu-core --device .
+
+      - name: Load verified D94 root policies
+        if: inputs.donor == 'd94ap'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          POLICY_RUN: ${{ inputs.donor_policy_run }}
+        run: |
+          [[ "$POLICY_RUN" =~ ^[0-9]+$ ]] || { echo 'D94 requires a successful root-policy run ID'; exit 1; }
+          test "$(gh run view "$POLICY_RUN" --json conclusion --jq .conclusion)" = success
+          gh run download "$POLICY_RUN" -n ios27-d94ap-root-policies -D scripts/policies/ios-27.0.1-24A446-d94ap
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('board.toml')
+          text = p.read_text()
+          old = '--policy-dir scripts/policies/ios-27.0.1-24A446"'
+          assert text.count(old) == 1
+          p.write_text(text.replace(old, '--policy-dir scripts/policies/ios-27.0.1-24A446-d94ap"'))
+          PY
 
       - name: Select the device
         working-directory: ./unixnu-core

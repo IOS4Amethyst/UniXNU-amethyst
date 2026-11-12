@@ -1,0 +1,36 @@
+diff --git a/pexpert/arm/hwtrace/hwtrace.c b/pexpert/arm/hwtrace/hwtrace.c
+--- a/pexpert/arm/hwtrace/hwtrace.c
++++ b/pexpert/arm/hwtrace/hwtrace.c
+@@ -475,5 +475,6 @@
+ #if DEVELOPMENT || DEBUG
+-void (*PE_arm_debug_panic_hook)(const char *str) = PE_arm_panic_hook;
++void (* __ptrauth(ptrauth_key_function_pointer, 0, 0x2abe) PE_arm_debug_panic_hook)(const char *str) = PE_arm_panic_hook;
+ #else
+-void(*const PE_arm_debug_panic_hook)(const char *str) = NULL;
++/* Retained platform drivers CAS-install and chain this callback in RELEASE. */
++void (* __ptrauth(ptrauth_key_function_pointer, 0, 0x2abe) PE_arm_debug_panic_hook)(const char *str) = NULL;
+ #endif  // DEVELOPMENT || DEBUG
+diff --git a/pexpert/pexpert/pexpert.h b/pexpert/pexpert/pexpert.h
+--- a/pexpert/pexpert/pexpert.h
++++ b/pexpert/pexpert/pexpert.h
+@@ -29,7 +29,8 @@
+ #define _PEXPERT_PEXPERT_H_
+ 
+ #include <sys/cdefs.h>
++#include <ptrauth.h>
+ 
+ #ifdef KERNEL
+ #include <IOKit/IOInterrupts.h>
+ #include <kern/kern_types.h>
+@@ -463,10 +464,8 @@
+ 
+ #if DEVELOPMENT || DEBUG
+ extern void PE_arm_debug_enable_trace(bool should_kprintf);
+-extern void (*PE_arm_debug_panic_hook)(const char *str);
+-#else
+-extern void(*const PE_arm_debug_panic_hook)(const char *str);
+ #endif
++extern void (* __ptrauth(ptrauth_key_function_pointer, 0, 0x2abe) PE_arm_debug_panic_hook)(const char *str);
+ #endif
+ 
+ 

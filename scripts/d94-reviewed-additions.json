@@ -5,6 +5,13 @@
   },
   "functions": [
     {
+      "original": "0xfffffff00ac11bd8",
+      "original_size": 12,
+      "original_sha256": "3432f29aac3e853b6e0d7137fc4847657d9090733766ec83091d1194104842e8",
+      "native_symbol": "_unixnu_task_get_sanitizer_config",
+      "evidence": "Task sanitizer bitmask, NOT task_is_privileged: donor getter task+0x6a8, native private appended byte+0x688. Fresh ARM43317687721 native and LTO retain byte getter, task zero/fork inheritance, exec entitlement ASAN2/TSAN4 recomputation, spawn mask0xe and sanitizer_config apple-string transport. D94-only bounded spawn ABI rejects unsupported nonzero security requests with ENOTSUP, invalid bits EINVAL. Both rebuilt getter bodies hash4aa9bc9c452fcb21d946ccee573859c2524266f284c2be5bef34fc404ad7016d. No hardware qualification."
+    },
+    {
       "original": "0xfffffff00ac2534c",
       "original_size": 16,
       "original_sha256": "1c23dd0d199a6667df99e692549ba9ca0545d7469b1a667b5cc85ebdc21734a0",
@@ -13,6 +20,12 @@
     }
   ],
   "data": [
+    {
+      "original": "0xfffffff007044478",
+      "native_symbol": "_PE_arm_debug_panic_hook",
+      "addend": 0,
+      "evidence": "Retained Watchdog/ProcessorTrace CAS-install and chain callbacks signed IA,no address diversity,discriminator0x2abe. Fresh ARM43317687721 source adaptation provides writable NULL __DATA,__common slot in native/LTO, native panic reader and LTO inlined panic paths retain runtime load/NULL guard/authenticated0x2abe call. RELEASE development tracing remains disabled. Must not bind unmodified RELEASE constNULL storage. No runtime qualification."
+    },
     {
       "original": "0xfffffff00b739538",
       "native_symbol": "_audio_active",

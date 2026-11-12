@@ -11,6 +11,8 @@ p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--core', type=Path, required=True)
 p.add_argument('--device', type=Path, required=True)
 a = p.parse_args()
+if not (a.core / 'kits/XnuPrelink/fileset_match.py').is_file():
+    raise SystemExit('Initialize the pinned kits/XnuPrelink submodule before preparing the donor fixture')
 name = 'ios-27.0.1-24A446-d94ap'
 url = 'https://raw.githubusercontent.com/MoyuZJ912/UniXNU-aston/'
 patch = urllib.request.urlopen(url + '282c1d672373a11ef69810e36723fc6ae807f004/unixnu-patches/0001-ios-27.0.1-24A446-iphone17-2.patch', timeout=60).read().decode()

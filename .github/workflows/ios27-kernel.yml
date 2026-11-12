@@ -128,6 +128,7 @@ jobs:
           USERDATA: ${{ inputs.build_userdata }}
         run: |
           test "$PAYLOAD" != true && test "$FIRMWARE" != true && test "$USERDATA" != true
+          git -C unixnu-core submodule update --init --recursive kits/XnuPrelink
           python3 scripts/prepare-d94-build.py --core unixnu-core --device .
 
       - name: Select the device

@@ -57,7 +57,9 @@ env:
 
 jobs:
   build:
-    runs-on: macos-26
+    # D94 cross-compiles arm64e with the same Xcode26.6 on Intel while the
+    # hosted arm64 pool repeatedly fails to acquire runners. Default unchanged.
+    runs-on: ${{ inputs.donor == 'd94ap' && 'macos-26-intel' || 'macos-26' }}
     # ARTIFACT_PASSPHRASE is a secret of the environment of the same name (as gpu-addon.yml): the outputs hold the prelinked
     # Apple kernelcache, so they are only uploaded encrypted. This repository is public.
     environment: ARTIFACT_PASSPHRASE
@@ -124,6 +126,15 @@ jobs:
             brew install unifdef
             echo "$(brew --prefix unifdef)/bin" >> "$GITHUB_PATH"
           fi
+
+      - name: Verify D94 cross-compilation host
+        if: inputs.donor == 'd94ap'
+        run: |
+          uname -m
+          xcodebuild -version
+          xcrun --sdk iphoneos clang --version
+          printf 'int d94_target_probe;\n' | xcrun --sdk iphoneos clang -target arm64e-apple-ios27.0 -x c -c -o "$RUNNER_TEMP/d94-target.o" -
+          file "$RUNNER_TEMP/d94-target.o"
 
       - name: Prepare isolated D94 donor audit
         if: inputs.donor == 'd94ap'

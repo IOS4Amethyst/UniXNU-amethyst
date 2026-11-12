@@ -1,0 +1,166 @@
+--- a/osfmk/kern/task.h
++++ b/osfmk/kern/task.h
+@@ -679,7 +679,13 @@
+ 	/* Guard objects telemetry. */
+ 	_Atomic vm_map_size_t large_allocation_size;
+ #endif
++	/* ponytail: D94-only cached opaque byte; no native field offsets move. */
++	uint8_t unixnu_sanitizer_config;
+ };
++
++/* Explicit build-time ABI selection, installed only by D94 preparation. */
++#define UNIXNU_D94_DARWIN26_SPAWN_ABI 1
++extern uint8_t unixnu_task_get_sanitizer_config(task_t task);
+ 
+ ZONE_DECLARE_ID(ZONE_ID_PROC_TASK, void *);
+ extern zone_t proc_task_zone;
+--- a/osfmk/kern/task.c
++++ b/osfmk/kern/task.c
+@@ -1480,6 +1480,7 @@
+ 	new_task->t_flags = t_flags;
+ 	task_ro_data.t_flags_ro = t_flags_ro;
+ 	new_task->t_procflags = t_procflags;
++	new_task->unixnu_sanitizer_config = 0;
+ 	new_task->t_returnwaitflags = t_returnwaitflags;
+ 	new_task->returnwait_inheritor = current_thread();
+ 	new_task->importance = 0;
+@@ -1504,6 +1505,8 @@
+ #if XNU_TARGET_OS_OSX
+ 		task_ro_data.t_flags_ro |= parent_t_flags_ro & TFRO_MACH_HARDENING_OPT_OUT;
+ #endif /* XNU_TARGET_OS_OSX */
++
++		new_task->unixnu_sanitizer_config = parent_task->unixnu_sanitizer_config;
+ 
+ 		/* task_security_config options are always inherited on fork */
+ 		new_task->security_config = parent_task->security_config;
+@@ -10881,3 +10884,11 @@
+ 
+ 	task_unlock(task);
+ }
++
++/* Keep a standalone byte-returning entry point through both LTO links. */
++__attribute__((used, noinline))
++uint8_t
++unixnu_task_get_sanitizer_config(task_t task)
++{
++	return task->unixnu_sanitizer_config;
++}
+--- a/bsd/sys/imgact.h
++++ b/bsd/sys/imgact.h
+@@ -133,6 +133,7 @@
+ 	uint64_t ip_dyld_fsobjid;
+ 	uint64_t ip_inherited_jop_pid;
+ 	unsigned int    ip_flags2;              /* extended image flags */
++	uint8_t         ip_unixnu_spawn_sanitizer_config; /* D94 decoded spawn byte */
+ };
+ 
+ /*
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -1853,6 +1853,18 @@
+ 		return retval;
+ 	}
+ 
++	/* Recompute, never accumulate inherited state across exec. */
++	uint8_t sanitizer_config = imgp->ip_px_sa != NULL ?
++	    imgp->ip_unixnu_spawn_sanitizer_config : 0;
++	if (IOVnodeHasEntitlement(imgp->ip_vp, (int64_t)imgp->ip_arch_offset,
++	    "com.apple.security.developer-tools.address-sanitizer")) {
++		sanitizer_config |= 0x02;
++	}
++	if (IOVnodeHasEntitlement(imgp->ip_vp, (int64_t)imgp->ip_arch_offset,
++	    "com.apple.security.developer-tools.thread-sanitizer")) {
++		sanitizer_config |= 0x04;
++	}
++	new_task->unixnu_sanitizer_config = sanitizer_config;
+ 	return retval;
+ }
+ 
+@@ -4332,6 +4344,44 @@
+  *		Handle posix_spawnattr_t
+  *		Handle posix_spawn_file_actions_t
+  */
++#if UNIXNU_D94_DARWIN26_SPAWN_ABI != 1
++#error This decoder requires the explicitly selected D94 Darwin26 spawn ABI
++#endif
++_Static_assert(offsetof(struct _posix_spawnattr, psa_sec_flags) == 0xaa, "native security layout changed");
++_Static_assert(offsetof(struct _posix_spawnattr, psa_crash_count) == 0xac, "native scalar layout changed");
++_Static_assert(offsetof(struct _posix_spawnattr, psa_ports) == 0xc0, "native prefix changed");
++_Static_assert(offsetof(struct _posix_spawnattr, psa_conclave_mem_limit) == 0xbc, "native scalar tail changed");
++
++static int
++unixnu_d94_spawnattr(user_addr_t attrp, struct _posix_spawnattr *psa, uint8_t *sanitizer)
++{
++	uint8_t raw[0xc8];
++	uint32_t security;
++	int error = copyin(attrp, raw, sizeof(raw));
++	if (error != 0) {
++		return error;
++	}
++	memcpy(&security, raw + 0xac, sizeof(security));
++	if (security & ~0x00001f01U) {
++		return EINVAL;
++	}
++	/* ponytail: reject all valid security requests until effects/auth are ported.
++	 * Darwin26 bits are NOT the same enum as native uint16_t psa_sec_flags. */
++	if (security != 0) {
++		return ENOTSUP;
++	}
++	bzero(psa, offsetof(struct _posix_spawnattr, psa_ports));
++	/* Copy through launch_type, not its padding or native security field. */
++	memcpy(psa, raw, offsetof(struct _posix_spawnattr, psa_launch_type) + sizeof(psa->psa_launch_type));
++	memcpy(&psa->psa_crash_count, raw + 0xb4, sizeof(psa->psa_crash_count));
++	memcpy(&psa->psa_throttle_timeout, raw + 0xb8, sizeof(psa->psa_throttle_timeout));
++	memcpy(&psa->psa_kqworkloop_soft_limit, raw + 0xbc, sizeof(psa->psa_kqworkloop_soft_limit));
++	memcpy(&psa->psa_kqworkloop_hard_limit, raw + 0xc0, sizeof(psa->psa_kqworkloop_hard_limit));
++	memcpy(&psa->psa_conclave_mem_limit, raw + 0xc4, sizeof(psa->psa_conclave_mem_limit));
++	*sanitizer = raw[0xb0] & 0x0e;
++	return 0;
++}
++
+ int
+ posix_spawn(proc_t ap, struct posix_spawn_args *uap, int32_t *retval)
+ {
+@@ -4358,7 +4408,6 @@
+ 	os_reason_t exec_failure_reason = NULL;
+ 
+ 	struct exec_port_actions port_actions = { };
+-	vm_size_t px_sa_offset = offsetof(struct _posix_spawnattr, psa_ports);
+ 	task_t old_task = current_task();
+ 	task_t new_task = NULL;
+ 	boolean_t should_release_proc_ref = FALSE;
+@@ -4452,7 +4501,8 @@
+ 			 * This is a bit fragile: <rdar://problem/16427422>
+ 			 */
+ 
+-			if ((error = copyin(px_args.attrp, &px_sa, px_sa_offset)) != 0) {
++			if ((error = unixnu_d94_spawnattr(px_args.attrp, &px_sa,
++			    &imgp->ip_unixnu_spawn_sanitizer_config)) != 0) {
+ 				goto bad;
+ 			}
+ 
+@@ -7369,6 +7419,17 @@
+ 		error = exec_add_user_string(imgp, CAST_USER_ADDR_T(hardened_runtime), UIO_SYSSPACE, FALSE);
+ 		if (error) {
+ 			printf("Failed to add hardened runtime flag with error %d\n", error);
++			goto bad;
++		}
++		imgp->ip_applec++;
++	}
++	uint8_t sanitizer_config = unixnu_task_get_sanitizer_config(task);
++	if (sanitizer_config != 0) {
++		char sanitizer_string[sizeof("sanitizer_config=0xff")];
++		snprintf(sanitizer_string, sizeof(sanitizer_string),
++		    "sanitizer_config=0x%x", (unsigned int)sanitizer_config);
++		error = exec_add_user_string(imgp, CAST_USER_ADDR_T(sanitizer_string), UIO_SYSSPACE, FALSE);
++		if (error) {
+ 			goto bad;
+ 		}
+ 		imgp->ip_applec++;
+--- a/config/Private.exports
++++ b/config/Private.exports
+@@ -1471,3 +1471,4 @@
+ 
+ __Z34IOInterruptDispatchSourceInterruptP8OSObjectPvP9IOServicei
+ __ZN18IOMemoryDescriptor9withVNodeEP5vnodeyyj
++_unixnu_task_get_sanitizer_config

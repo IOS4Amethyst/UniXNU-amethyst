@@ -17,6 +17,62 @@
       "original_sha256": "1c23dd0d199a6667df99e692549ba9ca0545d7469b1a667b5cc85ebdc21734a0",
       "native_symbol": "_thread_tid",
       "evidence": "NULL-safe uint64 thread_id getter; donor offset0x4e8 versus native0x4e0. Thread allocation writers and thread_identifier_info consumer confirm thread_id, not another thread field. Source thread.c thread_tid. Audited exact D94 and fresh amethyst native from43192925885."
+    },
+    {
+      "original": "0xfffffff00ad3d814",
+      "original_size": 16,
+      "original_sha256": "d2270f6d035f4193bfbf3470d3d5d6ac58af5ce52256fbc168adf60dc8941e69",
+      "native_symbol": "_ml_get_wake_timebase",
+      "evidence": "Returns original wake_abstime at 0xfffffff00b7914b0; writer 0xfffffff00ad3c61c belongs to reviewed ml_arm_sleep at 0xfffffff00ad3c5b8. Reference ml_arm_sleep writes its symbolized _wake_abstime at 0xfffffff00735dc4c. ARMPlatform caller 0xfffffff00860b8ac stores result at this+0x250. Source osfmk/arm/cpu_common.c:901-903; prior 23F84 fixture independently records this getter identity. Native/reference getter body hashes and layouts in remaining-platform-donors.json."
+    },
+    {
+      "original": "0xfffffff00abff7fc",
+      "original_size": 748,
+      "original_sha256": "eb5736547143044e94793c95a3300f7da1c728f153d22bd45793c8b4894bb207",
+      "native_symbol": "_sched_enable_acc_rail",
+      "evidence": "Converts die/cluster arguments into topology cpu_mask; acquires cluster_powerdown_lock and sched_available_cores_lock; ORs mask into pcs_required_online_pmgr (+0x28) at original +0x13c/+0x140, then performs synchronous power update and releases locks. Native +0xbc/+0xc0 has same OR/store. Paired PMGR caller 0xfffffff00929cdf8 selects enable when command byte +2 bit0 is set, arguments from bytes +0/+1. Source osfmk/kern/sched_prim.c:7885-7955; donor hashes/layouts in remaining-platform-donors.json."
+    },
+    {
+      "original": "0xfffffff00abffae8",
+      "original_size": 856,
+      "original_sha256": "e0c3e9d9159c423c90b8ac5bb716871673052223f06a40dd22886f14d8d71940",
+      "native_symbol": "_sched_disable_acc_rail",
+      "evidence": "Same die/cluster mask lookup as sched_enable_acc_rail; complements mask and clears pcs_required_online_pmgr (+0x28), original +0xdc/+0xe0 AND/store; signals async powered-core update if necessary. PMGR caller 0xfffffff00929ce00 selects disable when command byte +2 bit0 is clear. Source osfmk/kern/sched_prim.c:7964-7993; donor hashes/layouts in remaining-platform-donors.json."
+    },
+    {
+      "original": "0xfffffff00add41bc",
+      "original_size": 196,
+      "original_sha256": "f9a4383a1317f37a0f9640be1d3a5850b8dea921b496b2f659f07d6e9278c009",
+      "native_symbol": "_vnode_clearmountedon",
+      "evidence": "Under vnode spin lock, dereferences v_specinfo (original vnode+0x78), clears SI_MOUNTEDON bit0 at specinfo+0x10 (original +0x68/+0x6c/+0x70), and unlocks; native symbol body performs corresponding AND -2/store and vnode lock/unlock. Neighbor vnode_setmountedon already reviewed; direct original caller 0xfffffff00adb18f0 and APFS caller 0xfffffff00a971250 via thunk 0xfffffff00aa7d664. Source bsd/vfs/kpi_vfs.c:2440-2444 and bsd/vfs/vfs_syscalls.c:3158; donor hashes/layouts in remaining-platform-donors.json."
+    },
+    {
+      "original": "0xfffffff00ad449d0",
+      "original_size": 72,
+      "original_sha256": "70c01cf568a210d3abd5353036159dfac4da5df7290c552ff007139d1bec104c",
+      "native_symbol": "_ml_stack_remaining",
+      "evidence": "Returns address-of-local minus stack bottom, choosing interrupt-stack bottom if local lies within intstack bounds, otherwise current_thread kernel_stack; original additionally accounts for SPTM kredzonestack, absent in native configuration. IOCrypto caller 0xfffffff009fab5a4 negates return and adds address-of-local to recover stack bottom. Source osfmk/arm/machine_routines_common.c:1206-1226; prior 23F84 fixture independently records identity. Donor hashes/layouts in remaining-platform-donors.json."
+    },
+    {
+      "original": "0xfffffff00ac26044",
+      "original_size": 84,
+      "original_sha256": "15e9c81465efac6623f23e50ec9ccfe028aa75f4b8d009b2ad9962c2639727a8",
+      "native_symbol": "_thread_set_allocation_name",
+      "evidence": "Reviewed against fresh native 636f6799 at 0xfffffff00725dc6c and reference 1a2db227 at 0xfffffff00725fbb4. One pointer input/return; obtains current thread kernel state, authenticates it with discriminator 0x6d42, reads allocation_name at +0xc0, stores input iff input is NULL or old name is NULL, returns old name. Exact source semantics osfmk/kern/thread.c:3923-3933. Original thread kernel-state offset +0x150 versus native +0x148 is handled inside the respective implementations, not exposed in ABI. Independent IOGPU caller 0xfffffff00a025a88 saves returned old name and restores it through same thunk at 0xfffffff00a025ac0 around allocation work. Chained slot 0xfffffff00829caa8 and thunk 0xfffffff00a062210 resolve to original. No security policy substitution."
+    },
+    {
+      "original": "0xfffffff00aca1d30",
+      "original_size": 32,
+      "original_sha256": "5fb51dd740f43c93bdf2a80fe754b033423025c869862799b89c4b5b92f72325",
+      "native_symbol": "_vm_map_page_size",
+      "evidence": "Reviewed fresh native 636f6799 at 0xfffffff0072c5258 and reference 1a2db227 at 0xfffffff0072d5c08. ABI int vm_map_page_size(vm_map_t): input opaque native map pointer, return 32-bit 1 << map page shift; NULL returns 1 << native PAGE_SHIFT. Original reads byte +0x2c, defaults shift 14; native/reference read halfword +0x44 and global page shift. Internal layout/default page size differences are expected platform configuration, not an interchangeable raw-body claim. Source osfmk/vm/vm_map.c implementation and vm_map.h declaration independently establish identity. IOGPU import slot 0xfffffff00829cae8/thunk 0xfffffff00a062290 and pthread slot 0xfffffff007eb0618 resolve to original. Requires normal full-prelink ownership: map must be a native XNU vm_map, not a retained foreign-layout map."
+    },
+    {
+      "original": "0xfffffff00b4182c8",
+      "original_size": 16,
+      "original_sha256": "270e3f8691f72932d5b54c15ba75782fa0a900b4afe6ad4133552961da730434",
+      "native_symbol": "_kernel_image4_storage_data",
+      "evidence": "Original TXM implementation calls cold body 0xfffffff00b4182d8, which panics with 'unsupported AppleImage4 interface @%s:%d', file txm.c, line 1649. Prepared source bsd/kern/code_signing/txm.c:1630-1639 uniquely identifies txm_image4_storage_data(size_t *), public wrapper in bsd/kern/kern_codesigning.c:1494. Independent AppleImage4 caller 0xfffffff008fd648c passes pointer to zeroed size_t local, reads resulting allocation size, checks >0x38f and returned pointer alignment, establishing size-out/pointer-return ABI; import slot 0xfffffff008074e80/thunk 0xfffffff008ff9b88. Fresh native 636f6799 wrapper at 0xfffffff00766a224 tails to xnu_image4_storage_data 0xfffffff00766a614, returns real zero-initialized 0x1400-byte backing storage and writes actual size; fresh reference 1a2db227 wrapper at 0xfffffff0076e2258 inlines same real storage operation. This is platform storage provision, not signature verification or a forced security grant."
     }
   ],
   "data": [

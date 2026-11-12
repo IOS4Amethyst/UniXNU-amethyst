@@ -48,6 +48,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 env:
   HOMEBREW_NO_AUTO_UPDATE: 1
@@ -197,6 +198,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: ./unixnu build kernel --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
+
+      - name: Summarize prelink audit
+        if: always() && inputs.donor == 'd94ap'
+        run: |
+          python3 - <<'PY'
+          import glob, hashlib, json, os
+          from pathlib import Path
+          records = glob.glob('unixnu-core/out/amethyst/ios-27.0.1-24A446-d94ap/*/kernel/kernel.json')
+          lines = ['## D94 offline prelink audit (not hardware qualification)']
+          for name in records:
+              p = Path(name)
+              r = json.loads(p.read_text())
+              lines.append('candidate_written=' + str(r.get('candidate_written')))
+              for key in ('missing', 'stubbed'):
+                  owners = r.get(key, {})
+                  lines.append(f'{key}: {sum(len(v) for v in owners.values())} distinct owner/targets, {sum(sum(v.values()) for v in owners.values())} references')
+                  for owner in ('com.apple.security.sandbox', 'com.apple.driver.AppleMobileFileIntegrity'):
+                      lines.append(f'{key} {owner}: ' + json.dumps(owners.get(owner, {}), sort_keys=True))
+              kernel = p.with_suffix('.macho')
+              if kernel.is_file():
+                  lines.append('kernel_sha256=' + hashlib.sha256(kernel.read_bytes()).hexdigest())
+          if not records:
+              lines.append('No prelink record produced; inspect preceding build failure.')
+          text = '\n'.join(lines) + '\n'
+          print(text)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write(text)
+          PY
 
       # The kernel logs are only uploaded encrypted (the outputs hold the prelinked Apple kernelcache), so a failed build is opaque.
       # Print just the compiler and linker error lines: diagnostics about the open XNU sources, nothing derived from the kernelcache.

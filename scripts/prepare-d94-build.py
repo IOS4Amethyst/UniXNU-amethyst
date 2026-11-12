@@ -52,6 +52,9 @@ t = board.read_text()
 needle = '"ios-27.0.1-24A446" = "amethyst_defconfig"'
 assert t.count(needle) == 1
 t = t.replace(needle, needle + f'\n"{name}" = "amethyst_defconfig"')
+needle = '"os:configs/ipados.config"'
+assert t.count(needle) == 1
+t = t.replace(needle, '"os:configs/ios.config"')
 needle = '  "component:AppleKeyStoreState",'
 assert t.count(needle) == 1
 t = t.replace(needle, needle + '\n  "build-fileset-release-reference.py --tree . --lto",')

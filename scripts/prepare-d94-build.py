@@ -29,6 +29,11 @@ for section in patch.split('diff --git ')[1:]:
     text = '\n'.join(line[1:] for line in lines if line.startswith('+') and not line.startswith('+++')) + '\n'
     if relative == 'profile.toml':
         text = text.replace('"name" = "ios-27.0.1-24A446"', f'"name" = "{name}"')
+    if relative == 'configs/ios.config':
+        # Aston sets this in its device defconfig; amethyst's old OS fragment
+        # supplied it. Fileset relocation requires chained and split-seg records.
+        assert 'CONFIG_XNU_KERNEL_CHAINED_FIXUPS' not in text
+        text += 'CONFIG_XNU_KERNEL_CHAINED_FIXUPS=y\n'
     dest = a.core / 'profiles/os' / name / relative
     assert not dest.exists(), f'refuse overwrite: {dest}'
     dest.parent.mkdir(parents=True, exist_ok=True)

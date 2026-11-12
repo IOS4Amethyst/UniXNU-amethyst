@@ -8,9 +8,27 @@ import struct
 import sys
 
 PIN = 'b508b34e17ded04ea54c51399bc486592fb75b8d4629b9bf0c30fbc36d0071b2'
+D94 = json.loads(Path(__file__).with_name('pmgr-d94-pins.json').read_text())
+
+
+def qualified_image(data):
+    digest = hashlib.sha256(data).hexdigest()
+    require(digest in (PIN, D94['kernelcache_sha256']), 'Kernelcache SHA-256 mismatch')
+    return digest
 
 
 def lifecycle_bindings(image, undefined, slide):
+    if qualified_image(image.data) == D94['kernelcache_sha256']:
+        # Fileset emitter uses native.base - cache.base, not --slide. Both D94
+        # and this profile's native link base are 0xfffffff007004000.
+        require(image.base == 0xfffffff007004000 and slide == 0, 'Unexpected D94 collection slide')
+        bindings = {name: int(address, 16) for name, address in D94['bindings'].items()}
+        imports = {name for name in undefined if 'ApplePMGR' in name or name.startswith('_sheng_original_pmgr_')}
+        require(imports == set(bindings), f'Unexpected PMGR imports: {sorted(imports ^ set(bindings))}')
+        for anchor in D94['anchors'].values():
+            require(hashlib.sha256(image.read(int(anchor['address'], 16), anchor['size'])).hexdigest() == anchor['sha256'],
+                    f'D94 PMGR fingerprint mismatch at {anchor["address"]}')
+        return bindings
     require(slide == -0x1000000, 'Only the qualified iPhone profile slide is supported')
     bindings = {
         '__ZN9ApplePMGRC2EPK11OSMetaClass': 0xfffffff008feb7bc,
@@ -184,10 +202,18 @@ def main():
     parser.add_argument('--emit-pac', type=Path, help='Write installer header; requires a rebuilt 439-slot provider')
     args = parser.parse_args()
     data = args.kernelcache.read_bytes()
-    require(hashlib.sha256(data).hexdigest() == PIN, 'Kernelcache SHA-256 mismatch')
+    digest = qualified_image(data)
     sys.path.insert(0, str(args.prelink.resolve()))
     from kc_image import Image
     fixups = Image(data).fixups()
+    d94 = digest == D94['kernelcache_sha256']
+    iopmgr_table = int(D94['tables']['IOPMGR']['address'], 16) if d94 else 0xfffffff007c8ca40
+    pmgr_table = int(D94['tables']['ApplePMGR']['address'], 16) if d94 else 0xfffffff007eff258
+    if d94:
+        image = Image(data)
+        for table in D94['tables'].values():
+            require(hashlib.sha256(image.read(int(table['address'], 16), table['size'])).hexdigest() == table['sha256'],
+                    'D94 PMGR table fingerprint mismatch')
     native = object_table(args.iopmgr, '__ZTV6IOPMGR')
     provider = object_table(args.provider, '__ZTV18ShengPlatformPower')
     require(len(native) == 177, 'Expected 177 native IOPMGR slots')
@@ -195,9 +221,9 @@ def main():
     require(len(provider) in (340, 439), 'Unexpected provider table length')
     for label, entries in (('IOPMGR', native), ('ShengPlatformPower', provider)):
         for slot, (_, metadata) in enumerate(entries[:177]):
-            require(metadata == fixups[0xfffffff007c8ca40 + slot * 8][2:],
+            require(metadata == fixups[iopmgr_table + slot * 8][2:],
                     f'{label} slot {slot}: PAC metadata differs from original IOPMGR')
-    original = [fixups[0xfffffff007eff258 + i * 8] for i in range(439)]
+    original = [fixups[pmgr_table + i * 8] for i in range(439)]
     require(all(v[1] == 1 and v[2] == 0 and v[4] == 1 for v in original),
             'Expected address-diverse IA original provider slots')
     if args.emit_pac:
@@ -208,7 +234,7 @@ def main():
         args.emit_abi.mkdir(parents=True, exist_ok=True)
         (args.emit_abi / 'OriginalPMGRABI.h').write_text(header)
         (args.emit_abi / 'GuardedPMGRSlots.inc').write_text(guards)
-    print(json.dumps({'kernelcache_sha256': PIN, 'native_slots': len(native),
+    print(json.dumps({'kernelcache_sha256': digest, 'native_slots': len(native),
                       'provider_slots': len(provider), 'shared_prefix_pac_matches': True,
                       'native_provider_diversity': [v[1][1] for v in provider],
                       'original_provider_diversity': [v[3] for v in original],

@@ -1,0 +1,114 @@
+{
+  "kernelcache_sha256": "fa07057bf34f33af1ec26681ad0c87c13e5aaa548a300740eddb0e92876e5f95",
+  "bindings": {
+    "__ZN9ApplePMGRC2EPK11OSMetaClass": "0xfffffff00928c29c",
+    "__ZN9ApplePMGRD2Ev": "0xfffffff00928c46c",
+    "__ZN9ApplePMGR10gMetaClassE": "0xfffffff00b8e3c10",
+    "_sheng_original_pmgr_nub_create": "0xfffffff0092de548",
+    "_sheng_original_pmgr_nub_read": "0xfffffff0092e1d64",
+    "_sheng_original_pmgr_nub_write": "0xfffffff0092df7b4"
+  },
+  "anchors": {
+    "__ZN9ApplePMGRC2EPK11OSMetaClass": {
+      "address": "0xfffffff00928c29c",
+      "size": 464,
+      "sha256": "3a4773c3a89216e7441576471ba80fffd4e31eb86f4a2dd2774995650fd81289"
+    },
+    "__ZN9ApplePMGRD2Ev": {
+      "address": "0xfffffff00928c46c",
+      "size": 8,
+      "sha256": "0dc864901df17d24dfa54232f03543fea6f7d3021b92b2ab45d65946ea5e3aa0"
+    },
+    "__ZN9ApplePMGR10gMetaClassE": {
+      "address": "0xfffffff00b8e3c10",
+      "size": 40,
+      "sha256": "2c34ce1df23b838c5abf2a7f6437cca3d3067ed509ff25f11df6b11b582b51eb"
+    },
+    "_sheng_original_pmgr_nub_create": {
+      "address": "0xfffffff0092de548",
+      "size": 180,
+      "sha256": "e67696368088fd2036cc22ec9d6bf82177cdcbd35c4c3f2a4bf49960ea5ffc61"
+    },
+    "_sheng_original_pmgr_nub_read": {
+      "address": "0xfffffff0092e1d64",
+      "size": 68,
+      "sha256": "43f7ddbf5907fe0bad80c104d22133a0068a3515112032be89eeb307f722b3b1"
+    },
+    "_sheng_original_pmgr_nub_write": {
+      "address": "0xfffffff0092df7b4",
+      "size": 64,
+      "sha256": "0d7241a3be6b20d3408a008e06cbcc997dd20af1d89061422e63bf2b0353971e"
+    },
+    "0xfffffff0092de5fc": {
+      "address": "0xfffffff0092de5fc",
+      "size": 2316,
+      "sha256": "fc1412bd411112b0ffcce4da0bdb8c443dcaa3af3457eeef3c84cefea29e69bf"
+    },
+    "0xfffffff0092ccb98": {
+      "address": "0xfffffff0092ccb98",
+      "size": 128,
+      "sha256": "2b3790b0ba90c5b01368c8d4ea600222192ca755ee1675cfacac7063bc822cc6"
+    },
+    "0xfffffff0092dcfe8": {
+      "address": "0xfffffff0092dcfe8",
+      "size": 84,
+      "sha256": "d2381dda264ec97b4b8561a600096e5cff17352b766d827f2325a93e5c920dfa"
+    },
+    "0xfffffff0092e1ea0": {
+      "address": "0xfffffff0092e1ea0",
+      "size": 84,
+      "sha256": "24b9599ea8f6e4eb93a5fff82241210a036b9508711a1cd7b953cc7d28871e7b"
+    },
+    "0xfffffff0092cd208": {
+      "address": "0xfffffff0092cd208",
+      "size": 76,
+      "sha256": "de394b81bbb955cfb2467244b2f758e604062c4b4c12b53ae12116e8a7774db9"
+    },
+    "0xfffffff0092dccd4": {
+      "address": "0xfffffff0092dccd4",
+      "size": 56,
+      "sha256": "f35c25454d8407468d044c74371f723d1c7e4b46390a15c29633ec0a93bfa2fe"
+    },
+    "0xfffffff0092dcd0c": {
+      "address": "0xfffffff0092dcd0c",
+      "size": 8,
+      "sha256": "fcbba1a9c9c16c1ad16a237626574c2b6bf8e0eee68e97abf0665928138218f1"
+    },
+    "IOPMGR_metaclass_init": {
+      "address": "0xfffffff00b310820",
+      "size": 80,
+      "sha256": "468f647438b4996cebc61965dd76fbd501278ad2da6c87d671504da6a1a64ef6"
+    }
+  },
+  "class_sizes": {
+    "IOPMGR": 136,
+    "ApplePMGRBase": 136,
+    "ApplePMGR": 473304,
+    "ApplePMGRNub": 1856
+  },
+  "inheritance": [
+    "IOPMGR",
+    "ApplePMGRBase",
+    "ApplePMGR"
+  ],
+  "tables": {
+    "IOPMGR": {
+      "address": "0xfffffff007e4cdf0",
+      "size": 1416,
+      "sha256": "23e17364ad5c9bc15e72ab146fd4d462d388cd44aa113f7a74cc5202263e1e14",
+      "slots": 177
+    },
+    "ApplePMGRBase": {
+      "address": "0xfffffff0080e0098",
+      "size": 2408,
+      "sha256": "9d0dcda8b870cfaa3347697353faf722eda379de5ab37c92c49265e9d9b2c1bd",
+      "slots": 301
+    },
+    "ApplePMGR": {
+      "address": "0xfffffff0080d6a78",
+      "size": 3512,
+      "sha256": "2161fbee72622889ff5da5c6e9fc0a732d59cadee60dfdaaecc06ed3e6f68b70",
+      "slots": 439
+    }
+  }
+}

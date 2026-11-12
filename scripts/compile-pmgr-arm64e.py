@@ -75,9 +75,10 @@ def main():
         sys.path.insert(0, str(tree / 'kits/XnuPrelink'))
         from kc_image import Image
         data = args.kernelcache.read_bytes()
-        audit.require(hashlib.sha256(data).hexdigest() == audit.PIN, 'Kernelcache changed after audit')
+        digest = audit.qualified_image(data)
         undefined = set(subprocess.check_output(['llvm-nm', '--undefined-only', str(final)], text=True).split())
-        bindings = audit.lifecycle_bindings(Image(data), undefined, -0x1000000)
+        slide = 0 if digest == audit.D94['kernelcache_sha256'] else -0x1000000
+        bindings = audit.lifecycle_bindings(Image(data), undefined, slide)
         assembly = out / 'original-bindings.S'
         assembly.write_text(''.join(f'.globl {name}\n.set {name}, {address:#x}\n' for name, address in bindings.items()))
         binding_object = out / 'original-bindings.o'

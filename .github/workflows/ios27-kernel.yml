@@ -8,6 +8,11 @@ on:
     branches: [ios27]
   workflow_dispatch:
     inputs:
+      donor:
+        description: Kernel donor (D94 is kernel-only migration audit)
+        type: choice
+        options: ["iphone15,4", d94ap]
+        default: "iphone15,4"
       defconfig:
         description: Defconfig name
         required: true
@@ -55,7 +60,7 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode_${{ inputs.xcode || '26.6' }}.app/Contents/Developer
       DEFCONFIG: ${{ inputs.defconfig || 'amethyst_defconfig' }}
-      OS_PROFILE: ios-27.0.1-24A446
+      OS_PROFILE: ${{ inputs.donor == 'd94ap' && 'ios-27.0.1-24A446-d94ap' || 'ios-27.0.1-24A446' }}
 
     steps:
       - name: Check out Device Repo
@@ -115,6 +120,16 @@ jobs:
             echo "$(brew --prefix unifdef)/bin" >> "$GITHUB_PATH"
           fi
 
+      - name: Prepare isolated D94 donor audit
+        if: inputs.donor == 'd94ap'
+        env:
+          PAYLOAD: ${{ inputs.build_payload }}
+          FIRMWARE: ${{ inputs.build_firmware }}
+          USERDATA: ${{ inputs.build_userdata }}
+        run: |
+          test "$PAYLOAD" != true && test "$FIRMWARE" != true && test "$USERDATA" != true
+          python3 scripts/prepare-d94-build.py --core unixnu-core --device .
+
       - name: Select the device
         working-directory: ./unixnu-core
         run: |
@@ -141,12 +156,13 @@ jobs:
         run: |
           python3 - <<'PY'
           import sys
+          import os
           import tomllib
           from pathlib import Path
           from types import SimpleNamespace
           sys.path.insert(0, 'scripts')
           from unixnu.ipsw import Ipsw, kernelcache
-          profile = tomllib.loads(Path('profiles/os/ios-27.0.1-24A446/profile.toml').read_text())
+          profile = tomllib.loads((Path('profiles/os') / os.environ['OS_PROFILE'] / 'profile.toml').read_text())
           ctx = SimpleNamespace(board=profile, out_root=Path('out'))
           source = Ipsw(ctx, spec=profile['ipsw']['url'])
           print(kernelcache(ctx, source))

@@ -1,0 +1,29 @@
+diff --git a/osfmk/kern/stack.c b/osfmk/kern/stack.c
+--- a/osfmk/kern/stack.c
++++ b/osfmk/kern/stack.c
+@@ -154,6 +154,14 @@ roundup_pow2(vm_offset_t size)
+ static vm_offset_t stack_alloc_internal(void);
+ static void stack_free_stack(vm_offset_t);
+ 
++/*
++ * Retained CoreEntitlements measures room using the allocation alignment,
++ * not the native page shift. XnuPrelink binds only its reviewed import here.
++ * Source: UniXNU-sheng zzzz-sheng-ipados27-bringup.patch, stack.c hunk.
++ * Keep two lower guard pages above an aligned allocation on the 4K kernel.
++ */
++__attribute__((used)) SECURITY_READ_ONLY_LATE(uint32_t) unixnu_kernel_stack_shift;
++
+ static void
+ stack_init(void)
+ {
+@@ -173,8 +181,9 @@ stack_init(void)
+ 		    (void *) kernel_stack_size, PAGE_SIZE);
+ 	}
+ 
+-	stack_addr_mask = roundup_pow2(kernel_stack_size) - 1;
++	stack_addr_mask = roundup_pow2(kernel_stack_size + ptoa(3)) - 1;
+ 	kernel_stack_mask = ~stack_addr_mask;
++	unixnu_kernel_stack_shift = (uint32_t)__builtin_ctzl(stack_addr_mask + 1);
+ }
+ STARTUP(TUNABLES, STARTUP_RANK_MIDDLE, stack_init);
+ 

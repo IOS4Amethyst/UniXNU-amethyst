@@ -80,19 +80,29 @@ def main():
         slide = 0 if digest == audit.D94['kernelcache_sha256'] else -0x1000000
         bindings = audit.lifecycle_bindings(Image(data), undefined, slide)
         assembly = out / 'original-bindings.S'
-        lines = []
+        lines, addresses = [], []
         for name, address in bindings.items():
             if digest == audit.D94['kernelcache_sha256'] and name != '__ZN9ApplePMGR10gMetaClassE':
                 # Existing XnuPrelink relocation adapter: ld's direct N_ABS
                 # branch has no split-seg record and otherwise moves with text.
-                lines.append(f'.text\n.p2align 2\n.globl {name}\n{name}:\nbti c\nb {name}.original\n'
-                             f'.globl {name}.original\n.set {name}.original, {address:#x}\n')
+                lines.append(f'.text\n.p2align 2\n.globl {name}\n{name}:\nbti c\nb {name}.original\n')
+                addresses.append(f'.globl {name}.original\n.set {name}.original, {address:#x}\n')
             else:
                 lines.append(f'.globl {name}\n.set {name}, {address:#x}\n')
         assembly.write_text(''.join(lines))
         binding_object = out / 'original-bindings.o'
         subprocess.run(['xcrun', 'clang', '-target', 'arm64e-apple-ios27.0', '-c', str(assembly),
                         '-o', str(binding_object)], check=True)
+        address_objects = []
+        if addresses:
+            # Leave external BRANCH26 relocations for ld; same-TU absolute
+            # symbols would be resolved by the assembler relative to address0.
+            absolute = out / 'original-addresses.S'
+            absolute.write_text(''.join(addresses))
+            address_object = out / 'original-addresses.o'
+            subprocess.run(['xcrun', 'clang', '-target', 'arm64e-apple-ios27.0', '-c', str(absolute),
+                            '-o', str(address_object)], check=True)
+            address_objects.append(str(address_object))
         late = out / 'ShengPlatformPower.late.o'
         subprocess.run(['llvm-objcopy', '--remove-section=__DATA,__mod_init_func',
                         '--globalize-symbol=__GLOBAL__sub_I_ShengPlatformPower.cpp', str(final), str(late)], check=True)
@@ -106,7 +116,7 @@ def main():
         archive = out / 'libShengPlatformPower.a'
         temporary = out / 'libShengPlatformPower.pending.a'
         temporary.unlink(missing_ok=True)
-        subprocess.run(['xcrun', 'ar', 'rcs', str(temporary), str(late), str(binding_object)], check=True)
+        subprocess.run(['xcrun', 'ar', 'rcs', str(temporary), str(late), str(binding_object), *address_objects], check=True)
         temporary.replace(archive)
         (out / 'bindings.json').write_text(json.dumps({n: hex(v) for n, v in bindings.items()}, indent=2) + '\n')
         print(f'PASS: late-registration archive emitted: {archive}; link/runtime unverified')

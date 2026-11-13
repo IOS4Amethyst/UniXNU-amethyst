@@ -19,12 +19,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: IOS4Amethyst/UniXNU
-          ref: ios27-iphone15
+          ref: ios27-release-config-level
           path: unixnu-core
           submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - name: Install pinned D94 profile and fixture
+        run: python3 scripts/prepare-d94-build.py --core unixnu-core --device .
       - name: Install image tools
         env:
           GH_TOKEN: ${{ github.token }}
@@ -43,8 +45,8 @@ jobs:
           from unixnu.ipsw import Ipsw
           sys.path.insert(0, 'drivers/DarwinBoot/Test')
           import packed_ramdisk
-          profile = tomllib.loads(Path('profiles/os/ios-27.0.1-24A446/profile.toml').read_text())
-          assert profile['ipsw']['product'] == 'iPhone15,4' and profile['ipsw']['build'] == '24A446'
+          profile = tomllib.loads(Path('profiles/os/ios-27.0.1-24A446-d94ap/profile.toml').read_text())
+          assert profile['ipsw']['product'] == 'iPhone17,2' and profile['ipsw']['build'] == '24A446'
           source = Ipsw(SimpleNamespace(board=profile, out_root=Path('out')), spec=profile['ipsw']['url'])
           image = source.disk_image('OS')
           mount = Path('out/data-source').resolve()
@@ -57,10 +59,11 @@ jobs:
           # seed-data-grow.py creates its temporary workspace under the core build directory.
           Path('build').mkdir(exist_ok=True)
           try:
-              assert hashlib.sha256((mount/'sbin/launchd').read_bytes()).hexdigest() == 'c640246d38aaeb2d2372aff1e5aa0de59dec267f53c0dfc155f7837e717af68b'
-              subprocess.run([sys.executable, 'scripts/make-data-seed.py', str(mount), str(output/'data.dbr'), '--gib', '3', '--build', '24A446'], check=True)
+              # The decrypted whole OS image is pinned by the D94 profile; record launchd identity below.
+              assert hashlib.sha256(image.read_bytes()).hexdigest() == profile['root']['os_image_sha256']
+              subprocess.run([sys.executable, 'scripts/make-data-seed.py', str(mount), str(output/'data.dbr'), '--gib', '2', '--build', '24A446'], check=True)
               report, _ = packed_ramdisk.inspect(output/'data.dbr')
-              report.update(os_build='24A446', product='iPhone15,4', source_launchd_sha256=hashlib.sha256((mount/'sbin/launchd').read_bytes()).hexdigest(), ram_only=True, hardware_tested=False)
+              report.update(os_build='24A446', product='iPhone17,2', source_launchd_sha256=hashlib.sha256((mount/'sbin/launchd').read_bytes()).hexdigest(), ram_only=True, hardware_tested=False)
               (output/'seed.json').write_text(json.dumps(report, indent=2)+'\n')
               print(json.dumps(report, indent=2))
           finally:
@@ -76,7 +79,7 @@ jobs:
             openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:ARTIFACT_PASSPHRASE -out ios27-data-seed.tar.gz.enc
       - uses: actions/upload-artifact@v4
         with:
-          name: ios27-data-seed-encrypted
+          name: ios27-d94ap-data-seed-encrypted
           path: ios27-data-seed.tar.gz.enc
           if-no-files-found: error
           retention-days: 7

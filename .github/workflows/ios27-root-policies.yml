@@ -6,8 +6,8 @@ on:
       donor:
         description: Root-policy donor
         type: choice
-        options: ["iphone15,4", d94ap]
-        default: "iphone15,4"
+        options: [d94ap]
+        default: d94ap
   push:
     branches: [ios27]
     paths:
@@ -23,7 +23,7 @@ jobs:
     runs-on: macos-15-intel
     timeout-minutes: 180
     env:
-      OS_PROFILE: ${{ inputs.donor == 'd94ap' && 'ios-27.0.1-24A446-d94ap' || 'ios-27.0.1-24A446' }}
+      OS_PROFILE: ios-27.0.1-24A446-d94ap
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -40,7 +40,7 @@ jobs:
         with:
           python-version: '3.13'
       - name: Prepare pinned D94 profile
-        if: inputs.donor == 'd94ap'
+        if: env.OS_PROFILE == 'ios-27.0.1-24A446-d94ap'
         run: |
           git -C unixnu-core submodule update --init --recursive kits/XnuPrelink
           python3 scripts/prepare-d94-build.py --core unixnu-core --device .
@@ -77,7 +77,7 @@ jobs:
             --output "$RUNNER_TEMP/ios27-policies"
       - uses: actions/upload-artifact@v4
         with:
-          name: ios27-${{ inputs.donor == 'd94ap' && 'd94ap' || 'iphone15' }}-root-policies
+          name: ios27-d94ap-root-policies
           path: |
             ${{ runner.temp }}/ios27-policies/*/manifest.bin
             ${{ runner.temp }}/ios27-policies/*/manifest.header.bin

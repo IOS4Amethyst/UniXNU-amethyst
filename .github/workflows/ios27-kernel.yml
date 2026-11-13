@@ -1,6 +1,4 @@
-# iOS 27 (iPhone15,4, 27.0.1 24A446) kernel build for amethyst: macos.yml with `--os ios-27.0.1-24A446` and UniXNU from
-# IOS4Amethyst/UniXNU ios27-iphone15 (upstream main 82b847c + the profile). Kernel only for now: the iPadOS 17 payload and
-# userdata steps stay off; the iPadOS 17 bootstrap candidate step of macos.yml is left out. Runs on pushes to this branch (a dispatch-only workflow is only listed once it is on main).
+# iPhone17,2 / D94AP / 24A446 kernel-only build. iPadOS17 fallback is separate.
 name: iOS 27 kernel
 
 on:
@@ -11,12 +9,12 @@ on:
       donor:
         description: Kernel donor (D94 is kernel-only migration audit)
         type: choice
-        options: ["iphone15,4", d94ap]
-        default: "iphone15,4"
+        options: [d94ap]
+        default: d94ap
       donor_policy_run:
         description: Successful D94 root-policy run ID (required for D94)
         required: false
-        default: ""
+        default: "43184772128"
       defconfig:
         description: Defconfig name
         required: true
@@ -65,7 +63,7 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode_${{ inputs.xcode || '26.6' }}.app/Contents/Developer
       DEFCONFIG: ${{ inputs.defconfig || 'amethyst_defconfig' }}
-      OS_PROFILE: ${{ inputs.donor == 'd94ap' && 'ios-27.0.1-24A446-d94ap' || 'ios-27.0.1-24A446' }}
+      OS_PROFILE: ios-27.0.1-24A446-d94ap
 
     steps:
       - name: Check out Device Repo
@@ -126,7 +124,7 @@ jobs:
           fi
 
       - name: Verify D94 cross-compilation host
-        if: inputs.donor == 'd94ap'
+        if: env.OS_PROFILE == 'ios-27.0.1-24A446-d94ap'
         run: |
           uname -m
           xcodebuild -version
@@ -135,7 +133,7 @@ jobs:
           file "$RUNNER_TEMP/d94-target.o"
 
       - name: Prepare isolated D94 donor audit
-        if: inputs.donor == 'd94ap'
+        if: env.OS_PROFILE == 'ios-27.0.1-24A446-d94ap'
         env:
           PAYLOAD: ${{ inputs.build_payload }}
           FIRMWARE: ${{ inputs.build_firmware }}
@@ -146,10 +144,10 @@ jobs:
           python3 scripts/prepare-d94-build.py --core unixnu-core --device .
 
       - name: Load verified D94 root policies
-        if: inputs.donor == 'd94ap'
+        if: env.OS_PROFILE == 'ios-27.0.1-24A446-d94ap'
         env:
           GH_TOKEN: ${{ github.token }}
-          POLICY_RUN: ${{ inputs.donor_policy_run }}
+          POLICY_RUN: ${{ inputs.donor_policy_run || '43184772128' }}
         run: |
           [[ "$POLICY_RUN" =~ ^[0-9]+$ ]] || { echo 'D94 requires a successful root-policy run ID'; exit 1; }
           test "$(gh run view "$POLICY_RUN" --json conclusion --jq .conclusion)" = success
@@ -209,7 +207,7 @@ jobs:
         run: ./unixnu build kernel --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
 
       - name: Summarize prelink audit
-        if: always() && inputs.donor == 'd94ap'
+        if: always() && env.OS_PROFILE == 'ios-27.0.1-24A446-d94ap'
         run: |
           python3 - <<'PY'
           import glob, hashlib, json, os

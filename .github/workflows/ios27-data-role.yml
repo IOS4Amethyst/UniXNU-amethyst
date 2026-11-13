@@ -1,9 +1,16 @@
 name: Repair iOS 27 RAM Data role
 on:
-  push:
-    branches: [ios27]
-    paths: [.github/workflows/ios27-data-role.yml, scripts/set-ram-data-role.py]
   workflow_dispatch:
+    inputs:
+      seed_run:
+        description: Verified iPhone17,2 seed run
+        required: true
+      seed_sha256:
+        description: Exact packed seed SHA256
+        required: true
+      data_uuid:
+        description: Installation Data UUID from seed report
+        required: true
 permissions:
   contents: read
   actions: read
@@ -27,18 +34,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
+          SEED_RUN: ${{ inputs.seed_run }}
+          SEED_SHA256: ${{ inputs.seed_sha256 }}
+          DATA_UUID: ${{ inputs.data_uuid }}
         run: |
           set -euo pipefail
           test -n "$ARTIFACT_PASSPHRASE"
-          gh run download 42899327883 -R IOS4Amethyst/UniXNU-amethyst -n ios27-data-seed-encrypted -D input
+          [[ "$SEED_RUN" =~ ^[0-9]+$ ]] && [[ "$SEED_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          gh run download "$SEED_RUN" -R IOS4Amethyst/UniXNU-amethyst -n ios27-d94ap-data-seed-encrypted -D input
           mkdir decoded output
           openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:ARTIFACT_PASSPHRASE -in input/ios27-data-seed.tar.gz.enc | tar xz -C decoded
-          echo '7c24e514fbf6ab2d6e62f58560cc60cfad4e0e30b0004c0c158410f6b80f05b4  decoded/data.dbr' | shasum -a 256 -c -
-          python3 scripts/set-ram-data-role.py unixnu-core decoded/data.dbr output/data.dbr --uuid 072899DE-BA32-4875-B776-41C1929F4002
+          echo "$SEED_SHA256  decoded/data.dbr" | shasum -a 256 -c -
+          python3 -c 'import json; p=json.load(open("decoded/seed.json")); assert p["product"]=="iPhone17,2" and p["os_build"]=="24A446"'
+          python3 scripts/set-ram-data-role.py unixnu-core decoded/data.dbr output/data.dbr --uuid "$DATA_UUID"
           tar -czf - -C output data.dbr data.json | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:ARTIFACT_PASSPHRASE -out ios27-data-role.tar.gz.enc
       - uses: actions/upload-artifact@v4
         with:
-          name: ios27-data-role-encrypted
+          name: ios27-d94ap-data-role-encrypted
           path: ios27-data-role.tar.gz.enc
           if-no-files-found: error
           retention-days: 7

@@ -1,5 +1,13 @@
 # UniXNU for Xiaomi Redmi Note 14 Pro+ 5G (`amethyst`)
 
+**Active iOS 27 donor: iPhone17,2 / D94AP / 24A446.** Install the checked-in
+profile/fixture with `python3 scripts/prepare-d94-build.py --core ../UniXNU --device .`
+in a disposable core/board checkout, then select `--os ios-27.0.1-24A446-d94ap`.
+Kernel/root-policy/Data workflows now default to D94. The iPadOS17 fallback stays
+unchanged. iPhone15,4 images and address-specific bring-up scripts are historical
+rollback material, not D94 packaging inputs. D94 still has five unsupported private
+imports; no D94 hardware boot is qualified. Phone root replacement is not authorized.
+
 Device port of [UniXNU](https://github.com/UniXNU/UniXNU) for the Xiaomi Redmi Note 14 Pro+ 5G.
 
 > **Branch `ios27`:** experimental iOS 27.0.1 (`24A446`) port with an iPhone 15 identity (arm64e). The RELEASE kernel links and prelinks; see [iOS 27](#ios-27-ios27).

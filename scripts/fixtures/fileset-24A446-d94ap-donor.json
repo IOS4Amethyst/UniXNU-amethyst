@@ -1,0 +1,1353 @@
+{
+  "inputs": {
+    "kernelcache_sha256": "fa07057bf34f33af1ec26681ad0c87c13e5aaa548a300740eddb0e92876e5f95",
+    "entry": "com.apple.kernel"
+  },
+  "functions": [
+    {
+      "original": "0xfffffff00b24ce7c",
+      "original_size": 32,
+      "original_sha256": "e70e74087d15950f6d653a8c12e0f94d6e1f52df3029a5c79731e3d28426d67d",
+      "native_symbol": "__ZNK11OSMetaClass19instanceConstructedEv",
+      "evidence": "Atomic increment of instanceCount at +0x24; on zero-to-one follows superClassLink at +0x10 and repeats. Native uses OSIncrementAtomic, original uses LDADD. Source: OSMetaClass.cpp:985. Ported from 0xfffffe000ae41be4: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b24efa8",
+      "original_size": 100,
+      "original_sha256": "cc86402ee3931a80df2c67dd298bc6e89f39d530f0927559f4d2b6d8eb70dd79",
+      "native_symbol": "_OSObject_typed_operator_new",
+      "evidence": "Compares size x1 against the low 24 bits of ktv->kt_size at +0x2c, selects kalloc_type_impl_external with flags 4 or kalloc_ext, then accounts the allocation. Source: OSObject.cpp:312. Ported from 0xfffffe000ae43da0: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b24f00c",
+      "original_size": 100,
+      "original_sha256": "9c3d99c74707e694d127c1e17950d0073b0dce62bc9d4c888253527fe97c028d",
+      "native_symbol": "_OSObject_typed_operator_delete",
+      "evidence": "Null-checks x1, compares size x2 against ktv->kt_size at +0x2c, selects typed free or kfree_ext and subtracts size from allocation accounting. Source: OSObject.cpp:364. Ported from 0xfffffe000ae43e04: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00abd7bbc",
+      "original_size": 84,
+      "original_sha256": "f38242b8a9ecd926a7ac093c1aabbf7342cd7f4ee296b191b3506023d6914b36",
+      "native_symbol": "_lck_rw_unlock_shared",
+      "evidence": "Calls lck_rw_done, requires mode 1, otherwise panics with lck_rw_unlock_shared() and lock_rw_old.c. Native development image adds owner assertions before the same operation. Ported from 0xfffffe000a7f62bc: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00abd7c10",
+      "original_size": 84,
+      "original_sha256": "f01c10d3771d435b746e7ab6b6200be94f70c53115bc94f846829daa9a13950c",
+      "native_symbol": "_lck_rw_unlock_exclusive",
+      "evidence": "Calls lck_rw_done, requires mode 2, otherwise panics with lck_rw_unlock_exclusive() and lock_rw_old.c. Native development image adds owner assertions before the same operation. Ported from 0xfffffe000a7f6310: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b2b8948",
+      "original_size": 28,
+      "original_sha256": "09881ed95b0e38b0cee0164dfc62998c23708b1ec45d539169ae383136826674",
+      "native_symbol": "_IOMallocTypeImpl",
+      "evidence": "Tests kt_flags bit 0x10 at +0x28, selects Z_ZERO=4 with or without Z_NOFAIL=0x8000, then calls kalloc_type_impl_external. Source: IOLib.cpp IOMallocTypeImpl. Ported from 0xfffffe000aeac9b8: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b2b9024",
+      "original_size": 24,
+      "original_sha256": "48dab5a5515779431fc32d35a407edc3f0a2e5e292fd033945110e7ae9c1a638",
+      "native_symbol": "_IOMallocTypeVarImpl",
+      "evidence": "Tags the view in x0 with bit 1 and calls kalloc_ext with size in x1, flags 0x1f1004 and null site. Source: IOLib.cpp IOMallocTypeVarImpl and kalloc_type_var_impl. Ported from 0xfffffe000aead078: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b3cf4c0",
+      "original_size": 36,
+      "original_sha256": "9cf0befa4eb6438b7f572a3721007ca05930d19599c534ff502c6cf40cc916bb",
+      "native_symbol": "_PE_parse_boot_argn",
+      "evidence": "Reorders caller name/buffer/length into x1/x2/x3, obtains PE_state.bootArgs->CommandLine at +0x6c and passes allow_prefix=0 to the parser. Native obtains the same buffer through PE_boot_args. Ported from 0xfffffe000afc10e0: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00add3438",
+      "original_size": 40,
+      "original_sha256": "f2870d72e5b1d279b0dbc96d0906f4fae80c28f6b8693a5ae036c2cf9bb37cf1",
+      "native_symbol": "_vnode_mount",
+      "evidence": "Loads vnode.v_mount at +0xd8 and authenticates with address diversity 0xd6ef; returns zero for null. Native has the same field and discriminator, adding an explicit authentication failure trap. Ported from 0xfffffe000a9e9ad4: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b2b98f4",
+      "original_size": 60,
+      "original_sha256": "5629900b3da3df788dd2300bec57f2fd510aa68a466eff7d66dd80637fa8e14e",
+      "native_symbol": "_IOLockFree",
+      "evidence": "Destroys mutex with IOLockGroup then frees the typed mutex allocation. Native delegates both operations to lck_mtx_free, matching IOLocks.cpp IOLockFree. Ported from 0xfffffe000aead960: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b24bae0",
+      "original_size": 44,
+      "original_sha256": "3971e56900712fa76cce868f1185032e7962503cdd820fbef04fb9e07fec3312",
+      "native_symbol": "__ZN15OSMetaClassBase9_ptmf2ptfEPKS_MS_FvvE",
+      "evidence": "Nonzero member pointer x1 is authenticated with type discriminator 0xa83d and resigned with function discriminator 0x4a27. Native uses the same PAC keys and discriminators, plus an explicit authentication failure trap. Source: OSMetaClass.cpp feature ptrauth_member_function_pointer_type_discrimination. Ported from 0xfffffe000ae4082c: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00add2b78",
+      "original_size": 72,
+      "original_sha256": "8addd9e1fe680da4842c25211d8b3b6636f6ec4b88900ab8b3fbb006e2611e45",
+      "native_symbol": "_vfs_context_proc",
+      "evidence": "Masks vfs context thread tag bit 0, obtains its BSD task when present, otherwise returns current_thread_ro()->tro_proc or kernproc. Native vfs_context_proc performs the same selection with the current_proc fallback outlined. Ported from 0xfffffe000a9e92c8: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00abd4e3c",
+      "original_size": 88,
+      "original_sha256": "8173a10a5330d6edd3f2bbd9955eb9ebf7be5c09ac12e98f2bb424c72e765593",
+      "native_symbol": "_lck_mtx_init",
+      "evidence": "Initializes the type/group header with 0x22000000, zeroes mutex state and references the lock group. Native lck_mtx_init performs the same initialization plus DEVELOPMENT-only lock-attribute checks. Ported from 0xfffffe000a7f33d4: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00abd63d8",
+      "original_size": 140,
+      "original_sha256": "9137b31975d3345b87608cc0c988a360c961143cc82b080e6bcecdf81c9329b3",
+      "native_symbol": "_lck_rw_init",
+      "evidence": "Initializes the legacy RW lock layout with sleep/debug flag bits 2/0x40 and the lock-group RW count. Match the C _lck_rw_init from lock_rw_old.c, not the C++ overload that uses a different state encoding. Ported from 0xfffffe000a7f4af0: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b2e98c8",
+      "original_size": 320,
+      "original_sha256": "91a69ca2dc6621c06520f696feb0ab53da5f588c847b33f9a1fc8ba3ad26d4b1",
+      "native_symbol": "__ZN9IOService15serviceMatchingEPKcP12OSDictionary",
+      "evidence": "Converts the char string using OSSymbol::withCString and withString, creates/updates a dictionary under IOProviderClass, and releases the temporary symbols. Uses the raw dictionary overload; native char-string overload performs the same ownership sequence. Ported from 0xfffffe000aedd3b4: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00ab8e798",
+      "original_size": 100,
+      "original_sha256": "2c0347d736f9953c10fe2db090140514be6d3385e661c9a3b08d088e09df1503",
+      "native_symbol": "_kdp_register_callout",
+      "evidence": "Allocates a callout record with zalloc_permanent and links it onto the kdp callout list; same call as the reference kdp_register_callout. Ported from 0xfffffe000a7b4cc0: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b0fca08",
+      "original_size": 128,
+      "original_sha256": "6a60420abb167cd0490c14ac86d48fd70d4112284df11dde1489d7b4921c0078",
+      "native_symbol": "_sysctl_handle_opaque",
+      "evidence": "Calls req->oldfunc (SYSCTL_OUT of arg1/arg2), then req->newfunc when req->newptr is set (SYSCTL_IN). Source: bsd/kern/kern_newsysctl.c sysctl_handle_opaque. Ported from 0xfffffe000acf992c: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b11ab54",
+      "original_size": 80,
+      "original_sha256": "d27c55cfb2a2a3dc6ed38e2d3b4e13fd8192ec88e266e9f7ba9379eb8bdaf583",
+      "native_symbol": "_enable_developer_mode",
+      "evidence": "kern_codesigning.c source order between secure_channel_shared_page and developer_mode_state; TXM wrapper in original, XNU body in native Ported from 0xfffffe000ad16920: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b11aba4",
+      "original_size": 80,
+      "original_sha256": "cef870c94f2fcfca94f5ecfa0df7dc071798b570c9c4fb6ad26c24fa0cfb2999",
+      "native_symbol": "_disable_developer_mode",
+      "evidence": "kern_codesigning.c source order after enable_developer_mode, before developer_mode_state Ported from 0xfffffe000ad16970: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b11ac98",
+      "original_size": 64,
+      "original_sha256": "da2926c01faef436656d78cc78e6e038ce084e6f6e59a181ce50c4aa35277dac",
+      "native_symbol": "_restricted_execution_mode_enable",
+      "evidence": "kern_codesigning.c source order after extended_research_mode_state Ported from 0xfffffe000ad16a64: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b11acd8",
+      "original_size": 44,
+      "original_sha256": "e61eecc2800ef27f30ae6eaf3535af9f88ba39a74e722d253af3de56bc1b5be2",
+      "native_symbol": "_restricted_execution_mode_state",
+      "evidence": "kern_codesigning.c source order after restricted_execution_mode_enable Ported from 0xfffffe000ad16aa4: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b11ad04",
+      "original_size": 72,
+      "original_sha256": "b52e9aab914d02997ff4dc1157b13df9857db8de1229ec50c84adc671953fca0",
+      "native_symbol": "_update_csm_device_state",
+      "evidence": "kern_codesigning.c source order after restricted_execution_mode_state Ported from 0xfffffe000ad16ad0: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b11ad4c",
+      "original_size": 100,
+      "original_sha256": "c0908c0b54db45ca70d889912613dd192504569dc61e7527168c68b8e705a514",
+      "native_symbol": "_complete_security_boot_mode",
+      "evidence": "kern_codesigning.c source order after update_csm_device_state Ported from 0xfffffe000ad16b18: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00ad7f2d4",
+      "original_size": 124,
+      "original_sha256": "77fc45abff7ceca058d9621a70e2aae99e30590babcc224af2a4e7ce1e757ef4",
+      "native_symbol": "_buf_bawrite",
+      "evidence": "Inlined bawrite_internal(bp, 1): vnode_waitforwrites with VNODE_ASYNC_THROTTLE and the buf_bawrite message, sets B_ASYNC, then VNOP_BWRITE; bsd/vfs/vfs_bio.c. Ported from 0xfffffe000a999138: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00ad45084",
+      "original_size": 60,
+      "original_sha256": "b2abba24172aa23b5c8b4a6573d9aa3f23a7a0a65a3328d891d0ff84d882bac8",
+      "native_symbol": "_ml_cpu_signal",
+      "evidence": "Compares the MPIDR cluster of the target with this CPU and writes S3_5_C15_C0_0 or S3_5_C15_C0_1 with the immediate IPI type; ml_cpu_signal with ml_cpu_signal_type inlined. Ported from 0xfffffe000a962464: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b36aa88",
+      "original_size": 400,
+      "original_sha256": "117c20406a80e00de9bb3885086f86897c147bd86149530d104f0cbd50d08c76",
+      "native_symbol": "_IOCircularDataQueueEnqueue",
+      "evidence": "Validates the authenticated queue magic, data and size against the ring fields and stores the entry; iokit/IOKit/IOCircularDataQueueImplementation.h. Ported from 0xfffffe000af5e72c: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b17aa18",
+      "original_size": 304,
+      "original_sha256": "910448692103361eea937abd09eccd82292f9da647558a6dd839ac57bc178d3b",
+      "native_symbol": "_sock_getsockname",
+      "evidence": "Locks the socket, calls pru_sockaddr through pr_usrreqs, copies out the address; bsd/kern/kpi_socket.c sock_getsockname. Ported from 0xfffffe000ad757cc: identical masked instruction shape and strings. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00ad05978",
+      "original_size": 68,
+      "original_sha256": "0464008f46d70772cf6ed29599c4126861833abca4b88d434623ebcc85c3a36d",
+      "native_symbol": "___memcpy_chk",
+      "evidence": "Compares the destination size x3 with the length x2, tail-calls memcpy when it fits, else panics \"__memcpy_chk object size check failed: dst %p, src %p, (%zu < %zu)\" with subrs.c; the only unpaired native function with that string. corecrypto calls it through its auth stub. Source: osfmk/device/subrs.c __memcpy_chk. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b416214",
+      "original_size": 56,
+      "original_sha256": "845f24f861d9a20fc63864532708622f82072c3e4847b7d613288b7b429ce7f9",
+      "native_symbol": "_pmap_claim_reserved_ppl_page",
+      "evidence": "Names itself \"pmap_claim_reserved_ppl_page\" in \"%s: function not supported in this environment\" from pmap.c. The native non-PPL pmap implements the same exported KPI by returning NULL. Source: osfmk/arm/pmap/pmap.c, config/Private.exports. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b41624c",
+      "original_size": 56,
+      "original_sha256": "554cad720dae040b68645cc650cd25803884dea5d37bdff81b19a0081d124284",
+      "native_symbol": "_pmap_free_reserved_ppl_page",
+      "evidence": "Names itself \"pmap_free_reserved_ppl_page\" in \"%s: function not supported in this environment\" from pmap.c. The native non-PPL pmap implements the same exported KPI as a no-op. Source: osfmk/arm/pmap/pmap.c, config/Private.exports. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b11a998",
+      "original_size": 240,
+      "original_sha256": "90190f8fcbcaa896941c7c087f2a781abe64571d39ca5dbdbef12cbba4ba42f3",
+      "native_symbol": "_code_signing_configuration",
+      "evidence": "Computes the monitor type and configuration once behind an acquire-loaded flag and stores them through the two out pointers when non-NULL; kern_codesigning.c source order between code_signing_deallocate and disable_code_signing_feature, both paired. AppleImage4, AMFI and Image4 call it. Source: bsd/kern/kern_codesigning.c code_signing_configuration. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b119a94",
+      "original_size": 128,
+      "original_sha256": "e8ffb3d157d1b4bab2f199bcbd9c3704915b7151b15f4539327d0c40547512fd",
+      "native_symbol": "_check_trust_cache_runtime_for_uuid",
+      "evidence": "kern_trustcache.c source order between trust_cache_runtime_init and unload_trust_cache, both paired; called by AMFI. Source: bsd/kern/kern_trustcache.c check_trust_cache_runtime_for_uuid. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b11adb0",
+      "original_size": 8,
+      "original_sha256": "224d4df0836ae187285a713f6eab38d506f106d5205135a58ab1548d5684fce9",
+      "native_symbol": "_garbage_collect_provisioning_profiles",
+      "evidence": "8-byte function right after complete_security_boot_mode (paired) in kern_codesigning.c source order; blacktop symbolicator signatures name the same address. Source: bsd/kern/kern_codesigning.c garbage_collect_provisioning_profiles. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00ac991f8",
+      "original_size": 36,
+      "original_sha256": "2f6fec562b8d4b942dbabb093a78571b830b4bdf3e9034964852bb7ddac7fbe5",
+      "native_symbol": "_vm_map_page_mask",
+      "evidence": "Returns ~(-1 << shift) with shift read from byte 0x2c of the map, or 14 when the map is NULL (the native body uses its own layout and PAGE_SHIFT); sandbox calls it with kernel_map and AMFI with a task map. Source: osfmk/vm/vm_map.c vm_map_page_mask, config/Private.exports. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00ad46814",
+      "original_size": 92,
+      "original_sha256": "e443447b1594d6a28695577bbfe5bd7c80998c8191d41f7b53fa009fe88a0342",
+      "native_symbol": "_ml_get_cpu_number",
+      "evidence": "Masks the argument to 16 bits and walks topology_info.cpus (stride 0x88) comparing phys_id at +4; returns the index or -1. AppleARMPlatform calls it with the reg value of a cpu node. Source: osfmk/arm64/machine_routines.c ml_get_cpu_number. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00ad46870",
+      "original_size": 124,
+      "original_sha256": "2aef9cd97e765fcf3da5bc8910c6ef6790704275efa19e72c41328f3bb865024",
+      "native_symbol": "_ml_get_cluster_number",
+      "evidence": "Same walk as ml_get_cpu_number, then returns cluster_id at +8 of the matching entry or -1. Source: osfmk/arm64/machine_routines.c ml_get_cluster_number. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00ad468ec",
+      "original_size": 92,
+      "original_sha256": "5fba3fdb7fbc352d2a4bcb18c04e187f1ad17ed1f0c591556aba86487a588f25",
+      "native_symbol": "_ml_get_cpu_number_local",
+      "evidence": "Reads MPIDR_EL1, masks it to 16 bits and walks topology_info.cpus for the index. Source: osfmk/arm64/machine_routines.c ml_get_cpu_number_local. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00ad46948",
+      "original_size": 128,
+      "original_sha256": "0f9271d4a50cd9f830c72ad7d4948057004c39b9c102e170091595c3cd9d5ef8",
+      "native_symbol": "_ml_get_cluster_number_local",
+      "evidence": "Reads MPIDR_EL1 and returns the cluster_id of the matching topology entry. Source: osfmk/arm64/machine_routines.c ml_get_cluster_number_local. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00ad469c8",
+      "original_size": 16,
+      "original_sha256": "2df1ddb4e3bade4aee388f476ec3df2ec4e4001db3285879a2cc04b9cee1bfd9",
+      "native_symbol": "_ml_get_max_cpu_number",
+      "evidence": "Returns the 32-bit field after num_cpus in topology_info (max_cpu_id). Source: osfmk/arm64/machine_routines.c ml_get_max_cpu_number. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00abe3554",
+      "original_size": 56,
+      "original_sha256": "fc40ae160d329d2103fe9e9278509ed29d360daa7f457b36a61ddb3db9e4b7d4",
+      "native_symbol": "_printf",
+      "evidence": "Variadic: builds a va_list from the stack arguments, passes it with the stripped caller address to the shared console formatter and returns 0; subr_prf.c/cons order right after cons_putc_locked (paired), before vprintf and consdebug_putc. Eleven kexts call it. Source: osfmk/kern/printf.c printf. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00abe36d4",
+      "original_size": 36,
+      "original_sha256": "7a7c5dafbe7f84f5eda81981230c2cb2c4a3432432ec2a1be3192f236a9eb51f",
+      "native_symbol": "_vprintf",
+      "evidence": "Takes (fmt, va_list), passes them with the stripped caller address to the same formatter as printf and returns 0; order after printf and before consdebug_putc. APFS and AppleEffaceableStorage call it. Source: osfmk/kern/printf.c vprintf. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00ac061f4",
+      "original_size": 80,
+      "original_sha256": "f930fe3cf2c48b6ca261987644cb89d3b09db174556a86f3d21864c5bd7d61b7",
+      "native_symbol": "_smr_leave",
+      "evidence": "Clears the per-CPU SMR slot of smr->smr_pcpu (cpu number inlined from the CPU data) with a release store and re-enables preemption; between smr_enter and smr_ack_ipi. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00ab86b04",
+      "original_size": 12,
+      "original_sha256": "d81a6809f44fa6dc4b5926986d74ff6c7aeec7cd278ab31bae93d2b5b4d2a2da",
+      "native_symbol": "_mach_continuous_time",
+      "evidence": "Returns the continuous (sleep-inclusive) counter register directly; follows clock_continuoustime_interval_to_deadline, which reads the same register. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00ad71480",
+      "original_size": 56,
+      "original_sha256": "d65de3245a3f10c0c4a5ada05a183575313e92c5be994464de50e05544fe844e",
+      "native_symbol": "_crc32",
+      "evidence": "Byte-wise table CRC-32 with inverted seed and result, identical loop to native crc32. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00ada94d8",
+      "original_size": 112,
+      "original_sha256": "f96b98cbe222d59a93f5e2e0fbba849661f703c135698ac4415091076e925156",
+      "native_symbol": "_vnode_authorize",
+      "evidence": "Returns 0 for VBAD vnodes, otherwise kauth_authorize_action(vnode_scope, ctx->vc_ucred, action, ctx, vp, dvp, &error) and maps a denial without error to EACCES. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00addd814",
+      "original_size": 192,
+      "original_sha256": "99dd803ef28976e87c852d7edc0feb4101de068d388033ba69b17937f02b98a5",
+      "native_symbol": "_cp_os_version",
+      "evidence": "Caches and parses the osversion string into major<<24 | build letter<<16 | build number, falling back to 1; same parser as native cp_os_version. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b0de1d8",
+      "original_size": 132,
+      "original_sha256": "c4d9c5197bc479af03299f2bfad6e1c52bff9caa00293d193ba4b47c17a90e78",
+      "native_symbol": "_proc_name",
+      "evidence": "Zeroes the buffer, proc_find(pid), copies at most 17 bytes of p_comm and proc_rele; between proc_parent and proc_best_name. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00adb0fbc",
+      "original_size": 16,
+      "original_sha256": "485ce019828b23c9423d0e7f599d2427ca81cfe2432a2a6f455d7baf0e062467",
+      "native_symbol": "_vnode_getfromfd",
+      "evidence": "Wrapper of the fd-to-vnode helper with both optional outputs NULL: resolves the context proc, looks up the fd vnode, takes an iocount and drops the fileproc, which is vnode_getfromfd(ctx, fd, vpp). [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00add2e28",
+      "original_size": 80,
+      "original_sha256": "837f2fbf0263949fdffaec5931608d95925c8b988406d17d346b33d568889c3c",
+      "native_symbol": "_vfs_context_ignores_content_protection",
+      "evidence": "Darwin 26 KPI: resolves the context proc like vfs_context_proc and returns p_vfs_iopolicy bit 0x20 (P_VFS_IOPOLICY_IGNORE_CONTENT_PROTECTION, same bit index as the 0x2000 ENTITLED_RESERVE_ACCESS test in vfs_context_allow_entitled_reserve_access). Name chosen here; implemented in darwin26-kpi.patch. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00add2e78",
+      "original_size": 80,
+      "original_sha256": "24c05efa6b417d0560a041d37a482ef42cb3bf7fc05a9d3f50a243ca8c45fad2",
+      "native_symbol": "_vfs_context_iopolicy_unassigned_0x8000",
+      "evidence": "Darwin 26 KPI: same shape as the previous function but tests p_vfs_iopolicy bit 0x8000, which this kernel never sets, so the native body returns false. Name chosen here; implemented in darwin26-kpi.patch. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00ad8f0f4",
+      "original_size": 376,
+      "original_sha256": "16c7fee9a16f395117c3ce6151d3195cb5988e00086fdfd30900d4e2c2186ed7",
+      "native_symbol": "_cluster_update_range",
+      "evidence": "Darwin 26 KPI: validates (vp, offset, length, filesize, callback, arg), calls the callback (type discriminator 0x8b37 = int (*)(vnode_t, off_t x5, void *)) per 64 MiB page-aligned chunk and marks each chunk with cluster_update_state_internal(flags 0, defer writes). Name chosen here; implemented in darwin26-kpi.patch. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b0a2f14",
+      "original_size": 12,
+      "original_sha256": "63cde01bb8c9e69852cf127f51f7c2829441ae34eb25375701b8b284fbe6999d",
+      "native_symbol": "_csblob_get_teamid",
+      "evidence": "Returns cs_blob+0xb8, which in the Darwin 26 cs_blob is csb_teamid (cdhash grew to a 64-byte hash plus length, so every field from csb_hashtype on moved by 0x30: hashtype 0xa0, cd 0xb0, teamid 0xb8). Reference-symbol matched it to csblob_get_auxiliary_info only because native csb_auxiliary_info is also at 0xb8. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b0a30a8",
+      "original_size": 12,
+      "original_sha256": "b1dd9ff5da120675b30fe49ec40f25bc388cdcc25b41e78970f2afa692ec8278",
+      "native_symbol": "_csblob_get_auxiliary_info",
+      "evidence": "Returns cs_blob+0xe8, the Darwin 26 csb_auxiliary_info (native 0xb8 + 0x30); follows csblob_set_auxiliary_info, which stores the same field. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b0a2fa8",
+      "original_size": 12,
+      "original_sha256": "6093fdd3d959ebd2e704ba0b530470ceee27b3b2f81d673ccc8cdddeed17b8da",
+      "native_symbol": "_csblob_get_signer_type",
+      "evidence": "Returns the 32-bit field at cs_blob+0x24 (csb_signer_type, before the moved fields); identical to native. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b0a30b4",
+      "original_size": 44,
+      "original_sha256": "27af5a91eea6ca97fe28e565647e8bdd6554df4be3de7ddd7c9b87b64897b1cc",
+      "native_symbol": "_csblob_get_trust_level",
+      "evidence": "Returns the code signing monitor trust level when csb_csm_obj is set, else -1; this kernel has no monitor and native returns -1. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b0a30e0",
+      "original_size": 12,
+      "original_sha256": "676f37157e620f9a9e90e08b962d2f540ca660baa3134640b3a663f04a8d99cf",
+      "native_symbol": "_csblob_get_code_directory",
+      "evidence": "Returns cs_blob+0xb0, the Darwin 26 csb_cd (native 0x80 + 0x30). [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b0a3158",
+      "original_size": 108,
+      "original_sha256": "05ac7b80fe3885232a35b7ca81208b3a2c32902854d78134e208573a97af6090",
+      "native_symbol": "_csblob_os_entitlements_set",
+      "evidence": "Retains the OSEntitlements object and stores it signed (discriminator 0xaa50, cs_blob.csb_entitlements) at cs_blob+0xd0 (native 0xa0 + 0x30). [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b0a31c4",
+      "original_size": 120,
+      "original_sha256": "6065c9bb1851703369b5919a351e53c39394d2c3e0518baa77eb6c4ef00331d8",
+      "native_symbol": "_csblob_os_entitlements_copy",
+      "evidence": "Loads csb_entitlements (0xaa50) at cs_blob+0xd0, retains and returns it. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b0a323c",
+      "original_size": 40,
+      "original_sha256": "1ecc214dee130bb7a58957a3be0129b27e0fab4b059ea7e9d6086dce595bb06b",
+      "native_symbol": "_csblob_os_entitlements_get",
+      "evidence": "Returns the authenticated csb_entitlements (0xaa50) at cs_blob+0xd0 without retaining it. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b0a2e6c",
+      "original_size": 148,
+      "original_sha256": "52d2e24e5a356313f66cd76125c92e8b9cd9fe5f2aeab7ae2521ec40c56698c7",
+      "native_symbol": "_csproc_get_blob",
+      "evidence": "Takes p_textvp (signed 0x612c), requires CS_SIGNED in the proc csflags and returns ubc_cs_blob_get(textvp, -1, -1, p_textoff). [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b0a3f48",
+      "original_size": 120,
+      "original_sha256": "d8a4e10092f2f0b85d3b25888f4f33b7603492299357afddbe743f0e914a342a",
+      "native_symbol": "_csproc_get_platform_identifier",
+      "evidence": "Resolves the proc blob through p_textvp/p_textoff and ubc_cs_blob_get, then reads its platform identifier; the only native function between csvnode_get_platform_identifier and cs_entitlement_flags. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b0a43fc",
+      "original_size": 12,
+      "original_sha256": "461f0cd8c82fda303d244bd2e7d866dfa0a3a0e88e4e29eeaa32547988cb1a92",
+      "native_symbol": "_launch_constraint_data_get_launch_type",
+      "evidence": "Returns the first byte of the launch constraint data; identical to native. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b11b564",
+      "original_size": 76,
+      "original_sha256": "004119a3fa0cd07443e3d210724bab23fabe11443704963bab0ccc3f56e46517",
+      "native_symbol": "_set_local_signing_public_key",
+      "evidence": "Sends the key to the code signing monitor (selector 0x1a); native without a monitor stores it in the kernel. Source order after the compilation service cdhash functions. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b11b5b0",
+      "original_size": 84,
+      "original_sha256": "c9c195241b5c6755b8a8149a97c87216e8d878c78764c003a84ba194eb998977",
+      "native_symbol": "_get_local_signing_public_key",
+      "evidence": "Monitor selector 0x1b returning the key pointer or NULL; native returns the kernel copy. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b13ce5c",
+      "original_size": 152,
+      "original_sha256": "776fb9b5c408759c402dd1590c3459016a43c08d6da45bb2a1c915f529bca8cd",
+      "native_symbol": "_csblob_register_profile",
+      "evidence": "Registers a provisioning profile with the monitor for the blob (csb_csm_obj, 0xe82b) and returns 0 when unsupported; native without a monitor returns 0. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b0a2f90",
+      "original_size": 24,
+      "original_sha256": "55fc722c4e7aeef40a42998c29c096e4531cf112df3d45b004ff42983b6c817b",
+      "native_symbol": "_csblob_get_cdhash_with_length",
+      "evidence": "Darwin 26 KPI: returns cs_blob+0x58 (the cdhash) and stores the cdhash length byte from +0x98; AMFI uses that length (<= 64) to format and compare cdhashes. Name chosen here; darwin26-kpi.patch returns CS_CDHASH_LEN. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b0dea00",
+      "original_size": 248,
+      "original_sha256": "a0ebdf92a2e16c230b996c5062454ceebb5c0a2fb11733c3e0d24ffdc2e3bd03",
+      "native_symbol": "_proc_getcdhash_with_length",
+      "evidence": "Darwin 26 KPI: (proc, buffer, uint8_t *length) returns EINVAL for kernproc, the vn_getcdhash error, ERANGE when *length is too small, else stores the length and copies the cdhash. Name chosen here; implemented in darwin26-kpi.patch. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b11a1a0",
+      "original_size": 184,
+      "original_sha256": "4a0ae17e0dbaa967e5d05b67b9d0e29116f0dd7c409a24a8fdc819a0ab2cf2d1",
+      "native_symbol": "_query_trust_cache_with_length",
+      "evidence": "Darwin 26 KPI: query_trust_cache(type, cdhash, length, token); its neighbour with the length fixed at 0x14 is the plain query. Name chosen here; implemented in darwin26-kpi.patch (other lengths are not found). [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b11a314",
+      "original_size": 128,
+      "original_sha256": "7f92e5e14a97898e31ff80efa666c2a30c57a721c778fe23ba7154fc3dc528ae",
+      "native_symbol": "_query_trust_cache_for_rem_with_length",
+      "evidence": "Darwin 26 KPI: query_trust_cache_for_rem(cdhash, length, rem_perms); its neighbour fixes the length at 0x14. Name chosen here; implemented in darwin26-kpi.patch. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b11b4d8",
+      "original_size": 12,
+      "original_sha256": "f82ff609ceb33b71a7e2273911873ddfc36c8d615553fcfcc51734a93caf9b13",
+      "native_symbol": "_set_compilation_service_cdhash_ext",
+      "evidence": "Darwin 26 KPI: passes a 64-byte cdhash with its length at +0x40 to the compilation service setter that the 20-byte variant also uses. Name chosen here; implemented in darwin26-kpi.patch. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b11b558",
+      "original_size": 12,
+      "original_sha256": "6a1da7815f2ba1031e03858a109bc3964ea7c2c11b1dec2687822bdfe9bcff5e",
+      "native_symbol": "_match_compilation_service_cdhash_ext",
+      "evidence": "Darwin 26 KPI: the matching variant taking the 64-byte cdhash with its length at +0x40. Name chosen here; implemented in darwin26-kpi.patch. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b11b604",
+      "original_size": 80,
+      "original_sha256": "8620de8f120e9169bcd224fab637ad62dce89d8a5820163240cc1ce09512e4cb",
+      "native_symbol": "_unrestrict_local_signing_cdhash_ext",
+      "evidence": "Darwin 26 KPI: monitor selector 0x1c with a 64-byte cdhash and its length at +0x40; the 20-byte variant follows it. Name chosen here; implemented in darwin26-kpi.patch (no-op without a monitor, like native). [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b0e497c",
+      "original_size": 12,
+      "original_sha256": "6093fdd3d959ebd2e704ba0b530470ceee27b3b2f81d673ccc8cdddeed17b8da",
+      "native_symbol": "_proc_pgrpid",
+      "evidence": "Between proc_set_pthread_jit_allowlist and proc_sessionid as in kern_proc.c: returns the 32-bit p_pgrpid (+0x24 in the 27 proc). No symbol in the original image; Sandbox calls it. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b2581dc",
+      "original_size": 172,
+      "original_sha256": "1f40347ba961d532d8575e8f9b32d5eb89f80fbe604b09695fb793c9de33275e",
+      "native_symbol": "__ZN12OSDictionary14iterateObjectsEU13block_pointerFbPK8OSSymbolP8OSObjectE",
+      "evidence": "After the OSDictionary setObject overloads as in OSDictionary.cpp: walks count (+0x14) key/value pairs calling the block (invoke at +0x10) and stops on a true return or an updateStamp change, which is iterateObjects(block) with the refcon variant inlined. Sandbox, IOHIDFamily, IOSurface and IOAVFamily call it. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b332418",
+      "original_size": 56,
+      "original_sha256": "c8780604f4913db1bc861a73de946e58e1d8b12687644f59b5765ed95522b87a",
+      "native_symbol": "__ZN18IOMemoryDescriptor15getDescriptorIDEv",
+      "evidence": "Calls setDescriptorID (getKernelReserved, then the atomic ID assignment) and returns reserved->descriptorID, or 0 (kIODescriptorIDInvalid) without reserved data, as IOMemoryDescriptor::getDescriptorID in IOMemoryDescriptor.cpp. No symbol in the original image; IOSurface calls it on its memory descriptor. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b332404",
+      "original_size": 20,
+      "original_sha256": "65028c3b78f8e3f8af0dc5dd699f0b046734c11ac56c3ac8bef59b2af1769b8a",
+      "native_symbol": "__ZN18IOMemoryDescriptor10setContextEP8OSObject",
+      "evidence": "Tail-calls setContext(const OSSymbol *, OSObject *) (lazily allocated reserved data, contextObjects dictionary) with the object and a fixed key; the key global is the one the inlined copyContext(void) looks up, kOSBooleanFalse, as IOMemoryDescriptor::setContext(OSObject *) in IOMemoryDescriptor.cpp. No symbol in the original image; IOSurface calls it. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00ad452c8",
+      "original_size": 12,
+      "original_sha256": "aff4a75f0d212d486d017c8d97110d534bb110f461d01315abddea98305ba5e1",
+      "native_symbol": "_OSSynchronizeIO",
+      "evidence": "bti c; dsb sy; ret, next to ml_get_interrupts_enabled as in machine_routines.c: OSSynchronizeIO is __builtin_arm_dsb(DSB_SY). No symbol in the original image; IOSurface, IOGPUFamily, IOAVFamily and IOCryptoAcceleratorFamily call it. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b36e788",
+      "original_size": 660,
+      "original_sha256": "1650a32b022dafb7a2ccc9355852ad5ba847244db29c16cc1fdd1a323884669c",
+      "native_symbol": "__ZN10IOReporter16updateAllReportsEP5OSSetP19IOReportChannelListjPvS4_",
+      "evidence": "Static: returns kIOReturnBadArgument when the set, channel list, result or destination is null and requires action kIOReportCopyChannelData (1), then iterates the OSSet calling each reporter's updateReport. Follows IOReporter::configureReport (0xfffffe000b4f8654). Kext updateReport overrides tail-call it (IOReportHub::getValues reached the unmapped stub through ApplePMGR/AppleARMPlatform reporters, boot 86df4cc7). Source: IOReporter.cpp updateAllReports. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b36ea1c",
+      "original_size": 304,
+      "original_sha256": "e160f3bbf3ab98d867269b3092fa5854fa2897baf1bfa50812e5638bd288295f",
+      "native_symbol": "__ZN10IOReporter12updateReportEP19IOReportChannelListjPvS2_",
+      "evidence": "Member: takes _reporterLock (+0x80) with interrupts disabled, stores the interrupt state at +0x78, sets _reporterIsLocked (+0x48), calls the virtual handleUpdateReport, clears the flag and unlocks. Source: IOReporter.cpp updateReport (lockReporter/handleUpdateReport/unlockReporter inlined). [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00ad4d858",
+      "original_size": 48,
+      "original_sha256": "abb7c19ec8e64fd9442b0ac63d517c44dd947f80781419e9cf943ce14161035b",
+      "native_symbol": "_mach_absolute_time",
+      "evidence": "Reads CNTVCTSS_EL0 plus the per-CPU timebase offset at [tpidr_el1+0x1b8]+0x58 with a re-read loop and returns the sum; directly precedes the matched _clock_get_system_microtime and _absolutetime_to_microtime (osfmk/arm64 rtclock). corecrypto_kext_start calls it right after the fips_mode boot-arg. The native one reads the SM8550 timer (ArmCpu native arch timer)."
+    },
+    {
+      "original": "0xfffffff00ad1e170",
+      "original_size": 172,
+      "original_sha256": "3acebfb55ec964c3a547fbbcca07ed5d3ffefc5091aa09c3137bce583db96dbc",
+      "native_symbol": "_read_random",
+      "evidence": "(void *buf, u_int n): calls prng_funcs.refresh(prng_ctx) through the constant table at +0x768, then loops prng_funcs.generate(prng_ctx, cpu_number(), MIN(n, 256), buf) through +0x770; osfmk/prng/prng_random.c read_random with read_random_generate inlined (CCKPRNG_GENERATE_MAX_NBYTES 256). Called by corecrypto."
+    },
+    {
+      "original": "0xfffffff00abde90c",
+      "original_size": 308,
+      "original_sha256": "55e1b5e554730bab36213059f1bc00730d7fd682b6bf63a66b1f6774d4d47e78",
+      "native_symbol": "_lck_mtx_gate_try_close",
+      "evidence": "Source order: the only unmatched run between matched _lck_mtx_gate_alloc_init and _lck_mtx_gate_open has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and _lck_mtx_gate_try_close holds this position there (original 308 bytes, reference 12). Called by AppleImage4."
+    },
+    {
+      "original": "0xfffffff00abdea40",
+      "original_size": 284,
+      "original_sha256": "5af2096f4fcf9199049a7b876853b33d34e8b8e26d65fe5f492646bb77b8aa73",
+      "native_symbol": "_lck_mtx_gate_close",
+      "evidence": "Source order: the only unmatched run between matched _lck_mtx_gate_alloc_init and _lck_mtx_gate_open has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and _lck_mtx_gate_close holds this position there (original 284 bytes, reference 12). Called by AppleImage4."
+    },
+    {
+      "original": "0xfffffff00ac20880",
+      "original_size": 140,
+      "original_sha256": "e54771629d65498f627e64abfc9938f6c6e4d86062da80bb880052884e2d3d26",
+      "native_symbol": "_task_reference",
+      "evidence": "Source order: the only unmatched run between matched _task_deallocate_grp and _SENDING_NOTIFICATION__THIS_THREAD_IS_CONSUMING_TOO_MUCH_CPU has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and _task_reference holds this position there (original 140 bytes, reference 164). Called by CoreAnalyticsFamily,IOGPUFamily,IOHIDFamily,IOReportFamily,IOSurface."
+    },
+    {
+      "original": "0xfffffff00ac2090c",
+      "original_size": 68,
+      "original_sha256": "346830e15a8f45feb9dc46d6d769739adcfb40ea60bb6ae8435665a7ab04746c",
+      "native_symbol": "_task_deallocate",
+      "evidence": "Source order: the only unmatched run between matched _task_deallocate_grp and _SENDING_NOTIFICATION__THIS_THREAD_IS_CONSUMING_TOO_MUCH_CPU has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and _task_deallocate holds this position there (original 68 bytes, reference 96). Called by CoreAnalyticsFamily,IOGPUFamily,IOHIDFamily,IOReportFamily,IOSurface."
+    },
+    {
+      "original": "0xfffffff00ac475f4",
+      "original_size": 80,
+      "original_sha256": "23128e7c8529c846918e9ae9f51452820bf7eb733f1ef18a81849f6145d68321",
+      "native_symbol": "_zfree",
+      "evidence": "Source order: the only unmatched run between matched _zfree_nozero_n and _zfree_percpu has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and _zfree holds this position there (original 80 bytes, reference 92). Called by apfs."
+    },
+    {
+      "original": "0xfffffff00ac48238",
+      "original_size": 128,
+      "original_sha256": "8d3c95deebf0774c9957f793e211f69002884b2dfa997461ae3a61b3947d3c72",
+      "native_symbol": "_zone_require_ro",
+      "evidence": "Source order: the only unmatched run between matched _zalloc_ro and _zalloc_ro_mut has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and _zone_require_ro holds this position there (original 128 bytes, reference 144). Called by AppleMobileFileIntegrity,sandbox."
+    },
+    {
+      "original": "0xfffffff00ac9033c",
+      "original_size": 144,
+      "original_sha256": "d94bc6374125c24af3605a9e733d5f264fdb0187481b265fab3c2cb203febbc0",
+      "native_symbol": "_vm_kernel_addrhide",
+      "evidence": "Source order: the only unmatched run between matched _vm_kernel_addrhash and _vm_kernel_addrperm_external has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and _vm_kernel_addrhide holds this position there (original 144 bytes, reference 104). Called by IOGPUFamily,IOSurface."
+    },
+    {
+      "original": "0xfffffff00ad87160",
+      "original_size": 120,
+      "original_sha256": "771b957e12b31f01c86f56241d7462e1800cdb50913f5b868bbc0e05c5894819",
+      "native_symbol": "_cluster_max_io_size",
+      "evidence": "Source order: the only unmatched run between matched _cluster_init and _cluster_throttle_io_limit has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and _cluster_max_io_size holds this position there (original 120 bytes, reference 140). Called by apfs."
+    },
+    {
+      "original": "0xfffffff00ada1af4",
+      "original_size": 12,
+      "original_sha256": "29a3d38acb8a600e9719f081fad28d27a3bb22e4b4d88cbbf6894ca8e48a25eb",
+      "native_symbol": "_vnode_lookup",
+      "evidence": "mov x4, #0; b _vnode_lookupat (matched): bsd/vfs/kpi_vfs.c vnode_lookup(path, flags, vpp, ctx) = vnode_lookupat(..., NULL). Sandbox calls it as vnode_lookup(\"/private/var\", 1, &vp, ctx). An earlier source-order pin bound it to the same-size _vfs_mount_recovery, which returned 0 without setting vp: sandbox then called VNOP_IOCTL(NULL, ...) during devfs_kernel_mount (data abort, 2026-10-30)."
+    },
+    {
+      "original": "0xfffffff00add2190",
+      "original_size": 88,
+      "original_sha256": "2526994cc7e6766b5e2cf011e56f3efa8bc4fdea303332322b2c2d884cb5affe",
+      "native_symbol": "_vfs_vnodecovered_noblock",
+      "evidence": "Source order: the only unmatched run between matched _vfs_vnodecovered and _vfs_setdevvp has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and _vfs_vnodecovered_noblock holds this position there (original 88 bytes, reference 108). Called by sandbox."
+    },
+    {
+      "original": "0xfffffff00add40f8",
+      "original_size": 196,
+      "original_sha256": "fb65f5adb8e02fed48729e954684d986a80838739276d39d7e6ccb3aa0192813",
+      "native_symbol": "_vnode_setmountedon",
+      "evidence": "Source order: the only unmatched run between matched _vnode_ismountedon and _vnode_clearmountedon has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and _vnode_setmountedon holds this position there (original 196 bytes, reference 228). Called by apfs."
+    },
+    {
+      "original": "0xfffffff00adee60c",
+      "original_size": 84,
+      "original_sha256": "edd372c1874957b42e0e3929423ceebf60f4521c26f5f18d386357bf5409a085",
+      "native_symbol": "_decmpfs_cnode_free",
+      "evidence": "Source order: the only unmatched run between matched _decmpfs_cnode_alloc and _decmpfs_cnode_init has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and _decmpfs_cnode_free holds this position there (original 84 bytes, reference 96). Called by apfs."
+    },
+    {
+      "original": "0xfffffff00b092a0c",
+      "original_size": 416,
+      "original_sha256": "5a33e0d4ee0978d9c468903f55f26a7499126aa313be871c1eb8f8ac9d85f85c",
+      "native_symbol": "_ktriage_record",
+      "evidence": "Source order: the only unmatched run between matched _kdebug_storage_alloc and _ktriage_extract has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and _ktriage_record holds this position there (original 416 bytes, reference 492). Called by apfs."
+    },
+    {
+      "original": "0xfffffff00b0a34e0",
+      "original_size": 164,
+      "original_sha256": "9fd680155efe5f6e860d3f871d78a97a6c75499bc567e78181afea455a9efd19",
+      "native_symbol": "_csproc_get_platform_binary",
+      "evidence": "Source order: the only unmatched run between matched _csvnode_get_teamid and _csproc_get_platform_path has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and _csproc_get_platform_binary holds this position there (original 164 bytes, reference 204). Called by AppleMobileFileIntegrity,sandbox."
+    },
+    {
+      "original": "0xfffffff00b0dd71c",
+      "original_size": 120,
+      "original_sha256": "1464e4dd2a79f82931b0f0c2e6d234cf464dcbde62e587c76d48b5d82772dfcc",
+      "native_symbol": "_proc_ppid",
+      "evidence": "Source order: the only unmatched run between matched _proc_checkdeadrefs and _proc_original_ppid has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and _proc_ppid holds this position there (original 120 bytes, reference 136). Called by AppleMobileFileIntegrity,sandbox."
+    },
+    {
+      "original": "0xfffffff00b0de068",
+      "original_size": 368,
+      "original_sha256": "e7c577b28c4eb9e493475aed9e918df9d6b2ff3956d6f5410beaa3ad09fb230d",
+      "native_symbol": "_proc_parent",
+      "evidence": "Source order: the only unmatched run between matched _proc_setplatformdata and _proc_name has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and _proc_parent holds this position there (original 368 bytes, reference 600). Called by sandbox."
+    },
+    {
+      "original": "0xfffffff00b0e4f2c",
+      "original_size": 232,
+      "original_sha256": "989757634825b887141301b1ddef6f5552ae9ee2df6989b1b362681a6b1e1dc7",
+      "native_symbol": "_proc_get_syscall_filter_mask",
+      "evidence": "Source order: the only unmatched run between matched _proc_get_syscall_filter_mask_size and _proc_set_syscall_filter_mask has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and _proc_get_syscall_filter_mask holds this position there (original 232 bytes, reference 288). Called by sandbox."
+    },
+    {
+      "original": "0xfffffff00b28f6d4",
+      "original_size": 156,
+      "original_sha256": "5553302adae740c56d00f7eedbaf51101a5d9d10b2dec14fe482b9593842cb35",
+      "native_symbol": "__ZN11OSSerialize10setIndexedEb",
+      "evidence": "Source order: the only unmatched run between matched __ZN11OSSerialize18binaryWithCapacityEjPFPK15OSMetaClassBasePvPS_P12OSCollectionPK8OSSymbolS2_ES3_ and __ZN11OSSerialize15addBinaryObjectEPK15OSMetaClassBasejPKvjPj has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and __ZN11OSSerialize10setIndexedEb holds this position there (original 156 bytes, reference 156). Called by IOHIDFamily."
+    },
+    {
+      "original": "0xfffffff00b32cf8c",
+      "original_size": 308,
+      "original_sha256": "51508b5d53a929e37a741234e67e7b7011baff3b3c20c56cf6a3982bb5c792f3",
+      "native_symbol": "__ZN18IOMemoryDescriptor26ktraceEmitPhysicalSegmentsEv",
+      "evidence": "Source order: the only unmatched run between matched __ZN25IOGeneralMemoryDescriptor11wireVirtualEj and __ZN25IOGeneralMemoryDescriptor10writeBytesEyPKvy has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and __ZN18IOMemoryDescriptor26ktraceEmitPhysicalSegmentsEv holds this position there (original 308 bytes, reference 456). Called by IOSurface."
+    },
+    {
+      "original": "0xfffffff00b4077d4",
+      "original_size": 164,
+      "original_sha256": "8a0dac3d252fdc87f688272c9fbb482aef46b03c811a0894f3dcf38a1bf5257a",
+      "native_symbol": "_panic_with_options",
+      "evidence": "Source order: the only unmatched run between matched _Assert and _panic_with_options_and_initiator has the same length in this kernel and in the symbol-bearing RELEASE+LTO reference of xnu-12377, and _panic_with_options holds this position there (original 164 bytes, reference 72). Called by AppleARMWatchdogTimer."
+    },
+    {
+      "original": "0xfffffff00ad3ff40",
+      "original_size": 8,
+      "original_sha256": "5caeb23da292efcdf84e0d18d6c00be519c5feb7583b04b6aa0dbbe3ca6f3195",
+      "native_symbol": "_lck_spin_try_lock",
+      "evidence": "bti; b _hw_lock_try (matched). First of the two hw_lock_try wrappers after the matched _lck_spin_lock_grp, as lck_spin_try_lock / lck_spin_try_lock_grp in osfmk/arm/locks_arm.c."
+    },
+    {
+      "original": "0xfffffff00ad3ff50",
+      "original_size": 8,
+      "original_sha256": "9ca959f78525f414e0080a8c3ebc40f57d72dc065a7d4795c8727fa74a8f6863",
+      "native_symbol": "_lck_spin_unlock",
+      "evidence": "bti; b _hw_lock_unlock (matched). The only hw_lock_unlock wrapper in the lck_spin block, just before the matched _kdp_lck_spin_is_acquired: lck_spin_unlock in osfmk/arm/locks_arm.c. Called by 8 kexts (AppleImage4, AppleARMPlatform, ApplePMGR, apfs, ...)."
+    },
+    {
+      "original": "0xfffffff00b0de25c",
+      "original_size": 28,
+      "original_sha256": "0985a276dd3d175ca7f44e704160ad3c76824a445657006e513ebfadab51ea08",
+      "native_symbol": "_proc_best_name",
+      "evidence": "(proc_t p): returns p+0x56d (p_name) when its first byte is nonzero, else p+0x55c (p_comm); follows the matched _proc_name. bsd/kern/kern_proc.c proc_best_name."
+    },
+    {
+      "original": "0xfffffff00b3cfbc8",
+      "original_size": 36,
+      "original_sha256": "89b64e1b0f29c1be767f538adc2ca456d4aa674909bb8fa0d91dc5f4b577ba3b",
+      "native_symbol": "_PE_parse_boot_arg_str",
+      "evidence": "Shifts (name, buf, len) to x1-x3, x0 = boot-args command line, w4 = 1, then b _PE_parse_boot_argn_internal (matched): pexpert/gen/bootargs.c PE_parse_boot_arg_str (force_string TRUE). sandbox calls it with \"rd\" (sixth trap)."
+    },
+    {
+      "original": "0xfffffff00abc46ec",
+      "original_size": 16,
+      "original_sha256": "b0806f7d4b5367c8b9ca2c71a19ff61d7a72e5d88225ea2658028d5104a38c69",
+      "native_symbol": "_host_self",
+      "evidence": "Returns the address of a __DATA.__common global (realhost); the only function between the matched _host_get_io_main and _host_set_atm_diagnostic_flag, where osfmk/kern/host.c has host_self and host_priv_self, which return the same &realhost (identical code folded)."
+    },
+    {
+      "original": "0xfffffff00b0de6e0",
+      "original_size": 24,
+      "original_sha256": "aea2b55f8d66abe630c162c148a2eace9021fda1be01b90575a43db9d1b38486",
+      "native_symbol": "_proc_task",
+      "evidence": "(proc_t p): returns p + 0x768 (the task allocated after the proc) when p_lflag bit 0x2 (P_LHASTASK) is set, else NULL: bsd/kern/kern_proc.c proc_task. Follows the matched _proc_ucred_smr."
+    },
+    {
+      "original": "0xfffffff00b0e1f4c",
+      "original_size": 20,
+      "original_sha256": "cd5df1ddbf7d62221f6bdaabcd1830c0b12a713b3e86ab975f89e0c5b3e7815f",
+      "native_symbol": "_proc_is_translated",
+      "evidence": "(proc_t p): p ? (p_flag >> 17) & 1 : 0, bit 17 = P_TRANSLATED; the next function returns 0 (proc_is_classic). bsd/kern/kern_proc.c, after the matched _pgrp_enter_locked."
+    },
+    {
+      "original": "0xfffffff00b24dff4",
+      "original_size": 12,
+      "original_sha256": "eacee867bca8bd548e83141056717c7521637cf58fc5b0f7a6a52051439ece7b",
+      "native_symbol": "__ZNK11OSMetaClass13getSuperClassEv",
+      "evidence": "Returns this->superClassLink (+0x10); between the matched OSMetaClass::checkMetaCastWithName and OSMetaClass::printInstanceCounts, where libkern/c++/OSMetaClass.cpp has getSuperClass and getKmodName."
+    },
+    {
+      "original": "0xfffffff00b0a053c",
+      "original_size": 12,
+      "original_sha256": "616e3b44557d7376926e8ebd973895cf8ac7fe13cc148d0c3862c5e546e300b7",
+      "native_symbol": "_kauth_cred_getuid",
+      "evidence": "ldr w0, [x0, #0x18]; ret. One of five consecutive uid/gid getters before the matched _kauth_cred_getsvgid (+0x6c); offsets follow struct posix_cred at +0x18 (0x18 cr_uid), the order of bsd/kern/kern_credential.c."
+    },
+    {
+      "original": "0xfffffff00b0a0548",
+      "original_size": 12,
+      "original_sha256": "be8f2bb712fe5405d3e06b36561fe151f1172d46bcfdcb08af0bd4712ba81f8c",
+      "native_symbol": "_kauth_cred_getruid",
+      "evidence": "ldr w0, [x0, #0x1c]; ret. One of five consecutive uid/gid getters before the matched _kauth_cred_getsvgid (+0x6c); offsets follow struct posix_cred at +0x18 (0x1c cr_ruid), the order of bsd/kern/kern_credential.c."
+    },
+    {
+      "original": "0xfffffff00b0a0554",
+      "original_size": 12,
+      "original_sha256": "6240b6a6309c0e043e5ba016cc8eb9ee21d5247fabbea77e52c9cae3e90b0e38",
+      "native_symbol": "_kauth_cred_getsvuid",
+      "evidence": "ldr w0, [x0, #0x20]; ret. One of five consecutive uid/gid getters before the matched _kauth_cred_getsvgid (+0x6c); offsets follow struct posix_cred at +0x18 (0x20 cr_svuid), the order of bsd/kern/kern_credential.c."
+    },
+    {
+      "original": "0xfffffff00b0a0560",
+      "original_size": 12,
+      "original_sha256": "7c921fc862f95f93030a1bb1528f153f8ef915bb3f1bdd710390d820d403e1c5",
+      "native_symbol": "_kauth_cred_getgid",
+      "evidence": "ldr w0, [x0, #0x28]; ret. One of five consecutive uid/gid getters before the matched _kauth_cred_getsvgid (+0x6c); offsets follow struct posix_cred at +0x18 (0x28 cr_groups[0]), the order of bsd/kern/kern_credential.c."
+    },
+    {
+      "original": "0xfffffff00b0a056c",
+      "original_size": 12,
+      "original_sha256": "84cc57ef206a54cfeb0c1c53d6f94233e341ebab29cdbec6be52aa9d67a3f975",
+      "native_symbol": "_kauth_cred_getrgid",
+      "evidence": "ldr w0, [x0, #0x68]; ret. One of five consecutive uid/gid getters before the matched _kauth_cred_getsvgid (+0x6c); offsets follow struct posix_cred at +0x18 (0x68 cr_rgid), the order of bsd/kern/kern_credential.c."
+    },
+    {
+      "original": "0xfffffff00ad052bc",
+      "original_size": 96,
+      "original_sha256": "f6ccc88eded4f6ed253717fb648f6872e86b9999797cee8916122e595331f726",
+      "native_symbol": "_strncasecmp",
+      "evidence": "(s1, s2, n): returns 0 for n == 0, else folds A-Z to lower case on both sides and compares bytes until a difference, NUL or n: libkern/stdio string.c strncasecmp, right after the matched _strcasecmp (next: the 4-argument strbufcasecmp). Called by sandbox, apfs, AppleARMPlatform, IOMobileGraphicsFamily."
+    },
+    {
+      "original": "0xfffffff00b24f070",
+      "original_size": 44,
+      "original_sha256": "27e53dbbbf46e05f049eb579233d131cead74d11527edbadbdcef934d1c6f18c",
+      "native_symbol": "__ZN8OSObjectC2Ev",
+      "evidence": "OSObject::OSObject() base: stores the PAC-signed (pacda, discriminator 0xcda1) OSObject vtable at +0 and retainCount 1 at +8. One of four identical constructors between the matched OSObject_typed_operator_delete and OSObject::iterateObjects, in the order of the symbol-bearing RELEASE+LTO reference (C2Ev, C1Ev, C2EPK11OSMetaClass, C1EPK11OSMetaClass). Called by 12 kexts (CoreAnalyticsFamily trap)."
+    },
+    {
+      "original": "0xfffffff00b24f09c",
+      "original_size": 44,
+      "original_sha256": "27e53dbbbf46e05f049eb579233d131cead74d11527edbadbdcef934d1c6f18c",
+      "native_symbol": "__ZN8OSObjectC1Ev",
+      "evidence": "OSObject::OSObject() complete: stores the PAC-signed (pacda, discriminator 0xcda1) OSObject vtable at +0 and retainCount 1 at +8. One of four identical constructors between the matched OSObject_typed_operator_delete and OSObject::iterateObjects, in the order of the symbol-bearing RELEASE+LTO reference (C2Ev, C1Ev, C2EPK11OSMetaClass, C1EPK11OSMetaClass). Called by 12 kexts (CoreAnalyticsFamily trap)."
+    },
+    {
+      "original": "0xfffffff00b24f0c8",
+      "original_size": 44,
+      "original_sha256": "27e53dbbbf46e05f049eb579233d131cead74d11527edbadbdcef934d1c6f18c",
+      "native_symbol": "__ZN8OSObjectC2EPK11OSMetaClass",
+      "evidence": "OSObject::OSObject(const OSMetaClass *) base: stores the PAC-signed (pacda, discriminator 0xcda1) OSObject vtable at +0 and retainCount 1 at +8. One of four identical constructors between the matched OSObject_typed_operator_delete and OSObject::iterateObjects, in the order of the symbol-bearing RELEASE+LTO reference (C2Ev, C1Ev, C2EPK11OSMetaClass, C1EPK11OSMetaClass). Called by 12 kexts (CoreAnalyticsFamily trap)."
+    },
+    {
+      "original": "0xfffffff00b24f0f4",
+      "original_size": 44,
+      "original_sha256": "27e53dbbbf46e05f049eb579233d131cead74d11527edbadbdcef934d1c6f18c",
+      "native_symbol": "__ZN8OSObjectC1EPK11OSMetaClass",
+      "evidence": "OSObject::OSObject(const OSMetaClass *) complete: stores the PAC-signed (pacda, discriminator 0xcda1) OSObject vtable at +0 and retainCount 1 at +8. One of four identical constructors between the matched OSObject_typed_operator_delete and OSObject::iterateObjects, in the order of the symbol-bearing RELEASE+LTO reference (C2Ev, C1Ev, C2EPK11OSMetaClass, C1EPK11OSMetaClass). Called by 12 kexts (CoreAnalyticsFamily trap)."
+    },
+    {
+      "original": "0xfffffff00b3d1738",
+      "original_size": 44,
+      "original_sha256": "3d79ee9425d008d5ad022de036c2aca8bf7519a61361858c47a05fb74b4cfbc1",
+      "native_symbol": "_PE_i_can_has_debugger",
+      "evidence": "(uint32_t *debug_flags): if non-NULL stores debug_boot_arg, or 0 when the debug enable word is 0, then returns that word; follows the matched _PE_call_timebase_callback as in pexpert/arm/pe_init.c. Called by 11 kexts."
+    },
+    {
+      "original": "0xfffffff00b3d1764",
+      "original_size": 16,
+      "original_sha256": "8e24c02707b85078ffdf325aeca01a7e5a71633ef56ecccaaf39a0a78ee00e6c",
+      "native_symbol": "_PE_panic_debugging_enabled",
+      "evidence": "Returns one constant word; directly before the matched _PE_update_panic_crc, where pexpert/arm/pe_init.c has PE_panic_debugging_enabled."
+    },
+    {
+      "original": "0xfffffff00ab86b10",
+      "original_size": 52,
+      "original_sha256": "964bde8ab9402cea559d37b4392e351f2ce9065ecd5d9339d68ed93421373201",
+      "native_symbol": "_clock_get_uptime",
+      "evidence": "(uint64_t *result): *result = CNTVCTSS_EL0 + the per-CPU timebase offset (the mach_absolute_time read); follows the matched _mach_continuous_time. Called by 8 kexts."
+    },
+    {
+      "original": "0xfffffff00ad467f0",
+      "original_size": 16,
+      "original_sha256": "3a0f9b045134fc64d495700a609b9b2260508eef534a4e6a2d0a97ba7e1ecd69",
+      "native_symbol": "_ml_get_cpu_count",
+      "evidence": "Returns the word at 0xfffffff007e1125c = topology_info + 4 (num_cpus): the matched _ml_get_max_cpu_number reads max_cpu_id (+8) at 0xfffffff007e11260, so the struct starts at 0xfffffff007e11258. osfmk/arm64/machine_routines.c ml_get_cpu_count; sits before the matched _ml_get_boot_cpu_number. AppleARMPlatform trap."
+    },
+    {
+      "original": "0xfffffff00abfd9fc",
+      "original_size": 44,
+      "original_sha256": "e65480f23baa2b9b3f4c89f1f427056ef00cdab271310085fa292e0e24d9a226",
+      "native_symbol": "_preemption_enabled",
+      "evidence": "Returns 0 when the per-CPU preemption level ([tpidr_el1+0x1c0]) is non-zero, else whether DAIF has IRQ/FIQ unmasked: osfmk/kern/sched_prim.c preemption_enabled (get_preemption_level() == 0 && ml_get_interrupts_enabled())."
+    },
+    {
+      "original": "0xfffffff00ad3d804",
+      "original_size": 16,
+      "original_sha256": "7a19bae6d03d743d2533c0a4a80daae82d83cc1f203fead056edf43aaab50ae4",
+      "native_symbol": "_cpu_number",
+      "evidence": "Returns cpu_data->cpu_number (ldrh [tpidr_el1, #0x1b0]); directly after the matched _cpu_to_processor. Called by AppleARMPlatform and AppleARMWatchdogTimer."
+    },
+    {
+      "original": "0xfffffff00ad453bc",
+      "original_size": 8,
+      "original_sha256": "79fc3d25ecd2677ccc48955f54497e8bcae7d9c110e6afb44b1c13d3247185b6",
+      "native_symbol": "_ml_cpu_init_completed",
+      "evidence": "A single b to the matched _sched_cpu_init_completed: osfmk/arm64/machine_routines.c ml_cpu_init_completed."
+    },
+    {
+      "original": "0xfffffff00b3c1bdc",
+      "original_size": 24,
+      "original_sha256": "eb34ee04f1aade85fcaea53b3579301730cc5477a269f4b5f5421cda9f170852",
+      "native_symbol": "_IOPMRootDomainGetWillShutdown",
+      "evidence": "Returns a __bss flag != 0 (gWillShutdown); directly before the matched _registerSleepWakeInterest, the position of IOPMRootDomainGetWillShutdown in the symbol-bearing RELEASE+LTO reference of xnu-12377."
+    },
+    {
+      "original": "0xfffffff00b33ebc0",
+      "original_size": 16,
+      "original_sha256": "36c614153927e889ba546ff5d63d9e12d41556108c9ba5f965a537c849f64fef",
+      "native_symbol": "__ZN12IOPlatformIOD2Ev",
+      "evidence": "16 bytes right after the matched IOPlatformIO::IOPlatformIO(const OSMetaClass *); the symbol-bearing RELEASE+LTO reference of xnu-12377 has IOPlatformIO::~IOPlatformIO() (16 bytes) there."
+    },
+    {
+      "original": "0xfffffff00b34085c",
+      "original_size": 72,
+      "original_sha256": "18882fd0201cc37d5b070a4bc9847b61f5c6c3afc8dfdccee8969ce1e65e0a17",
+      "native_symbol": "__ZN24IOCPUInterruptControllerC1Ev",
+      "evidence": "72 bytes after the matched IOCPUInterruptController::operator new (112 bytes in both kernels); the symbol-bearing RELEASE+LTO reference of xnu-12377 continues C1Ev (72), C2Ev (72), IOCPURunPlatformQuiesceActions (140), IOCPURunPlatformActiveActions (140) and this kernel has 72, 72, 140, 140 before the matched IOCPURunPlatformPanicActions."
+    },
+    {
+      "original": "0xfffffff00b3408a4",
+      "original_size": 72,
+      "original_sha256": "18882fd0201cc37d5b070a4bc9847b61f5c6c3afc8dfdccee8969ce1e65e0a17",
+      "native_symbol": "__ZN24IOCPUInterruptControllerC2Ev",
+      "evidence": "Second of the 72, 72, 140, 140 run after IOCPUInterruptController::operator new; see the C1Ev pin."
+    },
+    {
+      "original": "0xfffffff00b3408ec",
+      "original_size": 140,
+      "original_sha256": "1d4bcc8d3ceca6ebe21250fc1bd79a8deb7d62ea98e41de0793c93cbc5beee65",
+      "native_symbol": "_IOCPURunPlatformQuiesceActions",
+      "evidence": "Third of the 72, 72, 140, 140 run after IOCPUInterruptController::operator new (iokit/Kernel/IOCPU.cpp); see the C1Ev pin."
+    },
+    {
+      "original": "0xfffffff00b340978",
+      "original_size": 140,
+      "original_sha256": "442de483eb5bf588f00a05507284538f59089b5bcd76e1211ae3769d835dfc9c",
+      "native_symbol": "_IOCPURunPlatformActiveActions",
+      "evidence": "Fourth of the 72, 72, 140, 140 run, before the matched IOCPURunPlatformPanicActions; see the C1Ev pin."
+    },
+    {
+      "original": "0xfffffff00ad3c5b8",
+      "original_size": 352,
+      "original_sha256": "96760776384a8ee4cdf01a6fd4b995b7981bbf772dcbb34ac91bd5087b96ef78",
+      "native_symbol": "_ml_arm_sleep",
+      "evidence": "Before the matched _cpu_machine_idle_init, after two functions of 156 and 20 bytes that equal cpu_timebase_init and cpu_cluster_id in the symbol-bearing RELEASE+LTO reference of xnu-12377, which then has ml_arm_sleep (osfmk/arm/cpu.c)."
+    },
+    {
+      "original": "0xfffffff00add5fcc",
+      "original_size": 80,
+      "original_sha256": "b0a3dd7f7cb8fa538470aed1884756c1f75bfc1b31dc9f4fdc5632c73f0475fb",
+      "native_symbol": "_VNOP_FSYNC",
+      "evidence": "VNOP wrapper: loads the address of the kernel vnodeop_desc whose vdesc_name is \"vnop_fsync\" (bsd/vfs/kpi_vfs.c VNOP_FSYNC). Apple 13432 reorders these wrappers, so the descriptor, not the position, identifies it."
+    },
+    {
+      "original": "0xfffffff00add7ab4",
+      "original_size": 72,
+      "original_sha256": "9955e9d465d0e358ebb1e39b402329d87ccdbfac6ff0d7bf17b94512079781d1",
+      "native_symbol": "_VNOP_STRATEGY",
+      "evidence": "VNOP wrapper: loads the address of the kernel vnodeop_desc whose vdesc_name is \"vnop_strategy\" (bsd/vfs/kpi_vfs.c VNOP_STRATEGY). Apple 13432 reorders these wrappers, so the descriptor, not the position, identifies it. APFS mount trap."
+    },
+    {
+      "original": "0xfffffff00add7afc",
+      "original_size": 72,
+      "original_sha256": "0fcc1519f61464fcef94c1779565692d4dea5c5c7901dba421b4bce7ac413f29",
+      "native_symbol": "_VNOP_BWRITE",
+      "evidence": "VNOP wrapper: loads the address of the kernel vnodeop_desc whose vdesc_name is \"vnop_bwrite\" (bsd/vfs/kpi_vfs.c VNOP_BWRITE). Apple 13432 reorders these wrappers, so the descriptor, not the position, identifies it."
+    },
+    {
+      "original": "0xfffffff00abdd208",
+      "original_size": 28,
+      "original_sha256": "1f866e13d5bb144c14941577a665234299a990b4f73bf0a99668ba3f2de676aa",
+      "native_symbol": "_lck_rw_gate_init",
+      "evidence": "(lock, gate): zeroes the gate and stores gt_type 0x60001; directly before the matched _lck_rw_gate_alloc_init, as osfmk/kern/locks.c lck_rw_gate_init."
+    },
+    {
+      "original": "0xfffffff00ac061c4",
+      "original_size": 48,
+      "original_sha256": "725715e3596421ab539852d7dbbb70c65e50e80f82a1f265d1ca35f485e3c9f1",
+      "native_symbol": "_smr_enter",
+      "evidence": "Disables preemption (level at [tpidr_el1+0x1c0]), then stores the SMR clock (+8) into this CPU's 128-byte slot of the per-CPU array (+0x10); directly before the matched _smr_leave (osfmk/kern/smr.c smr_enter)."
+    },
+    {
+      "original": "0xfffffff00ad7ab58",
+      "original_size": 12,
+      "original_sha256": "098eaedc005e3035dc4889826d8ab47dce01fc29661fd810127429e385054925",
+      "native_symbol": "_bufattr_setcpx",
+      "evidence": "str x1, [x0]: bap->ba_cpx = cpx. The bufattr accessor run before the matched _bufattr_dup follows bsd/vfs/vfs_bio.c: bufattr_cpx, bufattr_setcpx, bufattr_cpoff (+8 load), bufattr_setcpoff, bufattr_alloc, bufattr_free."
+    },
+    {
+      "original": "0xfffffff00ad7ab70",
+      "original_size": 12,
+      "original_sha256": "74526db3f2f991b070bcdbd3a8543bb836f8ea3c33b66da1fb9689b4d0e40609",
+      "native_symbol": "_bufattr_setcpoff",
+      "evidence": "str x1, [x0, #8]: bap->ba_cp_file_off = off, after the bufattr_cpoff +8 getter; see the bufattr_setcpx pin."
+    },
+    {
+      "original": "0xfffffff00ad7ab7c",
+      "original_size": 20,
+      "original_sha256": "52c0f13b54b0c022602b77f180bc6ee584f7130fff699baa2a0eaf1fba500510",
+      "native_symbol": "_bufattr_alloc",
+      "evidence": "kalloc_type of the bufattr type view (flags 4, Z_ZERO); see the bufattr_setcpx pin."
+    },
+    {
+      "original": "0xfffffff00ad7ab90",
+      "original_size": 20,
+      "original_sha256": "c9af2593ad38395d07c084d397c60185bf111ab18a5eb374cc3928945f614e60",
+      "native_symbol": "_bufattr_free",
+      "evidence": "kfree_type of the same view, directly before the matched _bufattr_dup; see the bufattr_setcpx pin."
+    },
+    {
+      "original": "0xfffffff00ad7b1e8",
+      "original_size": 12,
+      "original_sha256": "da7e370e67423a4cf1d966508772366c573f116fc6cf3a7279d8b3ed0fc72a60",
+      "native_symbol": "_buf_vnode",
+      "evidence": "ldr x0, [x0, #0x88] (b_vp); directly after the matched _buf_setdataptr, where bsd/vfs/vfs_bio.c has buf_vnode."
+    },
+    {
+      "original": "0xfffffff00ada5edc",
+      "original_size": 12,
+      "original_sha256": "fcd7772a4a9b1706f69b2ce8ae06654b9ef60cba595bd7eeb26bd605b633cc14",
+      "native_symbol": "_vnode_usecount",
+      "evidence": "ldr w0, [x0, #0x60] (v_usecount); between the matched _vnode_isinuse and _vnode_iocount, the order of bsd/vfs/vfs_subr.c (writecount, isinuse, usecount, iocount)."
+    },
+    {
+      "original": "0xfffffff00b0de818",
+      "original_size": 32,
+      "original_sha256": "2d767a25cad584c24f27d6565f9ff59e7702746ebe2d621f27345f5824766931",
+      "native_symbol": "_proc_is64bit",
+      "evidence": "(proc_t p): p ? (p_flag & P_LP64 (bit 2 of byte +0x444)) != 0 : 0; after the matched _proc_ucred_locked, as bsd/kern/kern_proc.c proc_is64bit."
+    },
+    {
+      "original": "0xfffffff00abdd25c",
+      "original_size": 312,
+      "original_sha256": "531750158ae2ddc5bbe95a253eeb23741fa441e3a6d303203617df5d5972ceb5",
+      "native_symbol": "_lck_rw_gate_destroy",
+      "evidence": "Exported (lock, gate) entry: reads the gate from x1 (ldr w8, [x1, #0x10]; type check 0x60000) with the static gate helper inlined. The lck_rw gate run after lck_rw_gate_alloc_init is 312, 348, 308, 284 bytes in both the lck_rw and lck_mtx blocks, osfmk/kern/locks.c order destroy, free, try_close, close. Called by APFS."
+    },
+    {
+      "original": "0xfffffff00abdd394",
+      "original_size": 348,
+      "original_sha256": "a2ea3223fefc4fd0a3bb44ae52768a9d341caad7e7e6bf23956b0cc5f5cafb14",
+      "native_symbol": "_lck_rw_gate_free",
+      "evidence": "Exported (lock, gate) entry: reads the gate from x1 (ldr w8, [x1, #0x10]; type check 0x60000) with the static gate helper inlined. The lck_rw gate run after lck_rw_gate_alloc_init is 312, 348, 308, 284 bytes in both the lck_rw and lck_mtx blocks, osfmk/kern/locks.c order destroy, free, try_close, close. "
+    },
+    {
+      "original": "0xfffffff00abdd4f0",
+      "original_size": 308,
+      "original_sha256": "1c58b0f0832311999d71fa2cbfbad06d080e17f9c14e8886229364bd3d1391dd",
+      "native_symbol": "_lck_rw_gate_try_close",
+      "evidence": "Exported (lock, gate) entry: reads the gate from x1 (ldr w8, [x1, #0x10]; type check 0x60000) with the static gate helper inlined. The lck_rw gate run after lck_rw_gate_alloc_init is 312, 348, 308, 284 bytes in both the lck_rw and lck_mtx blocks, osfmk/kern/locks.c order destroy, free, try_close, close. The matcher had bound it to the one-argument static gate_try_close(gate)."
+    },
+    {
+      "original": "0xfffffff00abdd624",
+      "original_size": 284,
+      "original_sha256": "edd42dc9e8b9a5704d450fcca9208afba91ebdb2c473b2eadbde9f00cbeb0e92",
+      "native_symbol": "_lck_rw_gate_close",
+      "evidence": "Exported (lock, gate) entry: reads the gate from x1 (ldr w8, [x1, #0x10]; type check 0x60000) with the static gate helper inlined. The lck_rw gate run after lck_rw_gate_alloc_init is 312, 348, 308, 284 bytes in both the lck_rw and lck_mtx blocks, osfmk/kern/locks.c order destroy, free, try_close, close. The matcher had bound it to the one-argument static gate_close(gate), so APFS's (lock, gate) call passed the lock as the gate: \"Gate used is invalid\" under VNOP_LOOKUP from devfs_kernel_mount (2026-10-30)."
+    },
+    {
+      "original": "0xfffffff00abde678",
+      "original_size": 312,
+      "original_sha256": "e022dfa324d1b580a3136d9aba620f5db16ce1b28ebb5aa682d1d2753ec0c5e7",
+      "native_symbol": "_lck_mtx_gate_destroy",
+      "evidence": "Exported (lock, gate) entry: reads the gate from x1 (ldr w8, [x1, #0x10]; type check 0x60000) with the static gate helper inlined. The lck_mtx gate run after lck_mtx_gate_alloc_init is 312, 348, 308, 284 bytes in both the lck_rw and lck_mtx blocks, osfmk/kern/locks.c order destroy, free, try_close, close. "
+    },
+    {
+      "original": "0xfffffff00abde7b0",
+      "original_size": 348,
+      "original_sha256": "12d11d407b43fb25d6cdc0497a74c49c8e0c29902041a5d40020c4830b5db86c",
+      "native_symbol": "_lck_mtx_gate_free",
+      "evidence": "Exported (lock, gate) entry: reads the gate from x1 (ldr w8, [x1, #0x10]; type check 0x60000) with the static gate helper inlined. The lck_mtx gate run after lck_mtx_gate_alloc_init is 312, 348, 308, 284 bytes in both the lck_rw and lck_mtx blocks, osfmk/kern/locks.c order destroy, free, try_close, close. "
+    },
+    {
+      "original": "0xfffffff00ac13a78",
+      "original_size": 32,
+      "original_sha256": "9a93d02a35e12565a488fa7ef3b04a2dfb1649e744cc6763fdbfc8cd4841b30c",
+      "native_symbol": "_task_set_cs_auxiliary_info",
+      "evidence": "(task, info): NULL task returns 4 (KERN_INVALID_ARGUMENT), else stores info into the task and returns 0: osfmk/kern/task.c task_set_cs_auxiliary_info. AMFI calls it from its execve label hook while launchd is exec'd (2026-10-30)."
+    },
+    {
+      "original": "0xfffffff00ac9c780",
+      "original_size": 16,
+      "original_sha256": "276ace16e28764284c8e4df85d50c3237f1260383e795a7daf32a736fa0e3f91",
+      "native_symbol": "_vm_map_unwire",
+      "evidence": "Sets x4 to a constant and b _vm_map_unwire_impl (matched): osfmk/vm/vm_map.c vm_map_unwire. Called by AMFI."
+    },
+    {
+      "original": "0xfffffff00b0a2bec",
+      "original_size": 12,
+      "original_sha256": "dc8e9afd348a80d12cda8cb1dc37d30bf8b0bf7740d5400715a80970442261a7",
+      "native_symbol": "_csblob_get_base_offset",
+      "evidence": "One of four accessors right after the matched _kern_config_is_development; the native kernel's csblob_get_base_offset, csblob_get_size and csblob_get_addr load +0x28, +0x40, +0x50 in that order, as these do (bsd/kern/ubc_subr.c). ldr x0, [x0, #0x28]."
+    },
+    {
+      "original": "0xfffffff00b0a2bf8",
+      "original_size": 12,
+      "original_sha256": "cc69ebf76870babe7c411c6192484957e0d33c8ac31e8007653d279554829f16",
+      "native_symbol": "_csblob_get_size",
+      "evidence": "One of four accessors right after the matched _kern_config_is_development; the native kernel's csblob_get_base_offset, csblob_get_size and csblob_get_addr load +0x28, +0x40, +0x50 in that order, as these do (bsd/kern/ubc_subr.c). ldr x0, [x0, #0x40]."
+    },
+    {
+      "original": "0xfffffff00b0a2c04",
+      "original_size": 12,
+      "original_sha256": "875ab0ba2d050f3b79837a6eb1fd33fbba22cfffcf10a560cbe17ea0ce5590fa",
+      "native_symbol": "_csblob_get_addr",
+      "evidence": "One of four accessors right after the matched _kern_config_is_development; the native kernel's csblob_get_base_offset, csblob_get_size and csblob_get_addr load +0x28, +0x40, +0x50 in that order, as these do (bsd/kern/ubc_subr.c). ldr x0, [x0, #0x50]."
+    },
+    {
+      "original": "0xfffffff00b0a2c10",
+      "original_size": 32,
+      "original_sha256": "84a8e4fedcc463f95b6313588355f1483969b79d660d459a970674a5b6f807e5",
+      "native_symbol": "_csblob_get_platform_binary",
+      "evidence": "One of four accessors right after the matched _kern_config_is_development; the native kernel's csblob_get_base_offset, csblob_get_size and csblob_get_addr load +0x28, +0x40, +0x50 in that order, as these do (bsd/kern/ubc_subr.c). blob ? blob->platform_binary (byte +0xdc in 13432, +0xac natively) : 0, the next accessor in ubc_subr.c."
+    },
+    {
+      "original": "0xfffffff00b0df0b0",
+      "original_size": 288,
+      "original_sha256": "af1d50bff102eeaabdc122a072047d7ac2ae7ac971ca0b9418e36bbde3c9fceb",
+      "native_symbol": "_proc_getexecutablevnode",
+      "evidence": "bsd/kern/kern_proc.c ends the block before proc_gettty with proc_getexecutablevnode and proc_getexecutablevnode_noblock; this kernel has 288- and 240-byte functions there before the matched _proc_gettty. Takes proc_lock (casa on p_mlock at +0x58), reads the PAC-signed p_textvp (+0x538), references it, unlocks and returns the vnode or NULL. AMFI calls it from mac_proc_check_inherit_ipc_ports during launchd's exec (2026-10-30)."
+    },
+    {
+      "original": "0xfffffff00b0df1d0",
+      "original_size": 240,
+      "original_sha256": "0c13d5cf99a394be1e9deb30adae336c94acbb16160b742a0a0e292e0ca8278b",
+      "native_symbol": "_proc_getexecutablevnode_noblock",
+      "evidence": "bsd/kern/kern_proc.c ends the block before proc_gettty with proc_getexecutablevnode and proc_getexecutablevnode_noblock; this kernel has 288- and 240-byte functions there before the matched _proc_gettty. The second, shorter function of the pair. Called by sandbox."
+    },
+    {
+      "original": "0xfffffff00b0a3b50",
+      "original_size": 272,
+      "original_sha256": "eb157b027aa0b365512270e76efe7851b64182853623440d320dcdd89e4ceb6e",
+      "native_symbol": "_csfg_get_teamid",
+      "evidence": "(struct fileglob *fg): fg_ops type DTYPE_VNODE, vnode from fg_data, vnode_lock, VREG, v_ubcinfo (+0x78) -> cs_blobs (+0x50) -> returns the blob pointer at +0xb8. The cs_blob layout of 13432 is the native one shifted by +0x30 (platform_binary +0xdc vs +0xac), and the native csblob_get_teamid reads csb_teamid at +0x88: bsd/kern/ubc_subr.c csfg_get_teamid. AMFI calls it from mac_file_check_mmap, the first syscall path of launchd/dyld (2026-10-30)."
+    },
+    {
+      "original": "0xfffffff00abd0d50",
+      "original_size": 80,
+      "original_sha256": "8ec1eecfe1d351fd1282d894352b3657363bb72352c7a5b4fdc5b9cf1b2e7b68",
+      "native_symbol": "_kern_os_zfree",
+      "evidence": "(zone, addr): reads z_self/z_stats from the zone, z_elem_size (+0x34), bzeroes the element and b zfree_ext: zfree(zone, addr) as osfmk/kern/kalloc.c kern_os_zfree under STRICT_IOKIT_FREE; directly between the matched _krealloc_shared_data and _kern_os_typed_free, the source order. AMFI's OSEntitlements release reaches it from cs_blob_cleanup (fcntl F_ADDFILESIGS, 2026-10-30; trap x0 = a zone in kernel data)."
+    },
+    {
+      "original": "0xfffffff00ac11bd8",
+      "original_size": 12,
+      "original_sha256": "3432f29aac3e853b6e0d7137fc4847657d9090733766ec83091d1194104842e8",
+      "native_symbol": "_task_is_privileged",
+      "evidence": "Kext pointers name this function (sandbox:__DATA_CONST); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at the function XnuPrelink pairs with _task_is_privileged (reviewed). Kexts are the same binaries in both collections, so the slot is the same import. Size and sha256 from the iPhone17,2 kernel's function starts. Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    },
+    {
+      "original": "0xfffffff00ac4c1dc",
+      "original_size": 16,
+      "original_sha256": "8d9d5229bb16beb4bde6c314115f5f8b3200d9140c9c9eb729fa5f5159dbd1e9",
+      "native_symbol": "_get_task_pidsuspended",
+      "evidence": "Kext pointers name this function (AppleH16ANEInterface:__DATA_CONST, IOHIDFamily:__DATA_CONST); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at the function XnuPrelink pairs with _get_task_pidsuspended (reviewed). Kexts are the same binaries in both collections, so the slot is the same import. Size and sha256 from the iPhone17,2 kernel's function starts. Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    },
+    {
+      "original": "0xfffffff00b115644",
+      "original_size": 48,
+      "original_sha256": "5487a428059967eb73ab77fef42a7d891f13c33f388e803d39e313fe761c2ecb",
+      "native_symbol": "_mbuf_datastart",
+      "evidence": "Kext pointers name this function (AppleOnboardSerial:__DATA_CONST, AppleUSBDeviceMux:__DATA_CONST, IOTimeSyncFamily:__DATA_CONST, ppp:__DATA_CONST); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at the function XnuPrelink pairs with _mbuf_datastart (reviewed). Kexts are the same binaries in both collections, so the slot is the same import. Size and sha256 from the iPhone17,2 kernel's function starts. Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    },
+    {
+      "original": "0xfffffff00b115674",
+      "original_size": 104,
+      "original_sha256": "285c9b9309942b3c4735e49887e8763b8621a032c6359ba78ac586e4dcb03b86",
+      "native_symbol": "_mbuf_setdata",
+      "evidence": "Kext pointers name this function (AppleOnboardSerial:__DATA_CONST, AppleUSBDeviceMux:__DATA_CONST, IONetworkingFamily:__DATA_CONST, IOTimeSyncFamily:__DATA_CONST, ppp:__DATA_CONST); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at the function XnuPrelink pairs with _mbuf_setdata (reviewed). Kexts are the same binaries in both collections, so the slot is the same import. Size and sha256 from the iPhone17,2 kernel's function starts. Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    },
+    {
+      "original": "0xfffffff00b11b6ec",
+      "original_size": 236,
+      "original_sha256": "64b850f3efe47508450e74ae0ff9b53830638e158e7047a486e3ffa031fe916e",
+      "native_symbol": "_csm_resolve_os_entitlements_from_proc",
+      "evidence": "Kext pointers name this function (AppleMobileFileIntegrity:__DATA_CONST); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at the function XnuPrelink pairs with _csm_resolve_os_entitlements_from_proc (reviewed). Kexts are the same binaries in both collections, so the slot is the same import. Size and sha256 from the iPhone17,2 kernel's function starts. Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    },
+    {
+      "original": "0xfffffff00b2a7e74",
+      "original_size": 284,
+      "original_sha256": "2c40fd65a5ba24daf77b354da44c0c2c934d495f54d17dbf111370dd34842318",
+      "native_symbol": "__ZN9IOService12Start_InvokeE5IORPCP15OSMetaClassBasePFiS2_PS_E",
+      "evidence": "Kext pointers name this function (IOHIDFamily:__DATA_CONST, IOSkywalkFamily:__DATA_CONST, IOStorageFamily:__DATA_CONST, IOTimeSyncFamily:__DATA_CONST, corecapture:__DATA_CONST); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at the function XnuPrelink pairs with __ZN9IOService12Start_InvokeE5IORPCP15OSMetaClassBasePFiS2_PS_E (reviewed). Kexts are the same binaries in both collections, so the slot is the same import. Size and sha256 from the iPhone17,2 kernel's function starts. Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    },
+    {
+      "original": "0xfffffff00b2a7f90",
+      "original_size": 284,
+      "original_sha256": "ae77c292366b4a40d011f90c7d7c3629cc68c44fb671b8c9df9851d6c48ac18f",
+      "native_symbol": "__ZN9IOService11Stop_InvokeE5IORPCP15OSMetaClassBasePFiS2_PS_E",
+      "evidence": "Kext pointers name this function (IOHIDFamily:__DATA_CONST, IOSkywalkFamily:__DATA_CONST, IOStorageFamily:__DATA_CONST, IOTimeSyncFamily:__DATA_CONST, corecapture:__DATA_CONST); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at the function XnuPrelink pairs with __ZN9IOService11Stop_InvokeE5IORPCP15OSMetaClassBasePFiS2_PS_E (reviewed). Kexts are the same binaries in both collections, so the slot is the same import. Size and sha256 from the iPhone17,2 kernel's function starts. Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    },
+    {
+      "original": "0xfffffff00b36ae4c",
+      "original_size": 68,
+      "original_sha256": "733c3d1deeb6a84f14f002c6bc55029f14eadbd3c09935b3cf0bde76e4a06179",
+      "native_symbol": "_IOCircularDataQueueCopyLatest",
+      "evidence": "Kext pointers name this function (IOHIDFamily:__DATA_CONST); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at the function XnuPrelink pairs with _IOCircularDataQueueCopyLatest (reviewed). Kexts are the same binaries in both collections, so the slot is the same import. Size and sha256 from the iPhone17,2 kernel's function starts. Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    },
+    {
+      "original": "0xfffffff00b1155a4",
+      "original_size": 16,
+      "original_sha256": "93e2981462c2821d47fbfaff18e8793719c582e5b2f73601bf22ba9476eddf88",
+      "native_symbol": "_mbuf_data",
+      "evidence": "Kext pointers name this function (AppleOnboardSerial, AppleUSBDeviceMux); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at the function XnuPrelink pairs with _mbuf_data (reviewed). Kexts are the same binaries in both collections, so the slot is the same import. Size and sha256 from the iPhone17,2 kernel's function starts. Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    },
+    {
+      "original": "0xfffffff00b117014",
+      "original_size": 764,
+      "original_sha256": "d8c1e0e758dc5425db38e8dc8e3f76018dd97d85831d1047b9a761ec5b29891f",
+      "native_symbol": "_mbuf_copyback",
+      "evidence": "Kext pointers name this function (AppleIPAppender, AppleUSBDeviceMux); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at the function XnuPrelink pairs with _mbuf_copyback (reviewed). Kexts are the same binaries in both collections, so the slot is the same import. Size and sha256 from the iPhone17,2 kernel's function starts. Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    },
+    {
+      "original": "0xfffffff00b3c9554",
+      "original_size": 76,
+      "original_sha256": "7d002b618257b2c78c8f2305600363fd5c52d5bf021ae2e82313c7d19a04ebb4",
+      "native_symbol": "__ZN14IOPMrootDomain9isLPWModeEv",
+      "evidence": "Kext pointers name this function (IOAccessoryManager); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at the function XnuPrelink pairs with __ZN14IOPMrootDomain9isLPWModeEv (reviewed). Kexts are the same binaries in both collections, so the slot is the same import. Size and sha256 from the iPhone17,2 kernel's function starts. Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    }
+  ],
+  "data": [
+    {
+      "original": "0xfffffff00b70c680",
+      "native_symbol": "_vfs_smr",
+      "addend": 0,
+      "evidence": "Referenced by nchinit, resize_namecache, vntblinit, vfs_mountroot, mount_common and dounmount; holds {2, 2}, the SMR_SEQ_INIT clock; APFS reaches it as _apfs_smr, the Private.exports alias of _vfs_smr. Source: osfmk/kern/smr.h SMR_SEQ_INIT, config/Private.exports. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b7a5680",
+      "native_symbol": "_gIOParentMatchKey",
+      "addend": 0,
+      "evidence": "IOService::initialize stores the OSSymbol made from \"IOParentMatch\" here, after gIOLocationMatchKey (\"IOLocationMatch\"); IOService::matchPassive reads it right before gIOLocationMatchKey. Source: iokit/Kernel/IOService.cpp. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b7a76c0",
+      "native_symbol": "_gIOAllCPUInitializedKey",
+      "addend": 0,
+      "evidence": "IOService::initialize stores the OSSymbol made from \"IOAllCPUInitialized\" here; cpu_boot_thread reads it. Same identity as the reviewed 23F84 entry. Source: iokit/Kernel/IOService.cpp gIOAllCPUInitializedKey. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff007ec40c8",
+      "native_symbol": "__ZN8OSObject9metaClassE",
+      "addend": 0,
+      "evidence": "Constant slot whose only pointer is OSObject::gMetaClass; kexts load it through their GOT. Source: libkern/c++/OSObject.cpp OSDefineMetaClass metaClass pointer. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff007ec40c0",
+      "native_symbol": "__ZN12OSCollection9metaClassE",
+      "addend": 0,
+      "evidence": "Constant slot whose only pointer is OSCollection::gMetaClass; IOSurface loads it through its GOT. Source: libkern/c++/OSCollection.cpp. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff007ef16c8",
+      "native_symbol": "__ZN18IOMemoryDescriptor9metaClassE",
+      "addend": 0,
+      "evidence": "Constant slot whose only pointer is IOMemoryDescriptor::gMetaClass; kexts load it through their GOT. Source: iokit/Kernel/IOMemoryDescriptor.cpp. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff007ec4150",
+      "native_symbol": "__ZN12IOUserClient9metaClassE",
+      "addend": 0,
+      "evidence": "Constant slot whose only pointer is IOUserClient::gMetaClass; AppleARMPlatform loads it through its GOT. Source: iokit/Kernel/IOUserClient.cpp. [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
+    },
+    {
+      "original": "0xfffffff00b70cff0",
+      "native_symbol": "_vnop_kqfilt_add_desc",
+      "addend": 0,
+      "evidence": "struct vnodeop_desc whose vdesc_name (+8) points to the string \"vnop_kqfilt_add\"; one of the 0x40-byte descriptors in the kernel __DATA run with vnop_compound_open .. vnop_removenamedstream. bsd/vfs/vnode_if.c vnop_kqfilt_add_desc. APFS's vnode operation table references it (vfs_fsadd \"bad operation\" when unmapped)."
+    },
+    {
+      "original": "0xfffffff00b70d030",
+      "native_symbol": "_vnop_kqfilt_remove_desc",
+      "addend": 0,
+      "evidence": "struct vnodeop_desc whose vdesc_name (+8) points to the string \"vnop_kqfilt_remove\"; one of the 0x40-byte descriptors in the kernel __DATA run with vnop_compound_open .. vnop_removenamedstream. bsd/vfs/vnode_if.c vnop_kqfilt_remove_desc. APFS's vnode operation table references it (vfs_fsadd \"bad operation\" when unmapped)."
+    },
+    {
+      "original": "0xfffffff00b70d070",
+      "native_symbol": "_vnop_monitor_desc",
+      "addend": 0,
+      "evidence": "struct vnodeop_desc whose vdesc_name (+8) points to the string \"vnop_monitor\"; one of the 0x40-byte descriptors in the kernel __DATA run with vnop_compound_open .. vnop_removenamedstream. bsd/vfs/vnode_if.c vnop_monitor_desc. APFS's vnode operation table references it (vfs_fsadd \"bad operation\" when unmapped)."
+    },
+    {
+      "original": "0xfffffff00b70d0b0",
+      "native_symbol": "_vnop_getnamedstream_desc",
+      "addend": 0,
+      "evidence": "struct vnodeop_desc whose vdesc_name (+8) points to the string \"vnop_getnamedstream\"; one of the 0x40-byte descriptors in the kernel __DATA run with vnop_compound_open .. vnop_removenamedstream. bsd/vfs/vnode_if.c vnop_getnamedstream_desc. APFS's vnode operation table references it (vfs_fsadd \"bad operation\" when unmapped)."
+    },
+    {
+      "original": "0xfffffff00b70d0f0",
+      "native_symbol": "_vnop_makenamedstream_desc",
+      "addend": 0,
+      "evidence": "struct vnodeop_desc whose vdesc_name (+8) points to the string \"vnop_makenamedstream\"; one of the 0x40-byte descriptors in the kernel __DATA run with vnop_compound_open .. vnop_removenamedstream. bsd/vfs/vnode_if.c vnop_makenamedstream_desc. APFS's vnode operation table references it (vfs_fsadd \"bad operation\" when unmapped)."
+    },
+    {
+      "original": "0xfffffff00b70d130",
+      "native_symbol": "_vnop_removenamedstream_desc",
+      "addend": 0,
+      "evidence": "struct vnodeop_desc whose vdesc_name (+8) points to the string \"vnop_removenamedstream\"; one of the 0x40-byte descriptors in the kernel __DATA run with vnop_compound_open .. vnop_removenamedstream. bsd/vfs/vnode_if.c vnop_removenamedstream_desc. APFS's vnode operation table references it (vfs_fsadd \"bad operation\" when unmapped)."
+    },
+    {
+      "original": "0xfffffff007e5a7f0",
+      "native_symbol": "__ZN12OSCollection9metaClassE",
+      "addend": 0,
+      "evidence": "Kext pointers name this address (IOSurface); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at 0xfffffe0007ed80c0, which XnuPrelink pairs with __ZN12OSCollection9metaClassE (reviewed). Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    },
+    {
+      "original": "0xfffffff007e5a7f8",
+      "native_symbol": "__ZN8OSObject9metaClassE",
+      "addend": 0,
+      "evidence": "Kext pointers name this address (AppleARMPMU, AppleDiagnosticDataAccessReadOnly, AppleEmbeddedTempSensor, AppleEmbeddedUSBHost, AppleHIDTransport, AppleHPM, ...); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at 0xfffffe0007ed80c8, which XnuPrelink pairs with __ZN8OSObject9metaClassE (reviewed). Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    },
+    {
+      "original": "0xfffffff007e5a880",
+      "native_symbol": "__ZN12IOUserClient9metaClassE",
+      "addend": 0,
+      "evidence": "Kext pointers name this address (AppleARMPlatform, AppleEmbeddedPCIE, AppleFirmwareKit, IOStreamFamily, IOUSBHostFamily); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at 0xfffffe0007ed8150, which XnuPrelink pairs with __ZN12IOUserClient9metaClassE (reviewed). Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    },
+    {
+      "original": "0xfffffff007e87df8",
+      "native_symbol": "__ZN18IOMemoryDescriptor9metaClassE",
+      "addend": 0,
+      "evidence": "Kext pointers name this address (AppleFirmwareKit, DiskImages, IOBiometricFamily, IOHIDFamily, IOPCIFamily, IOReportFamily, ...); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at 0xfffffe0007f056c8, which XnuPrelink pairs with __ZN18IOMemoryDescriptor9metaClassE (reviewed). Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    },
+    {
+      "original": "0xfffffff00b71bd94",
+      "native_symbol": "_gPESerialBaud",
+      "addend": 0,
+      "evidence": "Kext pointers name this address (IOSerialFamily); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at 0xfffffe000b89fe14, which XnuPrelink pairs with _gPESerialBaud (reviewed). Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    },
+    {
+      "original": "0xfffffff00b78fd98",
+      "native_symbol": "_tk_rawcc",
+      "addend": 0,
+      "evidence": "Kext pointers name this address (IOSerialFamily); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at 0xfffffe000b914a18, which XnuPrelink pairs with _tk_rawcc (reviewed). Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    },
+    {
+      "original": "0xfffffff00b78fda0",
+      "native_symbol": "_tk_nin",
+      "addend": 0,
+      "evidence": "Kext pointers name this address (IOSerialFamily, ppp); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at 0xfffffe000b914a20, which XnuPrelink pairs with _tk_nin (reviewed). Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    },
+    {
+      "original": "0xfffffff00b792640",
+      "native_symbol": "_gIOParentMatchKey",
+      "addend": 0,
+      "evidence": "Kext pointers name this address (AppleEmbeddedPCIE, AppleHIDTransportSCMCommon, AppleHIDTransportSPI, AppleHPM, ApplePMGR, AppleSPU, ...); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at 0xfffffe000b929680, which XnuPrelink pairs with _gIOParentMatchKey (reviewed). Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    },
+    {
+      "original": "0xfffffff00b794680",
+      "native_symbol": "_gIOAllCPUInitializedKey",
+      "addend": 0,
+      "evidence": "Kext pointers name this address (AppleARMPlatform, AppleARMWatchdogTimer, AppleProcessorTrace); at the same entry, segment and offset the iPad17,3 38e6d9fa collection points at 0xfffffe000b92b6c0, which XnuPrelink pairs with _gIOAllCPUInitializedKey (reviewed). Derived by UniXNU-aston scripts/derive-fileset-pins.py."
+    }
+  ],
+  "sites": [
+    {
+      "site": "0xfffffff0080c85d0",
+      "native_symbol": "_unixnu_kernel_stack_shift",
+      "evidence": "AppleMobileFileIntegrity's GOT slot for PAGE_SHIFT_CONST. Its only reader is the CoreEntitlements DER iterator's stack check (sp & ((1 << *slot) - 1) < 0x80 returns error 2), which assumes the stack base is aligned to 1 << shift, as on 16 KiB-page Apple kernels where the two lower guard pages are 32 KiB. On the native 4 KiB kernel the stack starts 8 KiB into a 32 KiB-aligned allocation, so the page shift (and 14) give false out-of-stack errors at fixed call depths (OSEntitlements copyDictionary failed with 14 on the exec path). Bound to unixnu_kernel_stack_shift, the allocation alignment shift (15), for which sp & mask stays at least 8 KiB inside any stack. The other ~70 components keep PAGE_SHIFT_CONST for page arithmetic. iPhone17,2: the only AppleMobileFileIntegrity pointer to PAGE_SHIFT_CONST (0xfffffff007dec770), at __DATA_CONST+0x6dc0 as on iPad17,3 (0xfffffe0008136458); kc-port rejected the iPad slot only because its target address differs. Reproduced on ishtar: \"AMFI: failed to create OSDictionary copy: 14\" @OSEntitlements.cpp:863 on launchd's first spawn (2026-10-30)."
+    }
+  ]
+}

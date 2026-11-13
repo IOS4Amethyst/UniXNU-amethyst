@@ -70,6 +70,6 @@ for offset, blob in extents:
 assert superblocks and max(superblocks)[1] == 0x40, superblocks
 assert report['bytes'] == logical
 report.update(volume_uuid=expected, apfs_role='Data', ram_only=True, hardware_tested=False,
-              role_source='diskutil apfs changeVolumeRole', os_build='24A446', product='iPhone15,4')
+              role_source='diskutil apfs changeVolumeRole', os_build='24A446', product='iPhone17,2')
 args.output.with_suffix('.json').write_text(json.dumps(report, indent=2) + '\n')
 print(json.dumps(report, indent=2))

@@ -1,3 +1,16 @@
+# Active donor migration — iPhone17,2 / D94AP
+
+Use `ios-27.0.1-24A446-d94ap`, checked-in donor profile and reviewed fixture
+additions. Root OS UUID `E3F4AED0-4454-4D5B-833C-E27E99C4F67B`, SystemOS UUID
+`8B599D21-9ABD-4050-8BA2-C61349890BED`; kernel SHA
+`fa07057bf34f33af1ec26681ad0c87c13e5aaa548a300740eddb0e92876e5f95`.
+Verified root policies: run43184772128. New D94 Data seed required; old Data UUID
+must not be reused without an explicit content/provenance audit. Five private
+imports remain unsupported; matching success is not runtime qualification.
+Everything below that references iPhone15,4 is historical bring-up evidence.
+
+---
+
 # iOS 27 (`ios27`) bring-up state
 
 Branch `ios27` moves the port from iPadOS 17.7.11 to iOS 27.0.1 (`24A446`) with

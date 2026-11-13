@@ -45,7 +45,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--core', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--profile', default='ios-27.0.1-24A446')
+    parser.add_argument('--profile', default='ios-27.0.1-24A446-d94ap')
     args = parser.parse_args()
     if platform.system() != 'Darwin':
         parser.error('AEA decryption and read-only image attachment require macOS')

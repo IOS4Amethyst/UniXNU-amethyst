@@ -6,7 +6,7 @@
  #include <machine/psl.h>
 +#if __arm64__
 +#include <machine/machine_routines.h>
-+#include <machine/thread.h>
++#include <arm/thread.h>
 +#include <mach/arm/thread_status.h>
 +#include <arm64/proc_reg.h>
 +#include <sys/subr_prf.h>

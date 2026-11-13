@@ -38,7 +38,7 @@ jobs:
         working-directory: unixnu-core
         run: |
           python3 - <<'PY'
-          import hashlib, json, plistlib, subprocess, sys, tomllib
+          import hashlib, json, plistlib, struct, subprocess, sys, tomllib, uuid
           from pathlib import Path
           from types import SimpleNamespace
           sys.path.insert(0, 'scripts')
@@ -61,8 +61,25 @@ jobs:
           try:
               # The decrypted whole OS image is pinned by the D94 profile; record launchd identity below.
               assert hashlib.sha256(image.read_bytes()).hexdigest() == profile['root']['os_image_sha256']
-              subprocess.run([sys.executable, 'scripts/make-data-seed.py', str(mount), str(output/'data.dbr'), '--gib', '2', '--build', '24A446'], check=True)
+              # The upstream creator requires >=3GiB. The verified role tool
+              # shrinks APFS before truncation to the volatile backend's2GiB ceiling.
+              subprocess.run([sys.executable, 'scripts/make-data-seed.py', str(mount), str(output/'initial.dbr'), '--gib', '3', '--build', '24A446'], check=True)
+              _, regions = packed_ramdisk.regions((output/'initial.dbr').read_bytes())
+              identities = set()
+              for _, blob in regions:
+                  for at in range(0, len(blob), 4096):
+                      page = blob[at:at+4096]
+                      if page[32:36] == b'APSB':
+                          identities.add(str(uuid.UUID(bytes=bytes(page[0xf0:0x100]))).upper())
+              assert len(identities) == 1, identities
+              installation_uuid = identities.pop()
+              device_repo = Path.cwd().parent
+              subprocess.run([sys.executable, str(device_repo/'scripts/set-ram-data-role.py'), str(Path.cwd()), str(output/'initial.dbr'), str(output/'data.dbr'), '--uuid', installation_uuid], check=True)
               report, _ = packed_ramdisk.inspect(output/'data.dbr')
+              assert report['bytes'] == 2 * 1024**3
+              role = json.loads((output/'data.json').read_text())
+              assert role['apfs_role'] == 'Data' and role['volume_uuid'] == installation_uuid
+              report.update(volume_uuid=installation_uuid, apfs_role='Data')
               report.update(os_build='24A446', product='iPhone17,2', source_launchd_sha256=hashlib.sha256((mount/'sbin/launchd').read_bytes()).hexdigest(), ram_only=True, hardware_tested=False)
               (output/'seed.json').write_text(json.dumps(report, indent=2)+'\n')
               print(json.dumps(report, indent=2))

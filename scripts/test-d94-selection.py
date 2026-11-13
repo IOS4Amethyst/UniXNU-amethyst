@@ -20,7 +20,8 @@ for name in ('ios27-kernel.yml', 'ios27-root-policies.yml'):
     assert 'options: [d94ap]' in text and 'default: d94ap' in text
     assert 'OS_PROFILE: ios-27.0.1-24A446-d94ap' in text
 seed = (root / '.github/workflows/ios27-data-seed.yml').read_text()
-assert "product='iPhone17,2'" in seed and "'--gib', '2'" in seed
+assert "product='iPhone17,2'" in seed and "'--gib', '3'" in seed
+assert 'set-ram-data-role.py' in seed and "assert report['bytes'] == 2 * 1024**3" in seed
 assert 'c640246d38aaeb2d' not in seed
 config = (root / 'configs/ios27_data_defconfig').read_text()
 assert 'CONFIG_XNU_OWNER_DATA_MOUNT=n' in config

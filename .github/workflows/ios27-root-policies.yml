@@ -8,6 +8,10 @@ on:
         type: choice
         options: [d94ap]
         default: d94ap
+      export_root_inputs:
+        description: Export encrypted verified OS/SystemOS inputs for host root-image assembly
+        type: boolean
+        default: false
   push:
     branches: [ios27]
     paths:
@@ -22,6 +26,7 @@ jobs:
   policies:
     runs-on: macos-15-intel
     timeout-minutes: 180
+    environment: ARTIFACT_PASSPHRASE
     env:
       OS_PROFILE: ios-27.0.1-24A446-d94ap
     steps:
@@ -85,6 +90,26 @@ jobs:
             ${{ runner.temp }}/ios27-policies/*/verification.json
           if-no-files-found: error
           retention-days: 7
+      - name: Encrypt verified root-image inputs
+        if: inputs.export_root_inputs
+        env:
+          ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          test -n "$ARTIFACT_PASSPHRASE"
+          # No deployment/flash command: these unchanged images are host inputs.
+          tar -czf - -C "$RUNNER_TEMP" ios27-images/OS.raw ios27-images/SystemOS.raw ios27-policies |
+            openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:ARTIFACT_PASSPHRASE \
+              -out "$RUNNER_TEMP/d94-root-inputs.tar.gz.enc"
+      - name: Upload encrypted root-image inputs
+        if: inputs.export_root_inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios27-d94ap-root-inputs-encrypted
+          path: ${{ runner.temp }}/d94-root-inputs.tar.gz.enc
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
       - name: Remove temporary owner key
         if: always()
         run: rm -f "$RUNNER_TEMP/ios27-owner/owner.pem"

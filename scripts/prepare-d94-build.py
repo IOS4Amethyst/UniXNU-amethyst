@@ -58,6 +58,6 @@ board.write_text(t)
 series = a.device / 'patches/xnu/series'
 text = series.read_text()
 assert 'native-kernel-stack-shift.patch' not in text
-series.write_text(text.rstrip() + '\nnative-kernel-stack-shift.patch\nnative-release-panic-hook.patch\nnative-d94-sanitizer.patch\n')
+series.write_text(text.rstrip() + '\nnative-kernel-stack-shift.patch\nnative-release-panic-hook.patch\nnative-d94-sanitizer.patch\nnative-lockdown-public-state.patch\nnative-pid1-exit-diagnostic.patch\n')
 print(f'PASS: D94 kernel-only checkout;{len(f["functions"])}function/{len(f["data"])}data anchors; SM7635/RAM-only retained')
 print('NOT PAYLOAD READY: install matching verified D94 policies and Data; phone roots require separate authorization')

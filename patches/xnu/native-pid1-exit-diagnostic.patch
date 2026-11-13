@@ -1,0 +1,122 @@
+--- a/bsd/kern/kern_exit.c
++++ b/bsd/kern/kern_exit.c
+@@ -75,6 +75,13 @@
+ 
+ #include <machine/reg.h>
+ #include <machine/psl.h>
++#if __arm64__
++#include <machine/machine_routines.h>
++#include <machine/thread.h>
++#include <mach/arm/thread_status.h>
++#include <arm64/proc_reg.h>
++#include <sys/subr_prf.h>
++#endif
+ #include <stdatomic.h>
+ 
+ #include <sys/param.h>
+@@ -1961,6 +1968,94 @@
+ #endif /* (DEVELOPMENT || DEBUG) && CONFIG_COREDUMP */
+ }
+ 
++#if __arm64__
++/* Diagnostic-only opt-in; no change to exit reason, signal delivery or panic. */
++static TUNABLE(uint32_t, pid1_exit_diag, "pid1-exit-diag", 0);
++static TUNABLE(uint32_t, pid1_exit_hold, "pid1-exit-hold", 10);
++
++static void __printflike(1, 2)
++pid1_exit_log(const char *fmt, ...)
++{
++	va_list ap;
++	va_start(ap, fmt);
++	/* Bypass os_log filtering; TOLOG acquires/releases its own msgbuf lock. */
++	prf(fmt, ap, TOLOG, NULL);
++	va_end(ap);
++}
++
++static void
++pid1_exit_diagnostic(proc_t p, int rv)
++{
++	if (!pid1_exit_diag || p != initproc) {
++		return;
++	}
++	pid1_exit_log("pid1-exit: status=0x%x signal=%d exit=%d ns=%u code=0x%llx\n",
++	    rv, WTERMSIG(rv), WEXITSTATUS(rv),
++	    p->p_exit_reason ? p->p_exit_reason->osr_namespace : 0,
++	    p->p_exit_reason ? (unsigned long long)p->p_exit_reason->osr_code : 0ULL);
++	/* Never read the logger/jetsam thread's registers as PID 1's state. */
++	if (current_proc() != p || get_threadtask(current_thread()) != proc_task(p) ||
++	    !ml_get_interrupts_enabled() || !preemption_enabled()) {
++		pid1_exit_log("pid1-exit: skip state/hold: foreign or non-schedulable context\n");
++		return;
++	}
++	arm_saved_state_t *ss = find_user_regs(current_thread());
++	if (ss == NULL || !is_saved_state64(ss) ||
++	    !PSR64_IS_USER64(get_saved_state_cpsr(ss))) {
++		pid1_exit_log("pid1-exit: no ARM64 EL0 saved state\n");
++	} else {
++		uint64_t pc = get_saved_state_pc(ss), lr = get_saved_state_lr(ss);
++		uint64_t sp = get_saved_state_sp(ss), fp = get_saved_state_fp(ss);
++		vm_map_t map = get_task_map(proc_task(p));
++		uint64_t lo = vm_map_min(map), hi = vm_map_max(map);
++		pid1_exit_log("pid1-exit: pc=0x%llx lr=0x%llx sp=0x%llx fp=0x%llx user=[0x%llx,0x%llx) pc-valid=%d\n",
++		    pc, lr, sp, fp, lo, hi, pc >= lo && pc < hi && !(pc & 3));
++		/* ponytail: current thread, 32 frames/1 MiB; not a task-wide unwinder. */
++		if (sp < lo || sp >= hi || (sp & 15)) {
++			pid1_exit_log("pid1-exit: stop invalid SP\n");
++		} else {
++			unsigned int i;
++			for (i = 0; i < 32; i++) {
++				uint64_t frame[2];
++				if (!fp) {
++					pid1_exit_log("pid1-exit: stop end #%u\n", i);
++					break;
++				}
++				if ((fp & 15) || fp < sp || fp - sp > 1024 * 1024 ||
++				    fp < lo || fp >= hi || hi - fp < sizeof(frame)) {
++					pid1_exit_log("pid1-exit: stop invalid FP #%u fp=0x%llx\n", i, fp);
++					break;
++				}
++				int error = copyin((user_addr_t)fp, frame, sizeof(frame));
++				if (error) {
++					pid1_exit_log("pid1-exit: stop copyin #%u fp=0x%llx errno=%d\n", i, fp, error);
++					break;
++				}
++				/* Keep raw PAC bits; ret47 is only the donor's symbolization hint. */
++				pid1_exit_log("pid1-exit: #%u fp=0x%llx next=0x%llx lr-raw=0x%llx ret47=0x%llx\n",
++				    i, fp, frame[0], frame[1], frame[1] & 0x00007fffffffffffULL);
++				if (frame[0] && frame[0] <= fp) {
++					pid1_exit_log("pid1-exit: stop non-increasing chain\n");
++					break;
++				}
++				fp = frame[0];
++			}
++			if (i == 32) {
++				pid1_exit_log("pid1-exit: truncated at 32 frames\n");
++			}
++		}
++	}
++	/* Call site holds no proc/signal mutex. Yield, do not busy-wait or flush UFS. */
++	uint32_t seconds = pid1_exit_hold > 30 ? 30 : pid1_exit_hold;
++	pid1_exit_log("pid1-exit: capture complete; hold=%u seconds then original panic\n", seconds);
++	if (seconds) {
++		struct timespec timeout = { .tv_sec = seconds, .tv_nsec = 0 };
++		int error = msleep(&pid1_exit_hold, NULL, PWAIT, "pid1-exit-log", &timeout);
++		pid1_exit_log("pid1-exit: hold returned=%d; continuing original panic\n", error);
++	}
++}
++#endif /* __arm64__ */
++
+ static void
+ proc_handle_critical_exit(proc_t p, int rv)
+ {
+@@ -2010,6 +2105,10 @@
+ 		boot_progress_critical_exit(proc_getpid(p), prefix_str_buf, sizeof(prefix_str_buf));
+ 		prefix_str = prefix_str_buf;
+ 	}
++
++#if __arm64__
++	pid1_exit_diagnostic(p, rv);
++#endif
+ 
+ 	proc_crash_coredump(p);
+ 

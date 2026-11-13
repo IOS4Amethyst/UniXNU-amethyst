@@ -1,6 +1,6 @@
 --- a/bsd/kern/kern_exit.c
 +++ b/bsd/kern/kern_exit.c
-@@ -75,6 +75,13 @@
+@@ -75,6 +75,14 @@
  
  #include <machine/reg.h>
  #include <machine/psl.h>
@@ -8,6 +8,7 @@
 +#include <machine/machine_routines.h>
 +#include <arm/thread.h>
 +#include <mach/arm/thread_status.h>
++#include <mach/vm_param.h>
 +#include <arm64/proc_reg.h>
 +#include <sys/subr_prf.h>
 +#endif
@@ -56,9 +57,9 @@
 +	} else {
 +		uint64_t pc = get_saved_state_pc(ss), lr = get_saved_state_lr(ss);
 +		uint64_t sp = get_saved_state_sp(ss), fp = get_saved_state_fp(ss);
-+		vm_map_t map = get_task_map(proc_task(p));
-+		uint64_t lo = vm_map_min(map), hi = vm_map_max(map);
-+		pid1_exit_log("pid1-exit: pc=0x%llx lr=0x%llx sp=0x%llx fp=0x%llx user=[0x%llx,0x%llx) pc-valid=%d\n",
++		/* Configured user ceiling only; copyin enforces actual map membership. */
++		uint64_t lo = 0, hi = MACH_VM_MAX_ADDRESS;
++		pid1_exit_log("pid1-exit: pc=0x%llx lr=0x%llx sp=0x%llx fp=0x%llx user-limit=[0x%llx,0x%llx) pc-valid=%d\n",
 +		    pc, lr, sp, fp, lo, hi, pc >= lo && pc < hi && !(pc & 3));
 +		/* ponytail: current thread, 32 frames/1 MiB; not a task-wide unwinder. */
 +		if (sp < lo || sp >= hi || (sp & 15)) {

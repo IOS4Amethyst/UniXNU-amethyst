@@ -80,7 +80,16 @@ def main():
         slide = 0 if digest == audit.D94['kernelcache_sha256'] else -0x1000000
         bindings = audit.lifecycle_bindings(Image(data), undefined, slide)
         assembly = out / 'original-bindings.S'
-        assembly.write_text(''.join(f'.globl {name}\n.set {name}, {address:#x}\n' for name, address in bindings.items()))
+        lines = []
+        for name, address in bindings.items():
+            if digest == audit.D94['kernelcache_sha256'] and name != '__ZN9ApplePMGR10gMetaClassE':
+                # Existing XnuPrelink relocation adapter: ld's direct N_ABS
+                # branch has no split-seg record and otherwise moves with text.
+                lines.append(f'.text\n.p2align 2\n.globl {name}\n{name}:\nbti c\nb {name}.original\n'
+                             f'.globl {name}.original\n.set {name}.original, {address:#x}\n')
+            else:
+                lines.append(f'.globl {name}\n.set {name}, {address:#x}\n')
+        assembly.write_text(''.join(lines))
         binding_object = out / 'original-bindings.o'
         subprocess.run(['xcrun', 'clang', '-target', 'arm64e-apple-ios27.0', '-c', str(assembly),
                         '-o', str(binding_object)], check=True)

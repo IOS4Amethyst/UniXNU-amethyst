@@ -24,6 +24,7 @@ assert "product='iPhone17,2'" in seed and "'--gib', '3'" in seed
 assert 'set-ram-data-role.py' in seed and "assert report['bytes'] == 2 * 1024**3" in seed
 assert 'c640246d38aaeb2d' not in seed
 config = (root / 'configs/ios27_data_defconfig').read_text()
-assert 'CONFIG_XNU_OWNER_DATA_MOUNT=n' in config
+assert 'CONFIG_XNU_OWNER_DATA_MOUNT=y' in config
+assert 'CONFIG_XNU_OWNER_DATA_VOLUME_UUID="9EE3A4D1-60A0-49AD-9D49-B960370FF230"' in config
 assert '072899DE-BA32-4875-B776-41C1929F4002' not in config
-print('PASS: canonical D94 profile/fixture/root identities/workflow defaults; old Data disabled;2GiB donor seed selected')
+print('PASS: canonical D94 profile/fixture/root identities/workflow defaults; verified new Data UUID;2GiB donor seed selected')

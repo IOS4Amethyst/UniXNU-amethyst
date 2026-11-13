@@ -23,9 +23,9 @@ CONFIG_XNU_OWNER_ROOT_TRUST=y
 # selects "no ignition" in the dyld flags, so the Darwin Ignition sequence and the ignition_blob sysctl are not used. The volume
 # UUIDs come from the OS profile ([root] os_volume_uuid -> ROOT_VOLUME_UUID, systemos_volume_uuid -> CACHE_VOLUME_UUID).
 # These owner patches are DEVELOPMENT-only upstream; patches/xnu/amethyst-owner-release.patch makes them build at RELEASE.
-# D94 seed is being regenerated. Never mount the legacy iPhone15,4 installation
-# under a new donor identity; enable only after the D94 role/UUID is verified.
-CONFIG_XNU_OWNER_DATA_MOUNT=n
+# Verified D94 RAM seed run43354434582: logical2GiB, newest APSB role0x40.
+# Installation UUID is independent of the donor OS/SystemOS UUIDs.
+CONFIG_XNU_OWNER_DATA_MOUNT=y
 CONFIG_XNU_OWNER_CACHE_MOUNT=y
 CONFIG_XNU_OWNER_CACHE_STARTUP=y
 CONFIG_XNU_OWNER_BOOT_MANIFEST=y
@@ -38,7 +38,7 @@ CONFIG_XNU_EXTRA_LD_ARCHIVES="-Wl,-force_load,{tree}/build/sheng-source-storage/
 # CONFIG_XNU_NATIVE_AES is not set
 CONFIG_XNU_NATIVE_RAM_BLOCK=y
 CONFIG_XNU_SOURCE_MOCKFS=y
-CONFIG_XNU_OWNER_DATA_VOLUME_UUID="00000000-0000-0000-0000-000000000000"
+CONFIG_XNU_OWNER_DATA_VOLUME_UUID="9EE3A4D1-60A0-49AD-9D49-B960370FF230"
 CONFIG_XNU_WATCHDOG_POLICY=y
 CONFIG_XNU_NATIVE_LEGACY_DISPLAY=n
 CONFIG_XNU_NATIVE_ARCH_TIMER=y

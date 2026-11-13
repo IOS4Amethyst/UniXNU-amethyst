@@ -16,6 +16,13 @@ if not (a.core / 'kits/XnuPrelink/fileset_match.py').is_file():
 name = 'ios-27.0.1-24A446-d94ap'
 source = a.device / 'profiles/os' / name
 shutil.copytree(source, a.core / 'profiles/os' / name)
+# Reuse typed platform-node generation for the explicit unencrypted ephemeral
+# Data contract. Do not claim SEP protection or apply this to persistent Data.
+generator = a.core / 'scripts/unixnu/devicetree.py'
+text = generator.read_text()
+old = "for name in ('defaults', 'options', 'product', 'buttons'):"
+assert text.count(old) == 1
+generator.write_text(text.replace(old, "for name in ('defaults', 'options', 'product', 'buttons', 'filesystems'):"))
 raw = (a.device / 'scripts/fixtures/fileset-24A446-d94ap-donor.json').read_bytes()
 assert hashlib.sha256(raw).hexdigest() == '377e220a2ab1d7d03265b6049a48dcf0273d6154cf70672e0ea9f7eaa87a07b0'
 f = json.loads(raw)

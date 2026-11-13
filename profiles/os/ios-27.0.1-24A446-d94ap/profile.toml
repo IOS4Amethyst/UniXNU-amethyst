@@ -13,6 +13,10 @@
 "ios_version" = "27.0"
 "abi" = []
 
+# Unencrypted ephemeral Data only; no SEP-backed protection is claimed.
+[adt.filesystems.u32]
+DoNotUseSEP = 1
+
 
 ["ipsw"]
 # iPhone 16 Pro Max. 12314041166 bytes, IPSW sha256 2b846dfd495f17eb074dacc6d892529df7f18587afdf930645747cd42286f538 (ipsw.me).

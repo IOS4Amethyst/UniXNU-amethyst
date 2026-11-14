@@ -313,6 +313,17 @@ support.write_text('''// SPDX-License-Identifier: BSD-2-Clause-Patent
 #include <IOKit/IOMemoryDescriptor.h>
 #include <libkern/c++/OSDictionary.h>
 #include <libkern/c++/OSNumber.h>
+// CPU/GOP-only ceiling: optional GPU telemetry/fences and foreign direct-DPU
+// mapping are unavailable. Real strong backend definitions override these.
+extern "C" __attribute__((weak)) int native_gpu_trace_enabled(void) {return 0;}
+extern "C" __attribute__((weak)) void native_gpu_trace_record(uint32_t,uint32_t,const uint64_t *,uint32_t) {}
+extern "C" __attribute__((weak)) bool native_adreno_fences(uint32_t *submitted,uint32_t *retired) {
+    if(submitted)*submitted=0;if(retired)*retired=0;return false;
+}
+extern "C" __attribute__((weak)) bool native_adreno_fences_detail(uint32_t *submitted,uint32_t *retired,uint32_t *detail) {
+    if(submitted)*submitted=0;if(retired)*retired=0;if(detail)*detail=0;return false;
+}
+extern "C" __attribute__((weak)) uint32_t native_ufs_dpu_map(unsigned,const uint64_t *,unsigned) {return 0;}
 extern "C" IOMemoryDescriptor *native_legacy_surface_descriptor(OSObject *);
 extern "C" OSObject *native_legacy_surface_create(OSObject *,void *,OSDictionary *);
 extern "C" IOReturn native_legacy_surface_allocate(OSObject *);

@@ -235,7 +235,8 @@ def main():
                 changes, unknown = plan(seed_mount, source)
                 report.update(changes=changes, skipped_unknown=unknown)
                 if unknown:
-                    raise ValueError('unknown paths; see output.json; no metadata edits applied')
+                    raise ValueError('unknown paths; no metadata edits applied: ' +
+                                     json.dumps(unknown, sort_keys=True))
                 for change in changes:
                     path = safe_path(seed_mount, change['path'])
                     if metadata(path) != change['before']:

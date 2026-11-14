@@ -52,6 +52,21 @@ jobs:
         run: |
           set -euo pipefail
           tar -czf - -C output data.dbr data.dbr.json | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:ARTIFACT_PASSPHRASE -out d94-ownership-seed.tar.gz.enc
+      - name: Encrypt failed repair report
+        if: failure()
+        env:
+          ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
+        run: |
+          if sudo test -f output/data.dbr.json; then
+            sudo cat output/data.dbr.json | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:ARTIFACT_PASSPHRASE -out d94-ownership-failure.json.enc
+          fi
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: d94-ownership-failure-report-encrypted
+          path: d94-ownership-failure.json.enc
+          retention-days: 7
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
           name: d94-ownership-repaired-ram-seed-encrypted

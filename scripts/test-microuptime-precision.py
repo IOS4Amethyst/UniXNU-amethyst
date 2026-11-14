@@ -5,6 +5,7 @@ Usage: python3 scripts/test-microuptime-precision.py /path/to/xnu-source
 Requires a host C compiler (CC, default cc); uses only Python's standard library.
 """
 import os
+import json
 from pathlib import Path
 import random
 import re
@@ -14,6 +15,21 @@ import tempfile
 
 
 def main():
+    fixture = json.loads((Path(__file__).resolve().parent /
+                          'fixtures/fileset-24A446-d94ap-donor.json').read_text())
+    def entries(value):
+        if isinstance(value, dict):
+            yield value
+            for child in value.values():
+                yield from entries(child)
+        elif isinstance(value, list):
+            for child in value:
+                yield from entries(child)
+    binding, = [item for item in entries(fixture)
+                if item.get('original') == '0xfffffff00ad4d8dc']
+    assert binding['native_symbol'] == '_absolutetime_to_microtime'
+    assert binding['original_size'] == 44
+    assert binding['original_sha256'] == 'fad03cfbcf5be1084ede621235dc62c8cfe930169c80e2e563880716d993e4dc'
     source = Path(sys.argv[1]).resolve()
     patch = Path(__file__).resolve().parents[1] / "patches/xnu/native-microuptime-precision.patch"
     original = (source / "osfmk/arm/rtclock.c").read_text()

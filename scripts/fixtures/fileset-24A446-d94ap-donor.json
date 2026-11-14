@@ -558,6 +558,13 @@
       "evidence": "Member: takes _reporterLock (+0x80) with interrupts disabled, stores the interrupt state at +0x78, sets _reporterIsLocked (+0x48), calls the virtual handleUpdateReport, clears the flag and unlocks. Source: IOReporter.cpp updateReport (lockReporter/handleUpdateReport/unlockReporter inlined). [Addresses in this text are from kernelcache 38e6d9fa; the fields above were ported to fa07057b by scripts/kc-port.py.] Ported from iPad17,3 38e6d9fa by UniXNU-ishtar scripts/kc-port.py (masked code verified)."
     },
     {
+      "original": "0xfffffff00ad4d8dc",
+      "original_size": 44,
+      "original_sha256": "fad03cfbcf5be1084ede621235dc62c8cfe930169c80e2e563880716d993e4dc",
+      "native_symbol": "_absolutetime_to_microtime",
+      "evidence": "Exact D94 fa07057b function: BTI; load rtc_sec_divisor; unsigned divide ticks to uint64 seconds via x1; subtract seconds*frequency; divide remainder by rtc_usec_divisor; store uint32 microseconds via x2; return. Already reference-symbol matched before native-microuptime-precision.patch changed its arithmetic. Explicit identity preserves that binding across the intentional full-frequency remainder scaling repair; native symbol resolved afresh, never a fixed native address. Verified build 43630565056 native disassembly at 0xfffffff007367518 performs remainder*1000000/frequency and preserves x0/x1/x2 ABI. Donor 44-byte instruction hash and whole-kernel hash gate this identity."
+    },
+    {
       "original": "0xfffffff00ad4d858",
       "original_size": 48,
       "original_sha256": "abb7c19ec8e64fd9442b0ac63d517c44dd947f80781419e9cf943ce14161035b",

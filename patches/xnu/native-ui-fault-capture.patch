@@ -1,6 +1,6 @@
 --- a/osfmk/kern/exception.c
 +++ b/osfmk/kern/exception.c
-@@ -102,6 +102,133 @@
+@@ -102,6 +102,134 @@
 
  #include <sys/code_signing.h> /* for developer mode state */
 
@@ -15,6 +15,7 @@
 +#include <stdatomic.h>
 +
 +extern int proc_pid(struct proc *);
++extern char *proc_best_name(struct proc *);
 +void ui_fault_reboot_capture(void);
 +static TUNABLE(uint32_t, ui_fault_diag, "ui-fault-diag", 0);
 +
@@ -182,4 +183,3 @@
 +void    ui_fault_reboot_capture(void);
  #endif
  __END_DECLS
-

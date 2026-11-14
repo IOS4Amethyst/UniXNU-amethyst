@@ -431,12 +431,58 @@ static void prof_sort(uint64_t *v, size_t n) {
       t = v[root]; v[root] = v[c]; v[c] = t; root = c;}}
 }
 
+// Exact producer types: LegacyDisplayProbe.cpp; every optional symbol is checked.
+#define DISPLAY_GLOBAL(type, name) extern volatile type native_legacy_##name __attribute__((weak_import))
+DISPLAY_GLOBAL(uint32_t, stage); DISPLAY_GLOBAL(uint32_t, failure_reason);
+DISPLAY_GLOBAL(uint32_t, init_result); DISPLAY_GLOBAL(uint32_t, start_result); DISPLAY_GLOBAL(uint32_t, parent_match);
+DISPLAY_GLOBAL(uint32_t, probe_match); DISPLAY_GLOBAL(uint32_t, released); DISPLAY_GLOBAL(uint32_t, surface_found);
+DISPLAY_GLOBAL(uint32_t, dt_attached); DISPLAY_GLOBAL(uint32_t, registration_calls);
+DISPLAY_GLOBAL(uint32_t, pm_stage); DISPLAY_GLOBAL(uint32_t, pm_calls); DISPLAY_GLOBAL(uint32_t, pm_callbacks); DISPLAY_GLOBAL(uint32_t, pm_ordinal);
+DISPLAY_GLOBAL(uint32_t, client_calls); DISPLAY_GLOBAL(uint32_t, client_type); DISPLAY_GLOBAL(uint32_t, swap_validation_calls);
+DISPLAY_GLOBAL(uint32_t, swap_validation_reason); DISPLAY_GLOBAL(uint32_t, transfer_calls); DISPLAY_GLOBAL(uint32_t, retirement_calls);
+DISPLAY_GLOBAL(uint32_t, retired_frames); DISPLAY_GLOBAL(uint32_t, frame_count); DISPLAY_GLOBAL(uint32_t, gop_width); DISPLAY_GLOBAL(uint32_t, gop_height);
+DISPLAY_GLOBAL(int, meta_status); DISPLAY_GLOBAL(int, surface_status); DISPLAY_GLOBAL(int, pm_status);
+DISPLAY_GLOBAL(int, client_pid); DISPLAY_GLOBAL(int, client_status); DISPLAY_GLOBAL(int, transfer_status); DISPLAY_GLOBAL(int, console_result);
+DISPLAY_GLOBAL(uint64_t, transfer_bytes); DISPLAY_GLOBAL(uint64_t, copy_n); DISPLAY_GLOBAL(uint64_t, copy_bytes_sum);
+DISPLAY_GLOBAL(uint64_t, gop_map); DISPLAY_GLOBAL(uint64_t, gop_physical); DISPLAY_GLOBAL(uint64_t, gop_virtual); DISPLAY_GLOBAL(uint64_t, gop_bytes);
+DISPLAY_GLOBAL(uint64_t, console_display); DISPLAY_GLOBAL(uint64_t, console_depth); DISPLAY_GLOBAL(uint64_t, console_stride); DISPLAY_GLOBAL(uint64_t, console_rotation);
+#undef DISPLAY_GLOBAL
 static uint32_t log_gpu_on, log_display_on;
 static size_t compose(char *out, size_t cap, uint32_t slot, unsigned now) {
   size_t at = 0;
   char head[96];
   snprintf(head, sizeof head, "#slot %u t=%us tag=%s", slot, now, &boot_progress_tag ? boot_progress_tag() : "");
   at = put(out, at, cap, head, sizeof head);
+  // Best-effort numeric snapshot, not an atomic transaction. Keep zeros/-1 and
+  // put this before large sections so a bounded slot retains early failures.
+  if (log_display_on) {
+    char row[512];
+#define DISPLAY_U(name) (&native_legacy_##name ? native_legacy_##name : 0u)
+#define DISPLAY_I(name) (&native_legacy_##name ? native_legacy_##name : -1)
+#define DISPLAY_Q(name) ((unsigned long long)DISPLAY_U(name))
+    at = put(out, at, cap, "[display status]", 16);
+    snprintf(row, sizeof row, "stage=%u fail=%u meta=%d init=%u start=%u parent=%u probe=%u released=%u surface=%d/%u DT=%u register=%u",
+      DISPLAY_U(stage), DISPLAY_U(failure_reason), DISPLAY_I(meta_status), DISPLAY_U(init_result), DISPLAY_U(start_result),
+      DISPLAY_U(parent_match), DISPLAY_U(probe_match), DISPLAY_U(released), DISPLAY_I(surface_status), DISPLAY_U(surface_found),
+      DISPLAY_U(dt_attached), DISPLAY_U(registration_calls));
+    at = put(out, at, cap, row, sizeof row);
+    snprintf(row, sizeof row, "PM stage=%u status=%d calls=%u callbacks=%u ordinal=%u client calls=%u type=%u pid=%d status=%d swap calls=%u accepted=%u rejected=%u reason=%u",
+      DISPLAY_U(pm_stage), DISPLAY_I(pm_status), DISPLAY_U(pm_calls), DISPLAY_U(pm_callbacks), DISPLAY_U(pm_ordinal),
+      DISPLAY_U(client_calls), DISPLAY_U(client_type), DISPLAY_I(client_pid), DISPLAY_I(client_status),
+      DISPLAY_U(swap_validation_calls), DISPLAY_U(swap_accepted_count), DISPLAY_U(swap_rejected_count), DISPLAY_U(swap_validation_reason));
+    at = put(out, at, cap, row, sizeof row);
+    snprintf(row, sizeof row, "transfer calls=%u status=%d bytes=%llu retirement=%u retired=%u frames=%u copy=%llu bytes=%llu",
+      DISPLAY_U(transfer_calls), DISPLAY_I(transfer_status), DISPLAY_Q(transfer_bytes), DISPLAY_U(retirement_calls),
+      DISPLAY_U(retired_frames), DISPLAY_U(frame_count), DISPLAY_Q(copy_n), DISPLAY_Q(copy_bytes_sum));
+    at = put(out, at, cap, row, sizeof row);
+    snprintf(row, sizeof row, "GOP map=%llx physical=%llx virtual=%llx bytes=%llu width=%u height=%u console result=%d display=%llu depth=%llu stride=%llu rotation=%llu",
+      DISPLAY_Q(gop_map), DISPLAY_Q(gop_physical), DISPLAY_Q(gop_virtual), DISPLAY_Q(gop_bytes), DISPLAY_U(gop_width), DISPLAY_U(gop_height),
+      DISPLAY_I(console_result), DISPLAY_Q(console_display), DISPLAY_Q(console_depth), DISPLAY_Q(console_stride), DISPLAY_Q(console_rotation));
+    at = put(out, at, cap, row, sizeof row);
+#undef DISPLAY_U
+#undef DISPLAY_I
+#undef DISPLAY_Q
+  }
   if (&boot_progress_page_text) {
     at = put(out, at, cap, "[page]", 8);
     for (unsigned i = 0; i < 48; ++i) if (boot_progress_page_text[i][0]) at = put(out, at, cap, boot_progress_page_text[i], 120);

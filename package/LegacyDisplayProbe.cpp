@@ -53,6 +53,26 @@ static bool publishOrMatchWord(IORegistryEntry *entry,const char *key,uint32_t v
 }
 extern "C" {
 volatile uint32_t native_legacy_stage;
+// First probe failure survives cleanup: see LegacyProbeFailure below.
+volatile uint32_t native_legacy_failure_reason;
+volatile int native_legacy_console_result=-1;
+volatile uint64_t native_legacy_console_display,native_legacy_console_depth,native_legacy_console_stride,native_legacy_console_rotation;
+enum LegacyProbeFailure {ProbeForbidden=1,ProbePreMod,ProbePostMod,ProbeConsole,ProbeAllocate,
+    ProbeInit,ProbePhase,ProbeSurfaceLoad,ProbeSurfaceFind,ProbeNub,ProbeNubAttach,
+    ProbeNubStart,ProbeDT,ProbeMatch,ProbeAttach,ProbeStart,ProbePresenter};
+static void probeFailed(unsigned reason) {
+    if(!native_legacy_failure_reason)native_legacy_failure_reason=reason;
+}
+static bool probeConsole(PE_Video *video) {
+    native_legacy_console_result=PE_current_console(video);
+    native_legacy_console_display=video->v_display;native_legacy_console_depth=video->v_depth;
+    native_legacy_console_stride=video->v_rowBytes;native_legacy_console_rotation=video->v_rotate;
+    bool valid=!native_legacy_console_result && video->v_baseAddr && video->v_width && video->v_height && video->v_depth==32
+        && !video->v_rotate && video->v_width<=16384 && video->v_height<=16384
+        && video->v_rowBytes>=video->v_width*4 && video->v_rowBytes<=UINT64_MAX/video->v_height;
+    if(!valid)probeFailed(ProbeConsole);
+    return valid;
+}
 volatile int native_legacy_meta_status=-1;
 volatile uint32_t native_legacy_init_result,native_legacy_start_result,native_legacy_probe_match;
 volatile uint32_t native_legacy_parent_match,native_legacy_object_size,native_legacy_released;
@@ -265,16 +285,10 @@ __attribute__((noinline)) void native_legacy_retirement_observed(IOService *disp
 extern "C" unsigned native_legacy_properties_now(char *out,unsigned cap) {
     if(!out || !cap)return 0;
     out[0]=0;
-    IOService *display=reinterpret_cast<IOService *>(native_legacy_object);
-    if(!display)return 0;
-    OSSerialize *xml=OSSerialize::withCapacity(8192);
-    unsigned size=0;
-    if(xml && display->serializeProperties(xml)) {
-        size=xml->getLength();if(size>=cap)size=cap-1;
-        memcpy(out,xml->text(),size);out[size]=0;
-    }
-    OSSafeReleaseNULL(xml);
-    return size;
+    // ponytail: numeric CPU diagnostics only; restore optional serialization only
+    // with synchronized publication of a boot-lifetime-retained active display.
+    // native_legacy_object is only an address diagnostic and can already be freed.
+    return 0;
 }
 void native_legacy_registration_observed(IOService *display) {
     native_legacy_registration_calls=native_legacy_registration_calls+1;
@@ -448,6 +462,7 @@ void native_legacy_display_probe(void) {
     PE_parse_boot_argn("sheng-fb-gpu",&gpu,sizeof gpu);
     PE_parse_boot_argn("sheng-dpu-scanout",&direct,sizeof direct);
     if(gpu || direct) {
+        probeFailed(ProbeForbidden);
         printf("amethyst-fb: refusing SM8550 GPU/direct-scanout boot arguments\n");
         return;
     }
@@ -456,15 +471,13 @@ void native_legacy_display_probe(void) {
     // postModLoad would attempt to register the same metaclasses again.
     if(native_legacy_stage)return;
     native_legacy_stage=1;void *handle=OSMetaClass::preModLoad(g_kernel_kmod_info.name);
-    if(!handle){native_legacy_display_checkpoint();return;}
+    if(!handle){probeFailed(ProbePreMod);native_legacy_display_checkpoint();return;}
     native_legacy_display_static_init();native_gop_presenter_static_init();native_legacy_meta_status=OSMetaClass::postModLoad(handle);
-    if(native_legacy_meta_status){native_legacy_display_checkpoint();return;}
+    if(native_legacy_meta_status){probeFailed(ProbePostMod);native_legacy_display_checkpoint();return;}
     PE_Video video={};native_legacy_stage=2;
-    if(PE_current_console(&video) || !video.v_baseAddr || !video.v_width || !video.v_height || video.v_depth!=32
-        || video.v_rotate || video.v_width>16384 || video.v_height>16384 || video.v_rowBytes<video.v_width*4
-        || video.v_rowBytes>UINT64_MAX/video.v_height){native_legacy_display_checkpoint();return;}
+    if(!probeConsole(&video)){native_legacy_display_checkpoint();return;}
     IOService *display=native_legacy_display_allocate();native_legacy_object=(uintptr_t)display;
-    if(!display){native_legacy_display_checkpoint();return;}
+    if(!display){probeFailed(ProbeAllocate);native_legacy_display_checkpoint();return;}
     native_legacy_object_size=display->getMetaClass()->getClassSize();
     native_legacy_parent_match=(display->metaCast("IOMobileFramebufferLegacy") && display->metaCast("IOMobileFramebuffer") && display->metaCast("IOService"));
     native_legacy_stage=3;native_legacy_init_result=display->init();
@@ -474,6 +487,7 @@ void native_legacy_display_probe(void) {
         // Retain this actual object until that normal lifecycle boundary.
         pendingLegacyDisplay=display;return;
     }
+    probeFailed(native_legacy_init_result?ProbePhase:ProbeInit);
     native_legacy_stage=7;display->release();native_legacy_released=1;native_legacy_stage=8;
     native_legacy_display_checkpoint();
 }
@@ -486,11 +500,10 @@ void native_legacy_display_late_probe(void) {
     OSDictionary *matching=IOService::nameMatching("IOCoreSurfaceRoot");
     IOService *surface=matching?IOService::waitForMatchingService(matching,5000000000ULL):nullptr;
     native_legacy_surface_found=surface!=nullptr;OSSafeReleaseNULL(surface);OSSafeReleaseNULL(matching);
+    if(native_legacy_surface_status)probeFailed(ProbeSurfaceLoad);
+    else if(!native_legacy_surface_found)probeFailed(ProbeSurfaceFind);
     PE_Video video={};
-    if(!native_legacy_surface_status && native_legacy_surface_found && !PE_current_console(&video)
-        && video.v_baseAddr && video.v_width && video.v_height && video.v_depth==32
-        && !video.v_rotate && video.v_width<=16384 && video.v_height<=16384
-        && video.v_rowBytes>=video.v_width*4 && video.v_rowBytes<=UINT64_MAX/video.v_height) {
+    if(!native_legacy_surface_status && native_legacy_surface_found && probeConsole(&video)) {
         native_legacy_video_base=video.v_baseAddr;native_legacy_video_bytes=video.v_rowBytes*video.v_height;
         // A real firmware framebuffer resource, with addresses and extent
         // obtained from the actual GOP handoff. It has no invented compatible,
@@ -505,6 +518,7 @@ void native_legacy_display_late_probe(void) {
         if(nub && memory && ranges && parent && nub->init()) {
             ranges->setObject(memory);nub->setDeviceMemory(ranges);nub->setName("NativeGOPFramebuffer");
             nubAttached=nub->attach(parent);if(nubAttached)nubStarted=nub->start(parent);
+            if(!nubAttached)probeFailed(ProbeNubAttach);else if(!nubStarted)probeFailed(ProbeNubStart);
             if(nubStarted) {
                 unsigned phase=0;PE_parse_boot_argn("offline-legacy-phase",&phase,sizeof(phase));
                 if(phase==4) {
@@ -517,6 +531,7 @@ void native_legacy_display_late_probe(void) {
                         nub->setName("gop-display",gIODTPlane);dtAttached=nub->attachToParent(displayTreeParent,gIODTPlane);
                     }
                     OSSafeReleaseNULL(data);native_legacy_dt_attached=dtAttached;
+                    if(!dtAttached)probeFailed(ProbeDT);
                 }
                 if(phase==3) {
                     IOService *presenter=native_gop_presenter_create();bool presenterAttached=false;
@@ -524,11 +539,14 @@ void native_legacy_display_late_probe(void) {
                         // Explicit own transport service only. The incomplete
                         // original framebuffer backend is never published.
                         activeGOPPresenter=presenter;activeGOPNub=nub;nub=nullptr;nubAttached=false;nubStarted=false;
-                    } else {if(presenterAttached)presenter->detach(nub);OSSafeReleaseNULL(presenter);}
+                    } else {probeFailed(ProbePresenter);if(presenterAttached)presenter->detach(nub);OSSafeReleaseNULL(presenter);}
                 } else {
                     SInt32 score=0;native_legacy_probe_match=(phase!=4 || dtAttached) && display->probe(nub,&score)==display;
                     if(native_legacy_probe_match)attached=display->attach(nub);
                     if(attached){native_legacy_stage=5;started=display->start(nub);native_legacy_start_result=started;}
+                    if(!native_legacy_probe_match)probeFailed(ProbeMatch);
+                    else if(!attached)probeFailed(ProbeAttach);
+                    else if(!started)probeFailed(ProbeStart);
                     if(started && phase==4) {
                         activeLegacyDisplay=display;activeGOPNub=nub;native_legacy_stage=10;
                         // No SM8550 GPU handoff on amethyst; use only the actual GOP resource.
@@ -538,7 +556,7 @@ void native_legacy_display_late_probe(void) {
                     }
                 }
             }
-        }
+        } else probeFailed(ProbeNub);
         native_legacy_stage=6;finishUnitScalePolicy(false);
         if(started)display->stop(nub);if(attached)display->detach(nub);
         if(dtAttached)nub->detachFromParent(displayTreeParent,gIODTPlane);

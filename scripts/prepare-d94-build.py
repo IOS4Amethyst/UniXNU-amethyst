@@ -24,16 +24,16 @@ old = "for name in ('defaults', 'options', 'product', 'buttons'):"
 assert text.count(old) == 1
 generator.write_text(text.replace(old, "for name in ('defaults', 'options', 'product', 'buttons', 'filesystems'):"))
 raw = (a.device / 'scripts/fixtures/fileset-24A446-d94ap-donor.json').read_bytes()
-assert hashlib.sha256(raw).hexdigest() == '377e220a2ab1d7d03265b6049a48dcf0273d6154cf70672e0ea9f7eaa87a07b0'
+assert hashlib.sha256(raw).hexdigest() == 'e0e6f72793fd4d27275d677dbb80faaa781af12284c5fdda4f1ec16e1ee54f0a'
 f = json.loads(raw)
 assert f['inputs']['kernelcache_sha256'] == 'fa07057bf34f33af1ec26681ad0c87c13e5aaa548a300740eddb0e92876e5f95'
-assert (len(f['functions']), len(f['data'])) == (172, 22)
+assert (len(f['functions']), len(f['data'])) == (173, 22)
 # Bitmask getter is NOT native boolean task_is_privileged. Four data pins are
 # outside com.apple.kernel. Keep these unresolved rather than silently misbind.
 f['functions'] = [x for x in f['functions'] if x['original'] != '0xfffffff00ac11bd8']
 bad = {'0xfffffff007ec40c0', '0xfffffff007ec40c8', '0xfffffff007ec4150', '0xfffffff007ef16c8'}
 f['data'] = [x for x in f['data'] if x['original'] not in bad]
-assert (len(f['functions']), len(f['data'])) == (171, 18)
+assert (len(f['functions']), len(f['data'])) == (172, 18)
 additions = json.loads(Path(__file__).with_name('d94-reviewed-additions.json').read_text())
 assert additions['inputs'] == f['inputs']
 for kind in ('functions', 'data'):

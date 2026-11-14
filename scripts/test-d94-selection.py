@@ -3,6 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import tomllib
+from types import SimpleNamespace
 
 root = Path(__file__).resolve().parents[1]
 profile = tomllib.loads((root / 'profiles/os/ios-27.0.1-24A446-d94ap/profile.toml').read_text())
@@ -13,7 +14,14 @@ assert profile['root']['os_volume_uuid'] == 'E3F4AED0-4454-4D5B-833C-E27E99C4F67
 assert profile['root']['systemos_volume_uuid'] == '8B599D21-9ABD-4050-8BA2-C61349890BED'
 assert profile['adt']['filesystems']['u32']['DoNotUseSEP'] == 1
 assert 'CONFIG_XNU_KERNEL_CHAINED_FIXUPS=y' in (root / 'profiles/os/ios-27.0.1-24A446-d94ap/configs/ios.config').read_text()
-assert hashlib.sha256((root / 'scripts/fixtures/fileset-24A446-d94ap-donor.json').read_bytes()).hexdigest() == '377e220a2ab1d7d03265b6049a48dcf0273d6154cf70672e0ea9f7eaa87a07b0'
+assert hashlib.sha256((root / 'scripts/fixtures/fileset-24A446-d94ap-donor.json').read_bytes()).hexdigest() == 'e0e6f72793fd4d27275d677dbb80faaa781af12284c5fdda4f1ec16e1ee54f0a'
+# Exercise the actual preparation guards and quarantine, without changing a checkout.
+prepare = (root / 'scripts/prepare-d94-build.py').read_text()
+guards = prepare[prepare.index('raw = '):prepare.index('additions = ')]
+scope = dict(a=SimpleNamespace(device=root), hashlib=hashlib, json=json)
+exec(compile(guards, 'prepare-d94-build.py:fixture-guards', 'exec'), scope)
+binding, = [x for x in scope['f']['functions'] if x['original'] == '0xfffffff00ad4d8dc']
+assert binding['native_symbol'] == '_absolutetime_to_microtime'
 additions = json.loads((root / 'scripts/d94-reviewed-additions.json').read_text())
 assert additions['inputs']['kernelcache_sha256'] == profile['kernel']['prelink']['kernelcache_sha256']
 for name in ('ios27-kernel.yml', 'ios27-root-policies.yml'):

@@ -49,7 +49,7 @@ assert t.count(needle) == 1
 t = t.replace(needle, '"os:configs/ios.config"')
 needle = '  "component:AppleKeyStoreState",'
 assert t.count(needle) == 1
-t = t.replace(needle, needle + '\n  "build-fileset-release-reference.py --tree . --lto",')
+t = t.replace(needle, needle + '\n  "build-gop-legacy-display-27.py",\n  "build-fileset-release-reference.py --tree . --lto",')
 t = t.replace('root_match_volume_uuid = "E89DE0E4-B66C-425D-BCD1-90F637F43F1F"', 'root_match_volume_uuid = "E3F4AED0-4454-4D5B-833C-E27E99C4F67B"')
 b = tomllib.loads(t)
 assert b['board']['soc'] == 'SM7635' and b['payload']['adt']['persistent_data'] is False
@@ -58,6 +58,6 @@ board.write_text(t)
 series = a.device / 'patches/xnu/series'
 text = series.read_text()
 assert 'native-kernel-stack-shift.patch' not in text
-series.write_text(text.rstrip() + '\nnative-kernel-stack-shift.patch\nnative-release-panic-hook.patch\nnative-d94-sanitizer.patch\nnative-lockdown-public-state.patch\nnative-pid1-exit-diagnostic.patch\nnative-union-root-checkdirs.patch\nnative-ui-exit-attribution.patch\nnative-ui-fault-capture.patch\n')
+series.write_text(text.rstrip() + '\nnative-kernel-stack-shift.patch\nnative-release-panic-hook.patch\nnative-d94-sanitizer.patch\nnative-lockdown-public-state.patch\nnative-pid1-exit-diagnostic.patch\nnative-union-root-checkdirs.patch\nnative-ui-exit-attribution.patch\nnative-ui-fault-capture.patch\nnative-d94-release-display.patch\n')
 print(f'PASS: D94 kernel-only checkout;{len(f["functions"])}function/{len(f["data"])}data anchors; SM7635/RAM-only retained')
 print('NOT PAYLOAD READY: install matching verified D94 policies and Data; phone roots require separate authorization')

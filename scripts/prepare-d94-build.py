@@ -42,6 +42,9 @@ for kind in ('functions', 'data'):
 (a.core / 'kits/XnuPrelink/fixtures/fileset-24A446-d94ap-symbols.json').write_text(json.dumps(f, indent=2) + '\n')
 board = a.device / 'board.toml'
 t = board.read_text()
+needle = '"ArmDTPlatform", "ArmCpu", "SoftwareAES"'
+assert t.count(needle) == 1
+t = t.replace(needle, '"ArmDTPlatform", "ArmCpu", "GopFramebuffer", "SoftwareAES"')
 needle = '"ios-27.0.1-24A446-d94ap" = "amethyst_defconfig"'
 assert t.count(needle) == 1
 needle = '"os:configs/ipados.config"'

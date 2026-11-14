@@ -1,0 +1,175 @@
+--- a/osfmk/kern/exception.c
++++ b/osfmk/kern/exception.c
+@@ -102,6 +102,141 @@
+ 
+ #include <sys/code_signing.h> /* for developer mode state */
+ 
++/* Insert in osfmk/kern/exception.c: no Mach-private includes in BSD. */
++#if defined(MACH_BSD) && defined(__arm64__)
++#include <arm/thread.h>
++#include <kern/startup.h>
++#include <machine/machine_routines.h>
++#include <machine/cpu_data.h>
++#include <vm/vm_protos.h>
++#include <libkern/copyio.h>
++#include <sys/subr_prf.h>
++#include <stdatomic.h>
++
++extern int proc_pid(struct proc *);
++void ui_fault_reboot_capture(void);
++static TUNABLE(uint32_t, ui_fault_diag, "ui-fault-diag", 0);
++
++static void __printflike(1, 2)
++ui_fault_log(const char *fmt, ...)
++{
++	va_list ap;
++	va_start(ap, fmt);
++	prf(fmt, ap, TOLOG, NULL);
++	va_end(ap);
++}
++
++static bool
++ui_fault_slot(_Atomic unsigned int *count, unsigned int *slot)
++{
++	unsigned int n = atomic_load_explicit(count, memory_order_relaxed);
++	while (n < 8) {
++		if (atomic_compare_exchange_weak_explicit(count, &n, n + 1,
++		    memory_order_relaxed, memory_order_relaxed)) {
++			*slot = n;
++			return true;
++		}
++	}
++	return false;
++}
++
++static void
++ui_fault_capture(const char *stage, exception_type_t type,
++    mach_exception_data_t code, mach_msg_type_number_t count, bool reboot)
++{
++	static _Atomic unsigned int faults, reboots;
++	if (!ui_fault_diag) {
++		return;
++	}
++	task_t task = current_task();
++	thread_t thread = current_thread();
++	struct proc *p = get_bsdtask_info(task);
++	if (p == NULL) {
++		return;
++	}
++	int pid = proc_pid(p);
++	const char *name = proc_best_name(p);
++	if (reboot ? pid != 1 :
++	    (strcmp(name, "SpringBoard") && strcmp(name, "backboardd") &&
++	    strcmp(name, "watchdogd") && strcmp(name, "liveactivitiesd") &&
++	    strcmp(name, "devicerecoverytool") && strcmp(name, "configd") && pid != 1)) {
++		return;
++	}
++	unsigned int slot;
++	if (!ui_fault_slot(reboot ? &reboots : &faults, &slot)) {
++		return;
++	}
++	ui_fault_log("ui-fault: %s #%u pid=%d tid=%llu name=%.32s type=0x%x count=%u code=0x%llx subcode=0x%llx\n",
++	    stage, slot, pid, (unsigned long long)thread_tid(thread), name, type, count,
++	    count > 0 ? (unsigned long long)code[0] : 0ULL,
++	    count > 1 ? (unsigned long long)code[1] : 0ULL);
++	arm_saved_state_t *ss = find_user_regs(thread);
++	if (ss == NULL || !is_saved_state64(ss)) {
++		ui_fault_log("ui-fault: %s #%u no-arm64-user-state\n", stage, slot);
++		return;
++	}
++	ui_fault_log("ui-fault: %s #%u pc=0x%llx lr=0x%llx sp=0x%llx fp=0x%llx esr=0x%x far=0x%llx\n",
++	    stage, slot, get_saved_state_pc(ss), get_saved_state_lr(ss),
++	    get_saved_state_sp(ss), get_saved_state_fp(ss),
++	    get_saved_state_esr(ss), get_saved_state_far(ss));
++	for (unsigned int i = 0; i < 8; i += 4) {
++		ui_fault_log("ui-fault: %s #%u x%u..%u=0x%llx 0x%llx 0x%llx 0x%llx\n",
++		    stage, slot, i, i + 3, get_saved_state_reg(ss, i),
++		    get_saved_state_reg(ss, i + 1), get_saved_state_reg(ss, i + 2),
++		    get_saved_state_reg(ss, i + 3));
++	}
++	/* Native telemetry snapshot, not guessed procargs/dyld-private offsets.
++	 * UUID may still be unset during dyld startup; not an atomic cache identity. */
++	ui_fault_log("ui-fault: %s #%u main=0x%llx cache-slide=0x%x (ffffffff=unknown) cache-uuid=%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x\n",
++	    stage, slot, (unsigned long long)task->mach_header_vm_address,
++	    task->task_shared_region_slide,
++	    task->task_shared_region_uuid[0], task->task_shared_region_uuid[1],
++	    task->task_shared_region_uuid[2], task->task_shared_region_uuid[3],
++	    task->task_shared_region_uuid[4], task->task_shared_region_uuid[5],
++	    task->task_shared_region_uuid[6], task->task_shared_region_uuid[7],
++	    task->task_shared_region_uuid[8], task->task_shared_region_uuid[9],
++	    task->task_shared_region_uuid[10], task->task_shared_region_uuid[11],
++	    task->task_shared_region_uuid[12], task->task_shared_region_uuid[13],
++	    task->task_shared_region_uuid[14], task->task_shared_region_uuid[15]);
++	/* Current-task, pre-delivery process context; no exception lock held.
++	 * ESR/FAR on reboot are saved state, NOT a new exception. */
++	if (!ml_get_interrupts_enabled() || get_preemption_level() != 0) {
++		ui_fault_log("ui-fault: %s #%u frames-skipped-unsafe-context\n", stage, slot);
++		return;
++	}
++	/* ponytail: 12 raw arm64 FP frames; add a real unwinder if insufficient.
++	 * No PAC mask guess: preserve raw LRs; invalid/PAC-bearing FPs stop. */
++	uint64_t fp = get_saved_state_fp(ss);
++	for (unsigned int i = 0; i < 12; i++) {
++		if (fp == 0 || (fp & 15) || fp > UINT64_MAX - 16) {
++			ui_fault_log("ui-fault: %s #%u frame-stop=%u fp=0x%llx\n",
++			    stage, slot, i, (unsigned long long)fp);
++			break;
++		}
++		uint64_t frame[2];
++		int error = copyin((user_addr_t)fp, frame, sizeof(frame));
++		if (error != 0) {
++			ui_fault_log("ui-fault: %s #%u frame=%u copyin=%d fp=0x%llx\n",
++			    stage, slot, i, error, (unsigned long long)fp);
++			break;
++		}
++		ui_fault_log("ui-fault: %s #%u frame=%u fp=0x%llx next=0x%llx lr-raw=0x%llx\n",
++		    stage, slot, i, (unsigned long long)fp,
++		    (unsigned long long)frame[0], (unsigned long long)frame[1]);
++		if (frame[0] <= fp) {
++			break;
++		}
++		fp = frame[0];
++	}
++}
++
++void
++ui_fault_reboot_capture(void)
++{
++	ui_fault_capture("pid1-reboot-request", 0, NULL, 0, true);
++}
++#endif /* MACH_BSD && __arm64__ */
++
+ bool panic_on_exception_triage = false;
+ 
+ /* Not used in coded, only for inspection during debugging */
+@@ -923,6 +1058,10 @@
+ 
+ 	assert(codeCnt > 0);
+ 
++#if defined(MACH_BSD) && defined(__arm64__)
++	ui_fault_capture("exception", exception, code, codeCnt, false);
++#endif
++
+ 	if (VM_MAP_PAGE_SIZE(task->map) < PAGE_SIZE) {
+ 		DEBUG4K_EXC("thread %p task %p map %p exception %d codes 0x%llx 0x%llx\n",
+ 		    thread, task, task->map, exception, code[0], codeCnt > 1 ? code[1] : 0);
+--- a/bsd/kern/kern_xxx.c
++++ b/bsd/kern/kern_xxx.c
+@@ -153,6 +153,7 @@
+ 	if (!error) {
+ #if __arm64__
+ 		ui_exit_reboot_log("accepted", uap->opt);
++		ui_fault_reboot_capture();
+ #endif
+ 		OSBitOrAtomic(P_REBOOT, &p->p_flag);  /* No more signals for this proc */
+ 		error = reboot_kernel(uap->opt, message);
+--- a/bsd/sys/reboot.h
++++ b/bsd/sys/reboot.h
+@@ -160,6 +160,7 @@
+ int     reboot_kernel(int, char *);
+ #if __arm64__
+ void    ui_exit_reboot_log(const char *, int);
++void    ui_fault_reboot_capture(void);
+ #endif
+ __END_DECLS
+ 

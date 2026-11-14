@@ -140,7 +140,16 @@ def mount_identity(mount, raw, readonly):
             info.get('FilesystemType', '').lower() != 'apfs' or
             info.get('GlobalPermissionsEnabled') is not True or
             info.get('ReadOnlyVolume') is not readonly):
-        raise ValueError('not the expected owners-on APFS disk-image mount')
+        diagnostic = dict(image_matches=len(matches), expected_readonly=readonly,
+                          info={key: info.get(key) for key in (
+                              'DeviceNode', 'DeviceIdentifier', 'VirtualOrPhysical',
+                              'FilesystemType', 'GlobalPermissionsEnabled',
+                              'ReadOnlyVolume', 'ReadOnlyMedia', 'MountPoint')},
+                          images=[dict(path=image.get('image-path'),
+                                       entities=image.get('system-entities'))
+                                  for image in images])
+        raise ValueError('not the expected owners-on APFS disk-image mount: ' +
+                         json.dumps(diagnostic, sort_keys=True))
     apfs = plist_command('diskutil', 'apfs', 'list', '-plist')
     volumes = [v for c in apfs['Containers'] for v in c.get('Volumes', [])
                if v['DeviceIdentifier'] == info['DeviceIdentifier']]

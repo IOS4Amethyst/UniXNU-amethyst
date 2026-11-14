@@ -20,6 +20,24 @@ def refuses(call):
     raise AssertionError('unsafe input accepted')
 
 
+original_plist = repair.plist_command
+def rejected_mount(*args):
+    if args[0] == 'hdiutil':
+        return {'images': []}
+    return {'DeviceNode': '/dev/disk9s1', 'FilesystemType': 'apfs',
+            'GlobalPermissionsEnabled': False, 'ReadOnlyVolume': True}
+repair.plist_command = rejected_mount
+try:
+    repair.mount_identity(Path('/unused-mount'), Path('/unused.raw'), True)
+except ValueError as error:
+    assert '"image_matches": 0' in str(error)
+    assert '"GlobalPermissionsEnabled": false' in str(error)
+else:
+    raise AssertionError('unverified mount accepted')
+finally:
+    repair.plist_command = original_plist
+
+
 with tempfile.TemporaryDirectory(prefix='test-d94-ownership-') as td:
     work = Path(td)
     seed, source, outside = (work / p for p in ('seed', 'source', 'outside'))

@@ -139,12 +139,12 @@ def mount_identity(mount, raw, readonly):
     if (len(matches) != 1 or info.get('VirtualOrPhysical') == 'Physical' or
             info.get('FilesystemType', '').lower() != 'apfs' or
             info.get('GlobalPermissionsEnabled') is not True or
-            info.get('ReadOnlyVolume') is not readonly):
+            info.get('VolumeReadOnly') is not readonly):
         diagnostic = dict(image_matches=len(matches), expected_readonly=readonly,
                           info={key: info.get(key) for key in (
                               'DeviceNode', 'DeviceIdentifier', 'VirtualOrPhysical',
                               'FilesystemType', 'GlobalPermissionsEnabled',
-                              'ReadOnlyVolume', 'ReadOnlyMedia', 'MountPoint')},
+                              'VolumeReadOnly', 'MediaReadOnly', 'MountPoint')},
                           images=[dict(path=image.get('image-path'),
                                        entities=image.get('system-entities'))
                                   for image in images])

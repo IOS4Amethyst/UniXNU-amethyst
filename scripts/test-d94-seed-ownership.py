@@ -25,7 +25,7 @@ def rejected_mount(*args):
     if args[0] == 'hdiutil':
         return {'images': []}
     return {'DeviceNode': '/dev/disk9s1', 'FilesystemType': 'apfs',
-            'GlobalPermissionsEnabled': False, 'ReadOnlyVolume': True}
+            'GlobalPermissionsEnabled': False, 'VolumeReadOnly': True}
 repair.plist_command = rejected_mount
 try:
     repair.mount_identity(Path('/unused-mount'), Path('/unused.raw'), True)
@@ -34,6 +34,27 @@ except ValueError as error:
     assert '"GlobalPermissionsEnabled": false' in str(error)
 else:
     raise AssertionError('unverified mount accepted')
+finally:
+    repair.plist_command = original_plist
+
+
+def verified_mount(*args):
+    if args[0] == 'hdiutil':
+        return {'images': [{'image-path': '/unused.raw',
+                            'system-entities': [{'dev-entry': '/dev/disk9s1'}]}]}
+    if args[1] == 'apfs':
+        return {'Containers': [{'Volumes': [{'DeviceIdentifier': 'disk9s1',
+                                             'Roles': ['Data']}]}]}
+    return {'DeviceNode': '/dev/disk9s1', 'DeviceIdentifier': 'disk9s1',
+            'FilesystemType': 'apfs', 'GlobalPermissionsEnabled': True,
+            'VolumeReadOnly': mount_readonly, 'VolumeUUID': repair.UUID,
+            'TotalSize': repair.SIZE}
+repair.plist_command = verified_mount
+try:
+    for mount_readonly in (True, False):
+        identity = repair.mount_identity(Path('/unused-mount'), Path('/unused.raw'), mount_readonly)
+        assert identity == dict(uuid=repair.UUID, size=repair.SIZE, roles=['Data'])
+        refuses(lambda: repair.mount_identity(Path('/unused-mount'), Path('/unused.raw'), not mount_readonly))
 finally:
     repair.plist_command = original_plist
 

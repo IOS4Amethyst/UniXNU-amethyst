@@ -1,0 +1,136 @@
+--- a/bsd/kern/kern_exit.c
++++ b/bsd/kern/kern_exit.c
+@@ -84,6 +84,7 @@
+ #include <sys/subr_prf.h>
+ #endif
+ #include <stdatomic.h>
++#include <sys/reboot.h>
+ 
+ #include <sys/param.h>
+ #include <sys/systm.h>
+@@ -1973,6 +1974,7 @@
+ /* Diagnostic-only opt-in; no change to exit reason, signal delivery or panic. */
+ static TUNABLE(uint32_t, pid1_exit_diag, "pid1-exit-diag", 0);
+ static TUNABLE(uint32_t, pid1_exit_hold, "pid1-exit-hold", 10);
++static TUNABLE(uint32_t, ui_exit_diag, "ui-exit-diag", 0);
+ 
+ static void __printflike(1, 2)
+ pid1_exit_log(const char *fmt, ...)
+@@ -1982,6 +1984,71 @@
+ 	/* Bypass os_log filtering; TOLOG acquires/releases its own msgbuf lock. */
+ 	prf(fmt, ap, TOLOG, NULL);
+ 	va_end(ap);
++}
++
++/* Saturating budget: concurrent exits cannot wrap or flood the retained log. */
++static bool
++ui_exit_take_slot(_Atomic unsigned int *count, unsigned int limit)
++{
++	unsigned int n = atomic_load_explicit(count, memory_order_relaxed);
++	while (n < limit) {
++		if (atomic_compare_exchange_weak_explicit(count, &n, n + 1,
++		    memory_order_relaxed, memory_order_relaxed)) {
++			return true;
++		}
++	}
++	return false;
++}
++
++void
++ui_exit_reboot_log(const char *stage, int howto)
++{
++	static _Atomic unsigned int count;
++	if (!ui_exit_diag || !ui_exit_take_slot(&count, 8)) {
++		return;
++	}
++	proc_t p = current_proc();
++	pid1_exit_log("ui-exit: reboot %s pid=%d name=%.32s howto=0x%x\n",
++	    stage, p ? proc_getpid(p) : -1, p ? p->p_name : "kernel", howto);
++}
++
++static void
++ui_exit_diagnostic(proc_t p, int rv)
++{
++	static _Atomic unsigned int count;
++	if (!ui_exit_diag ||
++	    (strncmp(p->p_name, "SpringBoard", sizeof(p->p_name)) != 0 &&
++	    strncmp(p->p_name, "backboardd", sizeof(p->p_name)) != 0 &&
++	    strncmp(p->p_name, "watchdogd", sizeof(p->p_name)) != 0 &&
++	    strncmp(p->p_name, "liveactivitiesd", sizeof(p->p_name)) != 0 &&
++	    strncmp(p->p_name, "devicerecoverytool", sizeof(p->p_name)) != 0) ||
++	    !ui_exit_take_slot(&count, 32)) {
++		return;
++	}
++	os_reason_t reason = p->p_exit_reason;
++	char desc[129] = "none";
++	/* ponytail: 128 printable bytes; no payload dump or daemon unwinding. */
++	if (reason != OS_REASON_NULL && reason->osr_kcd_buf && reason->osr_bufsize) {
++		kcdata_iter_t iter = kcdata_iter(reason->osr_kcd_buf, reason->osr_bufsize);
++		if (kcdata_iter_valid(iter) &&
++		    kcdata_iter_type(iter) == KCDATA_BUFFER_BEGIN_OS_REASON) {
++			iter = kcdata_iter_find_type(iter, EXIT_REASON_USER_DESC);
++			if (kcdata_iter_valid(iter)) {
++				const unsigned char *src = kcdata_iter_payload(iter);
++				size_t len = kcdata_iter_size(iter);
++				size_t i;
++				for (i = 0; i < sizeof(desc) - 1 && i < len && src[i]; i++) {
++					desc[i] = src[i] >= 32 && src[i] < 127 ? src[i] : '?';
++				}
++				desc[i] = '\0';
++			}
++		}
++	}
++	pid1_exit_log("ui-exit: pid=%d name=%.32s status=0x%x signal=%d exit=%d ns=%u code=0x%llx flags=0x%llx desc=%.128s\n",
++	    proc_getpid(p), p->p_name, rv, WTERMSIG(rv), WEXITSTATUS(rv),
++	    reason ? reason->osr_namespace : 0,
++	    reason ? (unsigned long long)reason->osr_code : 0ULL,
++	    reason ? (unsigned long long)reason->osr_flags : 0ULL, desc);
+ }
+ 
+ static void
+@@ -2147,6 +2214,9 @@
+ 	    p->p_exit_reason ? p->p_exit_reason->osr_namespace : 0,
+ 	    p->p_exit_reason ? p->p_exit_reason->osr_code : 0);
+ 
++#if __arm64__
++	ui_exit_diagnostic(p, rv);
++#endif
+ 	if (p->p_crash_behavior != 0 || p == initproc) {
+ 		proc_handle_critical_exit(p, rv);
+ 	}
+--- a/bsd/kern/kern_xxx.c
++++ b/bsd/kern/kern_xxx.c
+@@ -151,6 +151,9 @@
+ #endif
+ #endif
+ 	if (!error) {
++#if __arm64__
++		ui_exit_reboot_log("accepted", uap->opt);
++#endif
+ 		OSBitOrAtomic(P_REBOOT, &p->p_flag);  /* No more signals for this proc */
+ 		error = reboot_kernel(uap->opt, message);
+ 	}
+--- a/bsd/kern/kern_shutdown.c
++++ b/bsd/kern/kern_shutdown.c
+@@ -188,6 +188,9 @@
+ 	int hostboot_option = 0;
+ 	uint64_t startTime;
+ 
++#if __arm64__
++	ui_exit_reboot_log("kernel-entry", howto);
++#endif
+ 	if ((howto & (RB_PANIC | RB_QUICK)) == (RB_PANIC | RB_QUICK)) {
+ 		panic_kernel(howto, message);
+ 	}
+--- a/bsd/sys/reboot.h
++++ b/bsd/sys/reboot.h
+@@ -158,6 +158,9 @@
+ 
+ __BEGIN_DECLS
+ int     reboot_kernel(int, char *);
++#if __arm64__
++void    ui_exit_reboot_log(const char *, int);
++#endif
+ __END_DECLS
+ 
+ #define PROC_SHUTDOWN_LOG "/var/log/kernel-shutdown.log"

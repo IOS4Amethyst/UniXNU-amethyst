@@ -1,6 +1,9 @@
 name: D94 temporary RAM watchdog override
 on:
   workflow_dispatch:
+  push:
+    branches: [ios27-d94-build-audit]
+    paths: [.github/workflows/d94-watchdog-seed.yml]
 permissions:
   contents: read
   actions: read

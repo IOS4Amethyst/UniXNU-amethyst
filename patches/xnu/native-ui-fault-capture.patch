@@ -1,9 +1,8 @@
 --- a/osfmk/kern/exception.c
 +++ b/osfmk/kern/exception.c
-@@ -102,6 +102,134 @@
-
+@@ -103,5 +103,133 @@
  #include <sys/code_signing.h> /* for developer mode state */
-
+ 
 +/* Insert in osfmk/kern/exception.c: no Mach-private includes in BSD. */
 +#if defined(MACH_BSD) && defined(__arm64__)
 +#include <arm/thread.h>
@@ -133,12 +132,11 @@
 +#endif /* MACH_BSD && __arm64__ */
 +
  bool panic_on_exception_triage = false;
-
+ 
  /* Not used in coded, only for inspection during debugging */
-@@ -923,6 +1050,10 @@
-
+@@ -924,5 +1052,9 @@
  	assert(codeCnt > 0);
-
+ 
 +#if defined(MACH_BSD) && defined(__arm64__)
 +	ui_fault_capture("exception", exception, code, codeCnt, false);
 +#endif
@@ -151,7 +149,7 @@
 @@ -1976,6 +1976,15 @@
  static TUNABLE(uint32_t, pid1_exit_hold, "pid1-exit-hold", 10);
  static TUNABLE(uint32_t, ui_exit_diag, "ui-exit-diag", 0);
-
+ 
 +void __printflike(1, 2)
 +ui_fault_log(const char *fmt, ...)
 +{
@@ -176,7 +174,7 @@
  		error = reboot_kernel(uap->opt, message);
 --- a/bsd/sys/reboot.h
 +++ b/bsd/sys/reboot.h
-@@ -160,6 +160,7 @@
+@@ -160,5 +160,6 @@
  int     reboot_kernel(int, char *);
  #if __arm64__
  void    ui_exit_reboot_log(const char *, int);

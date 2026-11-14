@@ -1,0 +1,49 @@
+name: D94 temporary RAM watchdog override
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  seed:
+    runs-on: macos-15-intel
+    environment: ARTIFACT_PASSPHRASE
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/DarwinBoot
+          ref: 3c75734014cdab0acd9541e88057b7606ee7ae08
+          path: darwinboot
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Fetch verified D94 seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          gh run download 43354434582 -n ios27-d94ap-data-seed-encrypted -D input
+          mkdir original output
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:ARTIFACT_PASSPHRASE -in input/ios27-data-seed.tar.gz.enc | tar xz -C original
+          echo 'b981e18d13b4cc8fb63dc58169bc54bf9291fb37d14760e253d2d80025bff5d2  original/data.dbr' | shasum -a 256 -c -
+          python3 -c 'import json; r=json.load(open("original/seed.json")); assert r["product"]=="iPhone17,2" and r["volume_uuid"]=="9EE3A4D1-60A0-49AD-9D49-B960370FF230" and r["ram_only"]'
+      - name: Modify host copy only
+        run: |
+          python3 scripts/log/disable-watchdog-seed.py --check
+          sudo python3 scripts/log/disable-watchdog-seed.py original/data.dbr output/data.dbr --packer "$PWD/darwinboot/Test/packed_ramdisk.py" --expected-uuid 9EE3A4D1-60A0-49AD-9D49-B960370FF230
+          sudo chown -R "$(id -u):$(id -g)" output
+      - name: Encrypt temporary seed
+        env:
+          ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          tar -czf - -C output data.dbr data.dbr.json | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:ARTIFACT_PASSPHRASE -out d94-watchdog-seed.tar.gz.enc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: d94-watchdog-disabled-ram-seed-encrypted
+          path: d94-watchdog-seed.tar.gz.enc
+          retention-days: 7
+          if-no-files-found: error

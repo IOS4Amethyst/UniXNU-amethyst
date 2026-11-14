@@ -1,9 +1,9 @@
 --- a/osfmk/kern/exception.c
 +++ b/osfmk/kern/exception.c
-@@ -102,6 +102,141 @@
- 
+@@ -102,6 +102,133 @@
+
  #include <sys/code_signing.h> /* for developer mode state */
- 
+
 +/* Insert in osfmk/kern/exception.c: no Mach-private includes in BSD. */
 +#if defined(MACH_BSD) && defined(__arm64__)
 +#include <arm/thread.h>
@@ -12,21 +12,13 @@
 +#include <machine/cpu_data.h>
 +#include <vm/vm_protos.h>
 +#include <libkern/copyio.h>
-+#include <sys/subr_prf.h>
 +#include <stdatomic.h>
 +
 +extern int proc_pid(struct proc *);
 +void ui_fault_reboot_capture(void);
 +static TUNABLE(uint32_t, ui_fault_diag, "ui-fault-diag", 0);
 +
-+static void __printflike(1, 2)
-+ui_fault_log(const char *fmt, ...)
-+{
-+	va_list ap;
-+	va_start(ap, fmt);
-+	prf(fmt, ap, TOLOG, NULL);
-+	va_end(ap);
-+}
++extern void ui_fault_log(const char *fmt, ...) __printflike(1, 2);
 +
 +static bool
 +ui_fault_slot(_Atomic unsigned int *count, unsigned int *slot)
@@ -140,12 +132,12 @@
 +#endif /* MACH_BSD && __arm64__ */
 +
  bool panic_on_exception_triage = false;
- 
+
  /* Not used in coded, only for inspection during debugging */
-@@ -923,6 +1058,10 @@
- 
+@@ -923,6 +1050,10 @@
+
  	assert(codeCnt > 0);
- 
+
 +#if defined(MACH_BSD) && defined(__arm64__)
 +	ui_fault_capture("exception", exception, code, codeCnt, false);
 +#endif
@@ -153,6 +145,24 @@
  	if (VM_MAP_PAGE_SIZE(task->map) < PAGE_SIZE) {
  		DEBUG4K_EXC("thread %p task %p map %p exception %d codes 0x%llx 0x%llx\n",
  		    thread, task, task->map, exception, code[0], codeCnt > 1 ? code[1] : 0);
+--- a/bsd/kern/kern_exit.c
++++ b/bsd/kern/kern_exit.c
+@@ -1976,6 +1976,15 @@
+ static TUNABLE(uint32_t, pid1_exit_hold, "pid1-exit-hold", 10);
+ static TUNABLE(uint32_t, ui_exit_diag, "ui-exit-diag", 0);
+
++void __printflike(1, 2)
++ui_fault_log(const char *fmt, ...)
++{
++	va_list ap;
++	va_start(ap, fmt);
++	prf(fmt, ap, TOLOG, NULL);
++	va_end(ap);
++}
++
+ static void __printflike(1, 2)
+ pid1_exit_log(const char *fmt, ...)
+ {
 --- a/bsd/kern/kern_xxx.c
 +++ b/bsd/kern/kern_xxx.c
 @@ -153,6 +153,7 @@
@@ -172,4 +182,4 @@
 +void    ui_fault_reboot_capture(void);
  #endif
  __END_DECLS
- 
+

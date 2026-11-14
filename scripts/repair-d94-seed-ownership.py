@@ -152,7 +152,8 @@ def mount_identity(mount, raw, readonly):
 
 @contextmanager
 def attached(raw, mount, readonly):
-    command = ['hdiutil', 'attach', '-plist', '-nobrowse', '-owners', 'on',
+    command = ['hdiutil', 'attach', '-imagekey', 'diskimage-class=CRawDiskImage',
+               '-plist', '-nobrowse', '-owners', 'on',
                '-mountpoint', str(mount)]
     if readonly:
         command.append('-readonly')

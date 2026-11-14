@@ -318,10 +318,15 @@ support.write_text('''// SPDX-License-Identifier: BSD-2-Clause-Patent
 extern "C" __attribute__((weak)) int native_gpu_trace_enabled(void) {return 0;}
 extern "C" __attribute__((weak)) void native_gpu_trace_record(uint32_t,uint32_t,const uint64_t *,uint32_t) {}
 extern "C" __attribute__((weak)) bool native_adreno_fences(uint32_t *submitted,uint32_t *retired) {
-    if(submitted)*submitted=0;if(retired)*retired=0;return false;
+    if(submitted) *submitted=0;
+    if(retired) *retired=0;
+    return false;
 }
 extern "C" __attribute__((weak)) bool native_adreno_fences_detail(uint32_t *submitted,uint32_t *retired,uint32_t *detail) {
-    if(submitted)*submitted=0;if(retired)*retired=0;if(detail)*detail=0;return false;
+    if(submitted) *submitted=0;
+    if(retired) *retired=0;
+    if(detail) *detail=0;
+    return false;
 }
 extern "C" __attribute__((weak)) uint32_t native_ufs_dpu_map(unsigned,const uint64_t *,unsigned) {return 0;}
 extern "C" IOMemoryDescriptor *native_legacy_surface_descriptor(OSObject *);

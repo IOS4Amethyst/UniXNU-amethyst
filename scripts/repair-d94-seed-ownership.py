@@ -132,6 +132,7 @@ def plist_command(*args):
 
 def mount_identity(mount, raw, readonly):
     info = plist_command('diskutil', 'info', '-plist', str(mount))
+    mount_readonly = bool(os.statvfs(mount).f_flag & os.ST_RDONLY)
     images = plist_command('hdiutil', 'info', '-plist')['images']
     matches = [image for image in images if Path(image['image-path']).resolve() == raw.resolve()
                and any(e.get('dev-entry') == info['DeviceNode']
@@ -139,8 +140,9 @@ def mount_identity(mount, raw, readonly):
     if (len(matches) != 1 or info.get('VirtualOrPhysical') == 'Physical' or
             info.get('FilesystemType', '').lower() != 'apfs' or
             info.get('GlobalPermissionsEnabled') is not True or
-            info.get('VolumeReadOnly') is not readonly):
+            mount_readonly is not readonly):
         diagnostic = dict(image_matches=len(matches), expected_readonly=readonly,
+                          mount_readonly=mount_readonly,
                           info={key: info.get(key) for key in (
                               'DeviceNode', 'DeviceIdentifier', 'VirtualOrPhysical',
                               'FilesystemType', 'GlobalPermissionsEnabled',

@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import stat
 import tempfile
+from types import SimpleNamespace
 
 spec = importlib.util.spec_from_file_location(
     'repair', Path(__file__).with_name('repair-d94-seed-ownership.py'))
@@ -21,6 +22,8 @@ def refuses(call):
 
 
 original_plist = repair.plist_command
+original_statvfs = repair.os.statvfs
+repair.os.statvfs = lambda path: SimpleNamespace(f_flag=os.ST_RDONLY)
 def rejected_mount(*args):
     if args[0] == 'hdiutil':
         return {'images': []}
@@ -36,6 +39,7 @@ else:
     raise AssertionError('unverified mount accepted')
 finally:
     repair.plist_command = original_plist
+    repair.os.statvfs = original_statvfs
 
 
 def verified_mount(*args):
@@ -47,9 +51,10 @@ def verified_mount(*args):
                                              'Roles': ['Data']}]}]}
     return {'DeviceNode': '/dev/disk9s1', 'DeviceIdentifier': 'disk9s1',
             'FilesystemType': 'apfs', 'GlobalPermissionsEnabled': True,
-            'VolumeReadOnly': mount_readonly, 'VolumeUUID': repair.UUID,
+            'VolumeUUID': repair.UUID,
             'TotalSize': repair.SIZE}
 repair.plist_command = verified_mount
+repair.os.statvfs = lambda path: SimpleNamespace(f_flag=os.ST_RDONLY if mount_readonly else 0)
 try:
     for mount_readonly in (True, False):
         identity = repair.mount_identity(Path('/unused-mount'), Path('/unused.raw'), mount_readonly)
@@ -57,6 +62,7 @@ try:
         refuses(lambda: repair.mount_identity(Path('/unused-mount'), Path('/unused.raw'), not mount_readonly))
 finally:
     repair.plist_command = original_plist
+    repair.os.statvfs = original_statvfs
 
 
 with tempfile.TemporaryDirectory(prefix='test-d94-ownership-') as td:

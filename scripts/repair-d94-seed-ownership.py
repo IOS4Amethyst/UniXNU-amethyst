@@ -81,6 +81,12 @@ def inventory(root):
     return result
 
 
+def inventory_changes(expected, actual):
+    return [dict(path=path, expected=expected.get(path), actual=actual.get(path))
+            for path in sorted(expected.keys() | actual.keys())
+            if expected.get(path) != actual.get(path)]
+
+
 def source_metadata(path):
     # Source is read-only: reading a shared inode cannot mutate any of its aliases.
     return metadata(path, allow_hardlinks=True)
@@ -271,8 +277,12 @@ def main():
             raise ValueError('raw logical size changed')
         # Reattach read-only to verify persisted metadata after the writable detach.
         with attached(raw, seed_mount, True) as persisted:
-            if persisted != identity or inventory(seed_mount) != expected:
-                raise ValueError('persisted Data verification failed')
+            differences = inventory_changes(expected, inventory(seed_mount))
+            if persisted != identity or differences:
+                report['persisted_identity'] = persisted
+                report['persisted_differences'] = differences
+                raise ValueError('persisted Data verification failed: ' +
+                                 json.dumps(dict(identity=persisted, differences=differences), sort_keys=True))
         candidate = work / 'repaired.dbr'
         packed = packer.pack(raw, candidate)
         if packed['bytes'] != SIZE:

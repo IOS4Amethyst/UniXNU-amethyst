@@ -22,6 +22,11 @@ def refuses(call):
 
 
 original_plist = repair.plist_command
+assert repair.inventory_changes({'same': 1, 'changed': 1, 'removed': 1},
+                                {'same': 1, 'changed': 2, 'added': 3}) == [
+    dict(path='added', expected=None, actual=3),
+    dict(path='changed', expected=1, actual=2),
+    dict(path='removed', expected=1, actual=None)]
 original_statvfs = repair.os.statvfs
 repair.os.statvfs = lambda path: SimpleNamespace(f_flag=os.ST_RDONLY)
 def rejected_mount(*args):

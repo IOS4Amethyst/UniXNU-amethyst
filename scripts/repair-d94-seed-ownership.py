@@ -54,12 +54,12 @@ def safe_path(root, relative):
     return root.joinpath(*parts)
 
 
-def metadata(path):
+def metadata(path, *, allow_hardlinks=False):
     s = path.lstat()
     kind = stat.S_IFMT(s.st_mode)
     if kind not in (stat.S_IFREG, stat.S_IFDIR, stat.S_IFLNK):
         raise ValueError(f'unsupported inode: {path}')
-    if kind == stat.S_IFREG and s.st_nlink != 1:
+    if kind == stat.S_IFREG and s.st_nlink != 1 and not allow_hardlinks:
         raise ValueError(f'hardlinked file refused: {path}')
     return dict(uid=s.st_uid, gid=s.st_gid, mode=stat.S_IMODE(s.st_mode), kind=kind)
 
@@ -81,7 +81,12 @@ def inventory(root):
     return result
 
 
-def plan(seed, source, read_metadata=metadata):
+def source_metadata(path):
+    # Source is read-only: reading a shared inode cannot mutate any of its aliases.
+    return metadata(path, allow_hardlinks=True)
+
+
+def plan(seed, source, read_metadata=source_metadata):
     """Pure planner: source is the actual OS/private/var, not OS/var."""
     changes, unknown = [], []
     for relative, current in inventory(seed).items():
@@ -97,7 +102,14 @@ def plan(seed, source, read_metadata=metadata):
             # ponytail: only generator-owned paths; new install-state families need review.
             desired = {k: current[k] for k in ('uid', 'gid', 'mode', 'kind')}
             first = relative.split('/')[0]
-            if first in ('mobile', 'root') and current['kind'] != stat.S_IFLNK:
+            if ((relative == '.fseventsd' and current['kind'] == stat.S_IFDIR) or
+                    (relative.startswith('.fseventsd/') and relative.count('/') == 1 and
+                     current['kind'] == stat.S_IFREG and
+                     (relative.split('/')[1] == 'fseventsd-uuid' or
+                      (len(relative.split('/')[1]) == 16 and
+                       all(c in '0123456789abcdef' for c in relative.split('/')[1]))))):
+                rule = 'preserve host filesystem-event journal metadata; not donor install state'
+            elif first in ('mobile', 'root') and current['kind'] != stat.S_IFLNK:
                 desired.update(uid=501 if first == 'mobile' else 0,
                                gid=501 if first == 'mobile' else 0)
                 rule = f'generated {first} descendant; retain mode'

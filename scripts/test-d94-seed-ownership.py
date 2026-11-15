@@ -144,6 +144,16 @@ with tempfile.TemporaryDirectory(prefix='test-d94-ownership-') as td:
     (work / 'output').symlink_to(work / 'missing')
     refuses(lambda: repair.validate_paths(*args))
     refuses(lambda: repair.regular(seed))
+    os.link(work / 'input', source / 'source-hardlink')
+    assert repair.source_metadata(source / 'source-hardlink')['uid'] == os.getuid()
+    refuses(lambda: repair.metadata(source / 'source-hardlink'))
+    (seed / '.fseventsd').mkdir()
+    for name in ('0000000008edbd2b', 'fseventsd-uuid', 'unreviewed'):
+        (seed / '.fseventsd' / name).write_bytes(b'journal unchanged')
+    changes, unknown = repair.plan(seed, source)
+    assert not any(c['path'].startswith('.fseventsd') for c in changes)
+    journal_unknown = [u['path'] for u in unknown if u['path'].startswith('.fseventsd')]
+    assert journal_unknown == ['.fseventsd/unreviewed']
     os.link(work / 'input', seed / 'hardlink1')
     os.link(work / 'input', seed / 'hardlink2')
     refuses(lambda: repair.inventory(seed))

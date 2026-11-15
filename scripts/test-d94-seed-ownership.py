@@ -22,6 +22,16 @@ def refuses(call):
 
 
 original_plist = repair.plist_command
+addition = dict(path='.fseventsd/0000000008edc453', expected=None,
+                actual=dict(kind=stat.S_IFREG, uid=0, gid=99, mode=0o600, sha256='journal'))
+assert repair.host_journal_addition(addition)
+for field, value in (('uid', 501), ('gid', 0), ('mode', 0o644), ('kind', stat.S_IFLNK)):
+    assert not repair.host_journal_addition(dict(addition, actual=dict(addition['actual'], **{field: value})))
+assert not repair.host_journal_addition(dict(addition, expected=addition['actual']))
+assert not repair.host_journal_addition(dict(addition, actual=None))
+for path in ('mobile/0000000008edc453', '.fseventsd/unreviewed',
+             '.fseventsd/sub/0000000008edc453', '.fseventsd/0000000008EDC453'):
+    assert not repair.host_journal_addition(dict(addition, path=path))
 assert repair.inventory_changes({'same': 1, 'changed': 1, 'removed': 1},
                                 {'same': 1, 'changed': 2, 'added': 3}) == [
     dict(path='added', expected=None, actual=3),

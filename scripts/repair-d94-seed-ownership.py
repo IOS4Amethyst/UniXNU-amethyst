@@ -87,6 +87,16 @@ def inventory_changes(expected, actual):
             if expected.get(path) != actual.get(path)]
 
 
+def host_journal_addition(change):
+    parts = change['path'].split('/')
+    item = change['actual']
+    return (change['expected'] is None and item is not None and
+            len(parts) == 2 and parts[0] == '.fseventsd' and len(parts[1]) == 16 and
+            all(c in '0123456789abcdef' for c in parts[1]) and
+            item['kind'] == stat.S_IFREG and item['uid'] == 0 and
+            item['gid'] == 99 and item['mode'] == 0o600)
+
+
 def source_metadata(path):
     # Source is read-only: reading a shared inode cannot mutate any of its aliases.
     return metadata(path, allow_hardlinks=True)
@@ -278,6 +288,10 @@ def main():
         # Reattach read-only to verify persisted metadata after the writable detach.
         with attached(raw, seed_mount, True) as persisted:
             differences = inventory_changes(expected, inventory(seed_mount))
+            # macOS fseventsd flushes new journals during writable detach. Never
+            # exempt changes/removals of existing files or other installation state.
+            report['host_journal_additions'] = [d for d in differences if host_journal_addition(d)]
+            differences = [d for d in differences if not host_journal_addition(d)]
             if persisted != identity or differences:
                 report['persisted_identity'] = persisted
                 report['persisted_differences'] = differences

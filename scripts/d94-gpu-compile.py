@@ -118,6 +118,9 @@ def compile_objects(core, device, inputs, output):
              '-DSHENG_GMU_POOL_BYTES=0x2000000u', '-fno-lto']
     for directory in sorted(p for p in inputs.iterdir() if p.is_dir()):
         flags += ['-I', str(directory)]
+    gmu_headers = inputs / 'Sm7635Platform/kits/Sm7635Platform'
+    require((gmu_headers / 'ShengGmu.h').is_file(), 'missing pinned SM7635 GMU header')
+    flags += ['-I', str(gmu_headers)]
     flags += ['-I', str(ctx.tree / '.cache/xnu-work/osfmk')]
     sources = [inputs / 'NativeAdreno' / ('NativeAdreno' + n + '.cpp')
                for n in ('UserClient', 'Service')]

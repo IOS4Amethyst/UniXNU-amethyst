@@ -1,6 +1,9 @@
 name: D94 GPU object qualification
 
 on:
+  push:
+    branches: [ios27-d94-build-audit]
+    paths: [.github/workflows/d94-gpu-compile.yml]
   workflow_dispatch:
     inputs:
       input_run:
@@ -26,6 +29,7 @@ permissions:
 
 jobs:
   objects:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-26
     environment: ARTIFACT_PASSPHRASE
     timeout-minutes: 180

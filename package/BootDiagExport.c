@@ -505,7 +505,7 @@ uint64_t boot_diag_scan(uint64_t budget) {
   }
   for(unsigned i=0;i<sizeof diag_roots/sizeof diag_roots[0];++i)scan(diag_roots[i],0,i,ctx);
   qsort(diag_files,diag_count,sizeof diag_files[0],worth);
-  unsigned crash_count[5]={0};uint64_t crash_bytes=0;uint32_t files_kept=0;
+  unsigned crash_count[BL_CRASH_PROCESS_COUNT]={0};uint64_t crash_bytes=0;uint32_t files_kept=0;
   for(uint32_t i=0;i<diag_count;++i) {
     struct diag_file *f=&diag_files[i];int process=bl_crash_process(f->path);
     uint64_t cost=24+strlen(f->path)-1+f->size;

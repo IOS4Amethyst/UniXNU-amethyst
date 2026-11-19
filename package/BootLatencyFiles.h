@@ -7,12 +7,14 @@ static inline int bl_latency_contains(const char *text,size_t size,const char *t
  for(size_t at=0;at+length<=size;++at)if(!memcmp(text+at,term,length))return 1;
  return 0;
 }
+static const char *const bl_crash_processes[]={"STExtractionService","dasd","WidgetRenderer","FitnessWidget","CalendarWidget",
+ "SpringBoard","backboardd","containermanagerd","com.apple.datamigrator"};
+enum { BL_CRASH_PROCESS_COUNT=sizeof bl_crash_processes/sizeof bl_crash_processes[0] };
 static inline int bl_crash_process(const char *path) {
  const char *name=path;for(const char *at=path;*at;++at)if(*at=='/')name=at+1;
- static const char *const processes[]={"STExtractionService","dasd","WidgetRenderer","FitnessWidget","CalendarWidget"};
- for(unsigned i=0;i<sizeof processes/sizeof processes[0];++i) {
-  size_t n=strlen(processes[i]);
-  if(!strncmp(name,processes[i],n) && (name[n]=='-' || name[n]=='_' || !strncmp(name+n,"Extension-",10)))return (int)i;
+ for(unsigned i=0;i<BL_CRASH_PROCESS_COUNT;++i) {
+  size_t n=strlen(bl_crash_processes[i]);
+  if(!strncmp(name,bl_crash_processes[i],n) && (name[n]=='-' || name[n]=='_' || !strncmp(name+n,"Extension-",10)))return (int)i;
  }
  return -1;
 }

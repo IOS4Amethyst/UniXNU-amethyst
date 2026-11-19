@@ -242,6 +242,8 @@ def compile_objects(core, device, inputs, output):
     archive = output / 'libAmethystAdreno.qualification.late.a'
     run(['xcrun', 'ar', 'rcs', archive, *objects])
     members = subprocess.check_output(['xcrun', 'ar', 't', str(archive)], text=True).splitlines()
+    # Apple ar exposes its symbol index; it is metadata, not a compiled member.
+    members = [name for name in members if name not in ('__.SYMDEF', '__.SYMDEF SORTED')]
     require(members == [p.name for p in objects], 'archive member inventory mismatch')
     report['archive'] = {'sha256': sha(archive), 'members': members}
     save()

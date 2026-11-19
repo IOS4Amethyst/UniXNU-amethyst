@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Isolated live-XNU object qualification; never links, packages or enables GPU."""
+"""Isolated live-XNU archive qualification; never links, packages or enables GPU."""
 import argparse
 import hashlib
 import importlib.util
@@ -65,7 +65,8 @@ def stage(archive, output):
                 header + ': firmware array mismatch')
     board = output / 'board'
     board.mkdir()
-    for name in ('GpuPowerProbe.cpp', 'GpuPowerBoard.h', 'BoardClasses.h'):
+    for name in ('GpuPowerProbe.cpp', 'GpuPowerBoard.h', 'BoardClasses.h',
+                 'AmethystSmc.c', 'ShengGmuVotes.c'):
         content = subprocess.check_output(['git', '-C', str(Path(__file__).resolve().parents[1]),
                                           'show', builder.BOARD_PIN + ':scripts/log/' + name])
         (board / name).write_bytes(content)
@@ -74,6 +75,40 @@ def stage(archive, output):
     require({p.name for p in generated.iterdir()} == {
         'ShengGmuSource.h', 'ShengGmuVotesSource.h', 'ShengGmuCommandDbSource.h',
         'ShengGmuFirmware.h', 'ShengSqeFirmware.h', 'ShengZapFirmware.h'}, 'unexpected generated includes')
+
+
+def source_inventory(inputs, device):
+    validator = load('input_inventory', device / 'scripts/build-amethyst-adreno.py')
+    sources = []
+    for name in validator.required_inputs():
+        if name.endswith(('.c', '.cpp')):
+            matches = list(inputs.rglob(name))
+            require(len(matches) == 1, f'{name}: expected exactly one pinned source, got {matches}')
+            sources.append(matches[0])
+    sources.append(device / 'package/AmethystAdrenoDiagnostics.c')
+    require(all(p.is_file() for p in sources), 'missing archive source')
+    require(len({p.stem for p in sources}) == len(sources), 'duplicate object names')
+    return sources
+
+
+def import_closure(tables, native):
+    definitions = {}
+    imports = {}
+    for owner, symbols in tables.items():
+        for name, value, kind, desc in symbols:
+            if kind & 0xe0 or not kind & 1:
+                continue
+            if kind & 0xe or value:
+                definitions.setdefault(name, []).append(owner)
+            else:
+                imports.setdefault(name, []).append({'object': owner, 'weak': bool(desc & 0x40)})
+    native_names = {n for n, value, kind, _ in native
+                    if not kind & 0xe0 and kind & 1 and (kind & 0xe or value)}
+    return {'imports': imports, 'definitions': definitions,
+            'supplied_by_objects': sorted(imports.keys() & definitions.keys()),
+            'available_in_native': sorted((imports.keys() - definitions.keys()) & native_names),
+            'unresolved': sorted(imports.keys() - definitions.keys() - native_names),
+            'native_availability_is_final_link_proof': False}
 
 
 def compile_objects(core, device, inputs, output):
@@ -102,6 +137,15 @@ def compile_objects(core, device, inputs, output):
     recipe = ctx.tree / 'build/xnu/ios-obj/RELEASE_ARM64_BCM2837/iokit/RELEASE/IOPlatformExpert.cpo.json'
     require(recipe.is_file(), f'bootstrap exit {result.returncode}: missing live recipe; see bootstrap.log')
     record = json.loads(recipe.read_text().strip().rstrip(','))
+    c_recipe = recipe.parents[2] / 'bsd/RELEASE/bsd_init.o.json'
+    require(c_recipe.is_file(), 'missing live C recipe: ' + str(c_recipe))
+    records = {'cxx': record, 'c': json.loads(c_recipe.read_text().strip().rstrip(','))}
+    for language, live in records.items():
+        arguments = live['arguments']
+        require(any('arm64e-apple-ios27.0' in a for a in arguments), language + ': wrong recipe target')
+        private = {a[2:].split('=')[0] for a in arguments if a.startswith('-D') and len(a) > 2}
+        private.update(arguments[i + 1].split('=')[0] for i, a in enumerate(arguments[:-1]) if a == '-D')
+        require({'KERNEL_PRIVATE', 'XNU_KERNEL_PRIVATE'} <= private, language + ': missing private flags')
     args = record['arguments']
     require(any(a in ('--target=arm64e-apple-ios27.0.0', '--target=arm64e-apple-ios27.0.1',
                       'arm64e-apple-ios27.0.1', 'arm64e-apple-ios27.0') for a in args), 'wrong recipe target')
@@ -115,32 +159,92 @@ def compile_objects(core, device, inputs, output):
         bundle.add(exports, arcname='EXPORT_HDRS')
     builder = load('object_recipe', device / 'scripts/build-amethyst-adreno-archive.py')
     flags = ['-mgeneral-regs-only', '-DSHENG_GMU_POOL_BASE=UINT64_C(0xe6440000)',
-             '-DSHENG_GMU_POOL_BYTES=0x2000000u', '-fno-lto']
+             '-DSHENG_GMU_POOL_BYTES=0x2000000u']
     for directory in sorted(p for p in inputs.iterdir() if p.is_dir()):
         flags += ['-I', str(directory)]
     gmu_headers = inputs / 'Sm7635Platform/kits/Sm7635Platform'
     require((gmu_headers / 'ShengGmu.h').is_file(), 'missing pinned SM7635 GMU header')
     flags += ['-I', str(gmu_headers)]
     flags += ['-I', str(ctx.tree / '.cache/xnu-work/osfmk')]
-    sources = [inputs / 'NativeAdreno' / ('NativeAdreno' + n + '.cpp')
-               for n in ('UserClient', 'Service')]
-    sources += [inputs / 'board/GpuPowerProbe.cpp']
-    report = {'qualification': 'objects only; ABI review pending', 'runtime_qualified': False,
-              'bootstrap_exit': result.returncode, 'recipe': record, 'objects': {},
+    sources = source_inventory(inputs, device)
+    for directory in sorted({p.parent for p in sources}):
+        flags += ['-I', str(directory)]
+    abi = builder.audit_kernel(core, inputs / 'kernelcache')
+    report = {'qualification': 'isolated full inventory; not runtime-builder contract approval',
+              'runtime_qualified': False, 'prelink_qualified': False, 'hardware_qualified': False,
+              'bootstrap_exit': result.returncode, 'recipe': record, 'recipes': records, 'objects': {},
               'headers': {str(p.relative_to(exports)): sha(p) for p in exports.rglob('*') if p.is_file()}}
+    objects, tables = [], {}
+    def evidence(obj):
+        tables[obj.name] = builder.symbols_and_sections(obj)[1]
+        with (output / (obj.stem + '.nm')).open('w') as log:
+            run(['xcrun', 'nm', '-m', obj], stdout=log)
+        with (output / (obj.stem + '.disassembly')).open('w') as log:
+            run(['llvm-objdump', '--disassemble', '--reloc', obj], stdout=log)
+    def save():
+        (output / 'qualification.json').write_text(json.dumps(report, indent=2) + '\n')
+    save()
     for source in sources:
         obj = output / (source.stem + '.o')
+        record = records['c' if source.suffix == '.c' else 'cxx']
         command = builder.compile_command(record, source, obj, flags + ['-MD', '-MF', str(obj.with_suffix('.d'))])
         (output / (source.stem + '.command.json')).write_text(json.dumps(command, indent=2))
         with (output / (source.stem + '.log')).open('w') as log:
             run(command, cwd=record['directory'], env=env, stdout=log, stderr=subprocess.STDOUT)
-        builder.symbols_and_sections(obj)  # Actual arm64e MH_OBJECT, not LTO bitcode.
-        with (output / (source.stem + '.nm')).open('w') as log:
-            run(['xcrun', 'nm', '-m', obj], stdout=log)
-        with (output / (source.stem + '.disassembly')).open('w') as log:
-            run(['llvm-objdump', '--disassemble', '--reloc', obj], stdout=log)
+        evidence(obj)  # Actual arm64e MH_OBJECT, not LTO bitcode.
         report['objects'][obj.name] = {'sha256': sha(obj), 'source_sha256': sha(source)}
-    (output / 'qualification.json').write_text(json.dumps(report, indent=2) + '\n')
+        save()
+        if source.name == 'NativeAdrenoAccelerator.cpp':
+            builder.audit_accelerator(obj, abi)
+            late = obj.with_suffix('.late.o')
+            run(['llvm-objcopy', '--remove-section=__DATA,__mod_init_func',
+                 '--globalize-symbol=__GLOBAL__sub_I_NativeAdrenoAccelerator.cpp', obj, late])
+            raw, _, sections = builder.symbols_and_sections(obj)
+            late_raw, symbols, late_sections = builder.symbols_and_sections(late)
+            require(not any(n == '__mod_init_func' for n, *_ in late_sections), 'early constructor survived')
+            require(any(n == '__GLOBAL__sub_I_NativeAdrenoAccelerator.cpp' and k & 1
+                        for n, _, k, _ in symbols), 'late constructor not exported')
+            def text(data, secs):
+                return b''.join(data[o:o + size] for n, _, size, o, _, _ in secs if n == '__text')
+            require(text(raw, sections) == text(late_raw, late_sections), 'late staging changed instructions')
+            del tables[obj.name]
+            obj = late
+            evidence(obj)
+            report['objects'][obj.name] = {'sha256': sha(obj), 'source_sha256': sha(source)}
+            report['accelerator_audit'] = {k: v for k, v in abi.items() if k != 'slots'}
+            save()
+        objects.append(obj)
+    # Exact reviewed donor bindings, identical to the runtime builder; no fake fills.
+    text, addresses = '.text\n.p2align 2\n', ''
+    for name, address in builder.BINDINGS.items():
+        if name.endswith('gMetaClassE'):
+            addresses += f'.globl {name}\n.set {name}, {address:#x}\n'
+        else:
+            addresses += f'.globl {name}.original\n.set {name}.original, {address:#x}\n'
+            text += f'.globl {name}\n{name}:\n bti c\n b {name}.original\n'
+    for name, content in [('original-bindings', text), ('original-addresses', addresses)]:
+        source = output / (name + '.S')
+        source.write_text(content)
+        obj = source.with_suffix('.o')
+        run(['xcrun', 'clang', '-target', 'arm64e-apple-ios27.0.1', '-c', source, '-o', obj])
+        evidence(obj)
+        objects.append(obj)
+        report['objects'][obj.name] = {'sha256': sha(obj), 'source_sha256': sha(source)}
+    native = []
+    report['native_comparators'] = []
+    for path in sorted(recipe.parents[2].glob('mach.*.noctf')):
+        nm = output / (path.name + '.nm')
+        with nm.open('w') as log:
+            run(['xcrun', 'nm', '-g', '-U', '-j', path], stdout=log)
+        native += [(name, 0, 0xf, 0) for name in nm.read_text().splitlines() if name]
+        report['native_comparators'].append({'path': str(path), 'sha256': sha(path)})
+    report['import_closure'] = import_closure(tables, native)
+    archive = output / 'libAmethystAdreno.qualification.late.a'
+    run(['xcrun', 'ar', 'rcs', archive, *objects])
+    members = subprocess.check_output(['xcrun', 'ar', 't', str(archive)], text=True).splitlines()
+    require(members == [p.name for p in objects], 'archive member inventory mismatch')
+    report['archive'] = {'sha256': sha(archive), 'members': members}
+    save()
 
 
 def main():
@@ -173,9 +277,15 @@ def main():
             assert not (Path(tmp) / 'escaped').exists()
         builder = load('recipe_check', Path(__file__).with_name('build-amethyst-adreno-archive.py'))
         record = {'file': 'old.cpp', 'arguments': ['clang', '-DKERNEL_PRIVATE', '-flto', '-c', 'old.cpp', '-o', 'old.o', '-MJ', 'old.json']}
-        assert builder.compile_command(record, Path('new.cpp'), Path('new.o'), ['-fno-lto']) == [
+        assert builder.compile_command(record, Path('new.cpp'), Path('new.o'), []) == [
             'clang', '-DKERNEL_PRIVATE', '-flto', '-c', 'new.cpp', '-o', 'new.o', '-fno-lto']
-        print('PASS: extraction boundary and private-flag-preserving recipe substitution')
+        closure = import_closure({'a.o': [('local', 0, 1, 0), ('native', 0, 1, 0),
+                                        ('missing', 0, 1, 0x40)],
+                                  'b.o': [('local', 4, 0xf, 0)]}, [('native', 8, 0xf, 0)])
+        assert closure['supplied_by_objects'] == ['local']
+        assert closure['available_in_native'] == ['native']
+        assert closure['unresolved'] == ['missing'] and closure['imports']['missing'][0]['weak']
+        print('PASS: extraction boundary, recipe preservation, full-object import closure')
 
 
 if __name__ == '__main__':

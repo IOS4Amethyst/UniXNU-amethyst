@@ -101,7 +101,8 @@ def compile_command(record, source, output, flags):
         if value not in ('-MD', '-MMD', '-MP'):
             command.append(str(source) if value == record['file'] else value)
         i += 1
-    return command + flags
+    # PAC/section inspection and late-constructor removal require Mach-O, not bitcode.
+    return command + flags + ['-fno-lto']
 
 
 def symbols_and_sections(path):
@@ -210,14 +211,17 @@ def main():
         require(not subprocess.check_output(['git', '-C', str(directory), 'ls-files', '--others', '--exclude-standard']),
                 name + ': helper checkout has untracked include inputs')
     for prefix, anchor in [('ArmSmmu4K', 'ArmSmmu4K.c'), ('AdrenoHfi', 'AdrenoHfi.c'),
-                           ('AdrenoFirmware', 'AdrenoHfi.c'), ('ShengGmuCommandDb', 'ShengGmu.c')]:
+                            ('AdrenoFirmware', 'AdrenoHfi.c'), ('ShengGmuCommandDb', 'ShengGmu.c')]:
         for name in validator.required_inputs():
             if name.startswith(prefix) and name.endswith(('.c', '.h')) and 'Source' not in name:
                 require(paths[name].resolve() == (paths[anchor].parent / name).resolve(),
-                        name + ': must use the pinned helper source tree')
+                         name + ': must use the pinned helper source tree')
+    require(paths['ShengGmuVotes.h'].resolve() ==
+            (paths['ShengGmu.c'].parent / 'ShengGmuVotes.h').resolve(),
+            'ShengGmuVotes.h: must use the pinned SM7635 helper source tree')
     board = Path(__file__).resolve().parents[1]
     for name in ('GpuPowerProbe.cpp', 'GpuPowerBoard.h', 'BoardClasses.h', 'AmethystSmc.c',
-                 'ShengGmuVotes.c', 'ShengGmuVotes.h'):
+                  'ShengGmuVotes.c'):
         expected = subprocess.check_output(['git', '-C', str(board), 'show', BOARD_PIN + ':scripts/log/' + name])
         require(paths[name].read_bytes() == expected, name + ': differs from reviewed board main')
     # The pinned accelerator's relative include is ../NativeMetal, NOT ../AdrenoMetal.

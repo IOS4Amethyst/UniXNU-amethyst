@@ -29,7 +29,10 @@ def main():
               '-c', '/src/original.cpp', '-fapple-kext']}
     command = builder.compile_command(record, Path('/new.cpp'), Path('/new.o'), ['-mgeneral-regs-only'])
     assert command == ['clang++', '-target', 'arm64e-apple-ios27.0.0', '-D', 'RELEASE',
-                       '-o', '/new.o', '-c', '/new.cpp', '-fapple-kext', '-mgeneral-regs-only']
+                       '-o', '/new.o', '-c', '/new.cpp', '-fapple-kext', '-mgeneral-regs-only', '-fno-lto']
+    lto_record = dict(record, arguments=record['arguments'] + ['-flto=thin'])
+    inspected = builder.compile_command(lto_record, Path('/new.cpp'), Path('/new.o'), [])
+    assert inspected[-1] == '-fno-lto' and inspected.index('-flto=thin') < len(inspected) - 1
     rejected(lambda: builder.compile_command({'file': 'missing', 'arguments': ['clang']}, Path('a'), Path('b'), []))
     with tempfile.TemporaryDirectory(prefix='amethyst-adreno-') as temp:
         wrong = Path(temp) / 'wrong-kernel'

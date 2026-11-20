@@ -68,6 +68,11 @@ def prepare(a):
                     for x in config['payload']['kernel_args']), 'GPU runtime must remain off')
     needle = '  "build-fileset-release-reference.py --tree . --lto",'
     require(text.count(needle) == 1, 'run prepare-d94-build first')
+    archives = config['kernel']['archives']
+    require('build-gop-legacy-display-27.py' in archives and
+            archives.index('build-gop-legacy-display-27.py') <
+            archives.index('build-fileset-release-reference.py --tree . --lto'),
+            'D94 GOP archive must precede the release reference and GPU stage')
     command = 'prepare-d94-gpu-link.py stage --inputs ' + str(a.inputs.resolve()) + ' --core ' + str(a.core.resolve())
     board.write_text(text.replace(needle, needle + '\n  ' + json.dumps(command) + ','))
     series = a.device / 'patches/xnu/series'
@@ -78,7 +83,12 @@ def prepare(a):
     text = config.read_text()
     needle = 'CONFIG_XNU_EXTRA_LD_ARCHIVES="'
     require(text.count(needle) == 1, 'ambiguous archive config')
-    config.write_text(text.replace(needle, needle + '-Wl,-force_load,{tree}/build/d94-gpu/' + NAME + ' '))
+    text = text.replace(needle, needle + '-Wl,-force_load,{tree}/build/d94-gpu/' + NAME + ' ')
+    # The native builder owns both force-loading the GOP archive and display hook macros.
+    # Building the archive alone leaves GPUProbe/SourceStorageBootLog imports unresolved.
+    display = 'CONFIG_XNU_NATIVE_LEGACY_DISPLAY=n\n'
+    require(text.count(display) == 1, 'unexpected GPU audit display configuration')
+    config.write_text(text.replace(display, 'CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y\n'))
     # Preserve the platform warning flags; add only the hook macro in this disposable core.
     script = a.core / 'scripts/build-xnu-4k-baseline.sh'
     text = script.read_text()
@@ -130,7 +140,8 @@ def verify(a):
     require(absolute.get(meta) == bindings[meta], 'original metaclass binding drift')
     names = subprocess.check_output(['llvm-nm', '--defined-only', str(natives[0])], text=True)
     for name in ('_OSKextRegisterBoardClasses', '_native_adreno_accelerator_allocate',
-                 '__GLOBAL__sub_I_NativeAdrenoAccelerator.cpp'):
+                 '__GLOBAL__sub_I_NativeAdrenoAccelerator.cpp', '_native_legacy_display_probe',
+                 '_native_legacy_display_allocate', '_native_legacy_transfer_calls'):
         require(name in names, 'native implementation absent: ' + name)
     print('PASS: full native link and retained accelerator branches; runtime/hardware unqualified')
 

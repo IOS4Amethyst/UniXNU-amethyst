@@ -77,6 +77,15 @@ jobs:
           git -C drivers/Adreno740 checkout --detach FETCH_HEAD
           test "$(git -C drivers/Adreno740 rev-parse HEAD)" = 26c1da780d602c7bfe2fcd62bff41f9009ead6a3
           echo '889f361ff6903d68f48c95fdbdfcb6922431284be1dec2004a2a233cd1b09457  drivers/Adreno740/NativeAdrenoABI.h' | shasum -a 256 -c -
+          # The pinned patch creates this header but omits Git's new-file metadata.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('patches/mesa/turnip-frame-diagnostics.patch')
+          text = p.read_text()
+          old = 'diff --git a/src/freedreno/vulkan/tu_frame_diagnostic.h b/src/freedreno/vulkan/tu_frame_diagnostic.h\n--- /dev/null'
+          assert text.count(old) == 1
+          p.write_text(text.replace(old, old.replace('\n---', '\nnew file mode 100644\n---'), 1))
+          PY
           python3 ../gpu-helper/scripts/prepare-asteroids-turnip.py --unixnu "$PWD" --fetch-only
           .cache/mesa-venv/bin/pip install -r scripts/requirements-adreno-compiler.txt
           .cache/mesa-venv/bin/pip freeze

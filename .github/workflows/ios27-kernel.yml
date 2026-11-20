@@ -6,6 +6,10 @@ on:
     branches: [ios27]
   workflow_dispatch:
     inputs:
+      gpu_full_link:
+        description: "Kernel-only relink of pinned D94 GPU archive (runtime remains off)"
+        type: boolean
+        default: false
       donor:
         description: Kernel donor (D94 is kernel-only migration audit)
         type: choice
@@ -77,7 +81,7 @@ jobs:
           repository: IOS4Amethyst/UniXNU
           # The configuration-level parameter. Merge back to ios27-iphone15 once the
           # RELEASE kernel links and prelinks.
-          ref: ios27-release-config-level
+          ref: ${{ inputs.gpu_full_link && 'e6795bfe7ae4ef1825cd0be7201a4cc572c6b2cb' || 'ios27-release-config-level' }}
           path: unixnu-core
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -143,6 +147,19 @@ jobs:
           git -C unixnu-core submodule update --init --recursive kits/XnuPrelink
           python3 scripts/prepare-d94-build.py --core unixnu-core --device .
 
+      - name: Prepare pinned GPU full native relink
+        if: inputs.gpu_full_link
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          test "$DEFCONFIG" = amethyst_defconfig
+          test "$(gh run view 44635510510 --json conclusion --jq .conclusion)" = success
+          gh run download 44635510510 -n d94-gpu-qualification-encrypted -D "$RUNNER_TEMP/gpu-download"
+          python3 scripts/prepare-d94-gpu-link.py prepare --core unixnu-core --device . \
+            --encrypted "$RUNNER_TEMP/gpu-download/d94-gpu-qualification.tar.gz.enc" --inputs "$RUNNER_TEMP/gpu-link"
+
       - name: Load verified D94 root policies
         if: env.OS_PROFILE == 'ios-27.0.1-24A446-d94ap'
         env:
@@ -205,6 +222,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: ./unixnu build kernel --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
+
+      - name: Verify retained GPU full-link output
+        if: inputs.gpu_full_link
+        run: python3 scripts/prepare-d94-gpu-link.py verify --core unixnu-core
 
       - name: Summarize prelink audit
         if: always() && env.OS_PROFILE == 'ios-27.0.1-24A446-d94ap'
@@ -286,6 +307,7 @@ jobs:
           python3 - "$RUNNER_TEMP/files.txt" <<'PY'
           import glob, os, sys
           patterns = [
+              'unixnu-core/out/**/tree/build/d94-gpu/**',
               'unixnu-core/out/**/kernel/**',
               'unixnu-core/out/**/payload/**',
               'unixnu-core/out/**/userdata/**',

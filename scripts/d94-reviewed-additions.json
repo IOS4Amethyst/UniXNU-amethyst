@@ -73,6 +73,41 @@
       "original_sha256": "270e3f8691f72932d5b54c15ba75782fa0a900b4afe6ad4133552961da730434",
       "native_symbol": "_kernel_image4_storage_data",
       "evidence": "Original TXM implementation calls cold body 0xfffffff00b4182d8, which panics with 'unsupported AppleImage4 interface @%s:%d', file txm.c, line 1649. Prepared source bsd/kern/code_signing/txm.c:1630-1639 uniquely identifies txm_image4_storage_data(size_t *), public wrapper in bsd/kern/kern_codesigning.c:1494. Independent AppleImage4 caller 0xfffffff008fd648c passes pointer to zeroed size_t local, reads resulting allocation size, checks >0x38f and returned pointer alignment, establishing size-out/pointer-return ABI; import slot 0xfffffff008074e80/thunk 0xfffffff008ff9b88. Fresh native 636f6799 wrapper at 0xfffffff00766a224 tails to xnu_image4_storage_data 0xfffffff00766a614, returns real zero-initialized 0x1400-byte backing storage and writes actual size; fresh reference 1a2db227 wrapper at 0xfffffff0076e2258 inlines same real storage operation. This is platform storage provision, not signature verification or a forced security grant."
+    },
+    {
+      "original": "0xfffffff00b11beac",
+      "original_size": 120,
+      "original_sha256": "69c79bbdc700d2f455f9d929843b25f8c0833633985a4f2d6ec2bccea2a5125c",
+      "native_symbol": "_unixnu_d94_image4_unavail_beac",
+      "evidence": "iOS 27-only Image4 secure-channel monitor helper after kernel_image4_monitor_trap, past the end of xnu-12377.121.6 kern_codesigning.c; no native twin exists. Imported by com.apple.security.Image4. Bound to the D94 bring-up shim from native-d94-ios27-shims.patch, which returns the donor's no-reply result 0xffff (no monitor on SM7635). Donor body: builds a selector 0x34 mailbox request from x0-x2 and returns the u16 reply when reply type is 0x2b, else 0xffff. No hardware qualification."
+    },
+    {
+      "original": "0xfffffff00b11bf24",
+      "original_size": 108,
+      "original_sha256": "72abaa8d166a02ed91abdb764de5358615cc43a6144af1530a34805e4b37726b",
+      "native_symbol": "_unixnu_d94_image4_unavail_bf24",
+      "evidence": "iOS 27-only Image4 secure-channel monitor helper after kernel_image4_monitor_trap, past the end of xnu-12377.121.6 kern_codesigning.c; no native twin exists. Imported by com.apple.security.Image4. Bound to the D94 bring-up shim from native-d94-ios27-shims.patch, which returns the donor's no-reply result 0xffff (no monitor on SM7635). Donor body: selector 0x35 request from x0, same reply decoding as 0xfffffff00b11beac. No hardware qualification."
+    },
+    {
+      "original": "0xfffffff00b11bf90",
+      "original_size": 32,
+      "original_sha256": "4feb057fa2d5a965daad5206aaffd7982f9b9922871df015fe5849e8ae6926c1",
+      "native_symbol": "_unixnu_d94_image4_unavail_bf90",
+      "evidence": "iOS 27-only Image4 secure-channel monitor helper after kernel_image4_monitor_trap, past the end of xnu-12377.121.6 kern_codesigning.c; no native twin exists. Imported by com.apple.security.Image4. Bound to the D94 bring-up shim from native-d94-ios27-shims.patch, which returns the donor's no-reply result 0xffff (no monitor on SM7635); the shim keeps the donor's result 3 when any of x0-x3 is NULL. Donor body: bti; cbz x0-x3 -> mov w0,#3; ret; else tail-call 0xfffffff00b11e068. No hardware qualification."
+    },
+    {
+      "original": "0xfffffff00b11bfb0",
+      "original_size": 24,
+      "original_sha256": "e3da35c8068fc9727ddcb166b587e836a1300df9ec2618803b67ce028e37db35",
+      "native_symbol": "_unixnu_d94_image4_unavail_bfb0",
+      "evidence": "iOS 27-only Image4 secure-channel monitor helper after kernel_image4_monitor_trap, past the end of xnu-12377.121.6 kern_codesigning.c; no native twin exists. Imported by com.apple.security.Image4. Bound to the D94 bring-up shim from native-d94-ios27-shims.patch, which returns the donor's no-reply result 0xffff (no monitor on SM7635); the shim keeps the donor's result 3 when x0 or x1 is NULL. Donor body: bti; cbz x0/x1 -> mov w0,#3; ret; else tail-call 0xfffffff00b11e1a0 (selector 0x37 request, 0xffff on bad reply). No hardware qualification."
+    },
+    {
+      "original": "0xfffffff00b2ab224",
+      "original_size": 480,
+      "original_sha256": "3f21607e62db53e169f450e71e5709d99c453f12a5b7660017fe5b0217d36d94",
+      "native_symbol": "_unixnu_d94_ioservice_rpc_bf66",
+      "evidence": "iOS 27-only IOService DriverKit RPC client stub, message ID 0xbf66f4287c60ef85 (args OSObject*, bool, OSObject*, OUT OSDictionary** checked against OSDictionary::gMetaClass, supermethod), between StateNotificationItemCopy and Stop_async. The native kernel contains no stub or dispatch case with this ID (only CreatePMAssertion 0xabc814d03b619a1c and ReleasePMAssertion 0xb2c356503bbc13dc), so no native twin exists. Imported by com.apple.driver.AppleARMPlatform. Bound to the D94 bring-up shim from native-d94-ios27-shims.patch: clears *out and returns kIOReturnUnsupported, as a kernel whose IOService dispatch does not know the message. No hardware qualification."
     }
   ],
   "data": [

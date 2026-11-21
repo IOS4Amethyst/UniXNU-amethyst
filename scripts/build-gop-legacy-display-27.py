@@ -421,9 +421,12 @@ for source_dir, relative in ((HIDSRC / 'IOHIDFamily', 'IOKit/hid'), (HIDSRC / 'I
     (hid_include / relative).mkdir(parents=True, exist_ok=True)
     for h in sorted(source_dir.glob('*.h')):
         shutil.copyfile(h, hid_include / relative / h.name)
-# Core prepare-storage-headers.py: IOHIDDevice.h includes <TargetConditionals.h>, which only the SDK's usr/include has.
-shutil.copyfile(Path(sdk) / 'usr/include/TargetConditionals.h', hid_include / 'TargetConditionals.h')
-sdk_kernel = Path(sdk) / 'System/Library/Frameworks/Kernel.framework/Versions/A/Headers'
+# Core prepare-storage-headers.py / build-sheng-source-drivers.py: the macOS SDK supplies <TargetConditionals.h> and, after XNU's
+# own headers, the Kernel.framework headers the IOHIDFamily sources need (IOKit/graphics/IOGraphicsTypes.h is macOS-only).
+hid_sdk = Path(subprocess.check_output(['xcrun', '--sdk', 'macosx', '--show-sdk-path'], text=True).strip())
+shutil.copyfile(hid_sdk / 'usr/include/TargetConditionals.h', hid_include / 'TargetConditionals.h')
+sdk_kernel = hid_sdk / 'System/Library/Frameworks/Kernel.framework/Versions/A/Headers'
+require((sdk_kernel / 'IOKit/graphics/IOGraphicsTypes.h').is_file(), 'macOS Kernel.framework IOGraphicsTypes.h')
 hid_flags = ('-I', str(hid_include), '-idirafter', str(sdk_kernel), '-DNATIVE_HID_SOURCE_API=1', '-mgeneral-regs-only')
 hid_obj = OUT / 'NativeHidInput.o'
 compile_cpp(TOUCH / 'NativeHidInput.cpp', hid_obj, hid_flags)   # UniXNU/ShengHidInput d1ffc9d (In Range fix), unchanged

@@ -65,7 +65,16 @@ void native_hid_live_checkpoint(IOService *device) {
     static IORegistryEntry *publishedFor;
     if(!device || !device->getProperty("Built-In"))return;      // set by NativeHidInput only with touch on
     IORegistryEntry *driver=findEventDriver(device,4);
-    if(!driver || publishedFor==driver)return;                    // once: each setProperty notifies clients
+    if(!driver)return;
+    // iOS 27 (sheng HidInputProbe.cpp): the event service is the kernel side of a DriverKit driver that publishes its own usage pair
+    // (1,6) after it starts, later than the first publish here, so backboardd ignored every touch ("unsupported service"; b22: 43
+    // contacts reached the driver, none acted). Publish again whenever the pair reads back as anything but (0x0d,4); otherwise once,
+    // since each setProperty notifies the service's clients.
+    OSNumber *page=OSDynamicCast(OSNumber,driver->getProperty("PrimaryUsagePage"));
+    OSNumber *usage=OSDynamicCast(OSNumber,driver->getProperty("PrimaryUsage"));
+    const bool digitizerPair=page && usage && page->unsigned32BitValue()==0x0d && usage->unsigned32BitValue()==4;
+    if(publishedFor==driver && digitizerPair)return;
+    if(publishedFor==driver)amethyst_hid_published_flags=amethyst_hid_published_flags|2;   // bit 1: republished after the dext reset it
     publishedFor=driver;
     driver->setProperty("Built-In",kOSBooleanTrue);driver->setProperty("DisplayIntegrated",kOSBooleanTrue);
     driver->setProperty("PrimaryUsagePage",(unsigned long long)0x0d,32);driver->setProperty("PrimaryUsage",(unsigned long long)4,32);

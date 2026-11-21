@@ -421,6 +421,8 @@ for source_dir, relative in ((HIDSRC / 'IOHIDFamily', 'IOKit/hid'), (HIDSRC / 'I
     (hid_include / relative).mkdir(parents=True, exist_ok=True)
     for h in sorted(source_dir.glob('*.h')):
         shutil.copyfile(h, hid_include / relative / h.name)
+# Core prepare-storage-headers.py: IOHIDDevice.h includes <TargetConditionals.h>, which only the SDK's usr/include has.
+shutil.copyfile(Path(sdk) / 'usr/include/TargetConditionals.h', hid_include / 'TargetConditionals.h')
 sdk_kernel = Path(sdk) / 'System/Library/Frameworks/Kernel.framework/Versions/A/Headers'
 hid_flags = ('-I', str(hid_include), '-idirafter', str(sdk_kernel), '-DNATIVE_HID_SOURCE_API=1', '-mgeneral-regs-only')
 hid_obj = OUT / 'NativeHidInput.o'

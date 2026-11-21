@@ -167,6 +167,9 @@ extern "C" volatile uint32_t amethyst_touch_hid_shorts __attribute__((weak_impor
 extern "C" volatile int amethyst_touch_hid_last[2] __attribute__((weak_import));
 extern "C" volatile uint32_t native_touch_edge_stats[4] __attribute__((weak_import));   // NativeHidInput: installed, begun, at edge, skipped
 extern "C" volatile uint32_t native_legacy_swap_accepted_count __attribute__((weak_import));
+// AmethystPanel.cpp: [0] stage, [8] DSI commands, [9] timed out, [10] last us, [11] last level, [12] panel on, [13] iOS brightness
+// requests (AmethystBacklight setProperties), [14] last error, [15] scheduled line, [2] DSI_CTRL, [3] CMD_MODE_DMA_CTRL.
+extern "C" volatile int32_t native_panel_stats[16] __attribute__((weak_import));
 extern "C" volatile uint32_t native_legacy_swap_rejected_count __attribute__((weak_import));
 extern "C" volatile uint32_t native_legacy_rej_reason __attribute__((weak_import));
 extern "C" volatile uint64_t native_legacy_rej_surfaces[4] __attribute__((weak_import));
@@ -208,6 +211,12 @@ extern "C" void amethyst_touch_snapshot(void) {
                 native_legacy_rej_rects[0][0],native_legacy_rej_rects[0][1],native_legacy_rej_rects[0][2],native_legacy_rej_rects[0][3],
                 native_legacy_rej_rects[1][0],native_legacy_rej_rects[1][1],native_legacy_rej_rects[1][2],native_legacy_rej_rects[1][3],
                 native_legacy_rej_class);
+    } else if(&native_panel_stats && native_panel_stats[0]) {
+        // Brightness path: requests from CoreBrightness, DSI commands sent/timed out, the last level the panel accepted.
+        amethyst_touch_row_set(48,"AmethystPanel: st=%d req=%d cmd=%d to=%d us=%d lvl=%d on=%d err=%d line=%d ctrl=%x dma=%x\n",
+            native_panel_stats[0],native_panel_stats[13],native_panel_stats[8],native_panel_stats[9],native_panel_stats[10],
+            native_panel_stats[11],native_panel_stats[12],native_panel_stats[14],native_panel_stats[15],
+            (unsigned)native_panel_stats[2],(unsigned)native_panel_stats[3]);
     } else if(amethyst_sigp_disabled_mask && &armcpu_core_sgi) {
         unsigned self=0;PE_parse_boot_argn("armcpu-self-ipi",&self,sizeof self);
         amethyst_touch_row_set(48,"AmethystSmp: self-ipi=%u sigpoff=%02x sent=%llu ipi %u %u %u %u %u %u %u %u\n",

@@ -557,6 +557,7 @@ void native_legacy_display_late_probe(void) {
                     if(started && phase==4) {
                         activeLegacyDisplay=display;activeGOPNub=nub;native_legacy_stage=10;
                         // sheng LegacyDisplayProbe.cpp: the GPU hand-off presenter, attached to the resource service, not the display node.
+                        unsigned gpu=0;PE_parse_boot_argn("sheng-fb-gpu",&gpu,sizeof gpu);
                         if(gpu==1) {
                             IOService *handoff=native_gop_presenter_create();
                             IOService *home=IOService::getResourceService();

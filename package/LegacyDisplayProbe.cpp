@@ -461,9 +461,11 @@ void native_legacy_display_probe(void) {
     unsigned gpu=0,direct=0;
     PE_parse_boot_argn("sheng-fb-gpu",&gpu,sizeof gpu);
     PE_parse_boot_argn("sheng-dpu-scanout",&direct,sizeof direct);
-    if(gpu || direct) {
+    // sheng-dpu-scanout drives SM8550 display pipes: refused. sheng-fb-gpu=1 (GPU hand-off presenter, the iPadOS 17 V60 and sheng
+    // iPadOS 27 smooth path) only offers frames to the GPU client; it is allowed again now the D94 Metal addon loads.
+    if(direct || gpu>1) {
         probeFailed(ProbeForbidden);
-        printf("amethyst-fb: refusing SM8550 GPU/direct-scanout boot arguments\n");
+        printf("amethyst-fb: refusing SM8550 direct-scanout boot arguments\n");
         return;
     }
     // The registration path and optional original-userclient inspection both
@@ -554,7 +556,15 @@ void native_legacy_display_late_probe(void) {
                     else if(!started)probeFailed(ProbeStart);
                     if(started && phase==4) {
                         activeLegacyDisplay=display;activeGOPNub=nub;native_legacy_stage=10;
-                        // No SM8550 GPU handoff on amethyst; use only the actual GOP resource.
+                        // sheng LegacyDisplayProbe.cpp: the GPU hand-off presenter, attached to the resource service, not the display node.
+                        if(gpu==1) {
+                            IOService *handoff=native_gop_presenter_create();
+                            IOService *home=IOService::getResourceService();
+                            bool handoffAttached=false;
+                            if(handoff && home)native_gop_presenter_set_source(handoff,nub);
+                            if(handoff && home && handoff->init() && (handoffAttached=handoff->attach(home)) && handoff->start(home))gpuHandoffPresenter=handoff;
+                            else {if(handoffAttached)handoff->detach(home);OSSafeReleaseNULL(handoff);}
+                        }
                         finishUnitScalePolicy(true);
                         OSSafeReleaseNULL(displayTreeParent);
                         native_legacy_display_checkpoint();return;

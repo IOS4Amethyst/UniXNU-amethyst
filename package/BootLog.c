@@ -108,6 +108,7 @@ extern volatile uint32_t native_adreno_fence_wait[8] __attribute__((weak_import)
 extern volatile uint32_t native_adreno_stall[24] __attribute__((weak_import));
 extern volatile uint32_t native_adreno_stall_mem[59] __attribute__((weak_import));
 extern volatile uint32_t native_adreno_unstick[15] __attribute__((weak_import));
+extern volatile uint32_t native_adreno_stall_working __attribute__((weak_import));   // first-stage kicks skipped: the CP was moving
 extern volatile uint32_t native_adreno_fence_pending[8] __attribute__((weak_import));
 extern volatile uint32_t native_adreno_wptr_fence[4] __attribute__((weak_import));
 extern volatile uint64_t native_adreno_wait_outer[5] __attribute__((weak_import));
@@ -1635,10 +1636,11 @@ static size_t compose(char *out, size_t cap, uint32_t slot, unsigned now) {
     char row[200];
     // [0] write-pointer retries, [1] fence of the last, [2] translation drops, [4] bus drains with ack [5]/[6], [9..11] stalls that ended after
     // the write pointer / translations / drain stage, [12] the most timeouts one stall took, [13] a wait's timeout in us.
-    snprintf(row, sizeof row, "[gpu unstick] kick=%u last=%u tlb=%u drain=%u ack=%x/%x ended: kick=%u tlb=%u drain=%u longest=%u unit=%uus",
+    snprintf(row, sizeof row, "[gpu unstick] kick=%u last=%u tlb=%u drain=%u ack=%x/%x ended: kick=%u tlb=%u drain=%u longest=%u unit=%uus working=%u",
              native_adreno_unstick[0], native_adreno_unstick[1], native_adreno_unstick[2], native_adreno_unstick[4],
              native_adreno_unstick[5], native_adreno_unstick[6], native_adreno_unstick[9], native_adreno_unstick[10],
-             native_adreno_unstick[11], native_adreno_unstick[12], native_adreno_unstick[13]);
+             native_adreno_unstick[11], native_adreno_unstick[12], native_adreno_unstick[13],
+             &native_adreno_stall_working ? native_adreno_stall_working : 0);
     at = put(out, at, cap, row, sizeof row);
   }
   if (log_gpu_on && (&native_adreno_fence_pending)) {

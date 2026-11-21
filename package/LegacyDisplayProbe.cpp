@@ -494,7 +494,10 @@ void native_legacy_display_probe(void) {
 void native_legacy_display_late_probe(void);
 // ishtar: none of sheng's board probes (keystore, cpufreq, GPU power, touch, WiFi, ADSP, battery, audio, buttons, backlight, DPU,
 // HID): this board does not have those drivers yet; each comes back with its stage.
+extern void native_keystore_probe(void);
 void native_legacy_display_late_probe(void) {
+    // The AppleKeyStore stand-in first, as sheng does (gated inside on offline-key-events=1 and sheng-aks=1).
+    native_keystore_probe();
     IOService *display=pendingLegacyDisplay;if(!display)return;pendingLegacyDisplay=nullptr;
     native_legacy_surface_status=OSKextLoadKextWithIdentifier("com.apple.iokit.IOSurface");
     OSDictionary *matching=IOService::nameMatching("IOCoreSurfaceRoot");

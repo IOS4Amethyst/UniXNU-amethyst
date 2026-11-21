@@ -154,7 +154,7 @@ jobs:
           ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
         run: |
           set -euo pipefail
-          test "$DEFCONFIG" = amethyst_defconfig
+          test "$DEFCONFIG" = amethyst_defconfig || test "$DEFCONFIG" = ios27_data_defconfig
           test "$(gh run view 44635510510 --json conclusion --jq .conclusion)" = success
           gh run download 44635510510 -n d94-gpu-qualification-encrypted -D "$RUNNER_TEMP/gpu-download"
           python3 scripts/prepare-d94-gpu-link.py prepare --core unixnu-core --device . \

@@ -79,7 +79,10 @@ def prepare(a):
     text = series.read_text()
     require('native-d94-release-display.patch' in text and 'native-d94-release-gpu.patch' not in text, 'patch ordering')
     series.write_text(text.rstrip() + '\nnative-d94-release-gpu.patch\n')
-    config = a.device / 'configs/amethyst_defconfig'
+    # The Data-mount boot config (ios27_data_defconfig) takes the same GPU archive as the link audit config.
+    selected = os.environ.get('DEFCONFIG', 'amethyst_defconfig')
+    require(selected in ('amethyst_defconfig', 'ios27_data_defconfig'), 'unsupported GPU defconfig: ' + selected)
+    config = a.device / 'configs' / selected
     text = config.read_text()
     needle = 'CONFIG_XNU_EXTRA_LD_ARCHIVES="'
     require(text.count(needle) == 1, 'ambiguous archive config')
@@ -87,8 +90,9 @@ def prepare(a):
     # The native builder owns both force-loading the GOP archive and display hook macros.
     # Building the archive alone leaves GPUProbe/SourceStorageBootLog imports unresolved.
     display = 'CONFIG_XNU_NATIVE_LEGACY_DISPLAY=n\n'
-    require(text.count(display) == 1, 'unexpected GPU audit display configuration')
-    config.write_text(text.replace(display, 'CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y\n'))
+    enabled = 'CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y\n'
+    require(text.count(display) + text.count(enabled) == 1, 'unexpected GPU audit display configuration')
+    config.write_text(text.replace(display, enabled))
     # Preserve the platform warning flags; add only the hook macro in this disposable core.
     script = a.core / 'scripts/build-xnu-4k-baseline.sh'
     text = script.read_text()

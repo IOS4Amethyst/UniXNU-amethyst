@@ -167,9 +167,19 @@ public:
         OSDictionary *dictionary = OSDynamicCast(OSDictionary, properties);
         if (!dictionary) return kIOReturnBadArgument;
         OSNumber *brightness = OSDynamicCast(OSNumber, dictionary->getObject("brightness"));
-        if (!brightness) return kIOReturnSuccess;
+        // iOS 27 CoreBrightness (24A446, SetBLDriverNitsValue) sends no "brightness": it sends "brightness-nits", an SInt32 of 16.16 nits
+        // between the calibration's lMinPanel and lMaxPanel (2..500 here), and "brightness-nits-cap". Without this every Control Center
+        // slider move was accepted and dropped (b28: req=0). OLED luminance is close to linear in the DCS 0x51 level.
+        OSNumber *nits = OSDynamicCast(OSNumber, dictionary->getObject("brightness-nits"));
+        if (!brightness && !nits) return kIOReturnSuccess;
         OSNumber *fadePeriod = OSDynamicCast(OSNumber, dictionary->getObject("FadePeriod"));
-        const int32_t requested = (int32_t)brightness->unsigned32BitValue();
+        int32_t requested;
+        if (brightness) requested = (int32_t)brightness->unsigned32BitValue();
+        else {
+            const int64_t n16 = (int32_t)nits->unsigned32BitValue();
+            requested = n16 <= 0 ? 0 : (int32_t)((n16 * kMaxLevel + (500ll << 15)) / (500ll << 16));
+            if (n16 > 0 && requested < 1) requested = 1;
+        }
         const uint32_t goal = requested < 0 ? 0 : (uint32_t)requested > kMaxLevel ? kMaxLevel : (uint32_t)requested;
         uint64_t milliseconds = fadePeriod ? ((uint64_t)fadePeriod->unsigned32BitValue() * 1000) >> 16 : 0;
         if (milliseconds > 5000) milliseconds = 5000;

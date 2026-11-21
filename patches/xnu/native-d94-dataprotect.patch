@@ -1,5 +1,5 @@
 diff --git a/bsd/vfs/kpi_vfs.c b/bsd/vfs/kpi_vfs.c
-index 75816a5..2292832 100644
+index 75816a5..5742741 100644
 --- a/bsd/vfs/kpi_vfs.c
 +++ b/bsd/vfs/kpi_vfs.c
 @@ -105,6 +105,7 @@
@@ -10,13 +10,14 @@ index 75816a5..2292832 100644
  #include <sys/kdebug.h>
  #include <vfs/vfs_disk_conditioner.h>
  
-@@ -3707,10 +3708,25 @@ struct vnop_create_args {
+@@ -3706,11 +3707,26 @@ struct vnop_create_args {
+ 	vfs_context_t a_context;
  };
  #endif /* 0*/
- errno_t
 +static int native_dataprotect_emulated(vnode_t vp);
 +static void native_dataprotect_setattr(vnode_t vp, struct vnode_attr *vap, vfs_context_t ctx);
 +
+ errno_t
  VNOP_CREATE(vnode_t dvp, vnode_t * vpp, struct componentname * cnp, struct vnode_attr * vap, vfs_context_t ctx)
  {
  	int _err;

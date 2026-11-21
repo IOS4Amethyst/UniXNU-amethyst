@@ -62,6 +62,80 @@ static int sheng_boot_setup_reset(proc_t p,uint64_t scratch) {
  return 0;
 }
 
+// amethyst-skip-setup (default 1): Setup's completion preferences written before launchd, on every boot, so a RAM-only boot (fresh Data each time,
+// sheng-data-persist=0) goes to the lock screen instead of the Hello page. The values are UniXNU scripts/seed-data-skip-setup.py's (the
+// sheng port's seed tool, which needs macOS to edit the image); here the kernel writes them as XML plists owned by mobile, mode 0600.
+// The purplebuddy pair is rewritten each boot; the others are created only when absent, keeping anything the seed already has.
+#define SKIP_PLIST_HEAD "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" " \
+ "\"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><dict>"
+#define SKIP_PLIST_TAIL "</dict></plist>\n"
+static const struct {const char *path; const char *body; int replace;} skip_setup_files[]={
+ {"/private/var/mobile/Library/Preferences/com.apple.purplebuddy.plist",
+  SKIP_PLIST_HEAD "<key>SetupDone</key><true/><key>SetupFinishedAllSteps</key><true/><key>SetupVersion</key><integer>11</integer>"
+  "<key>daemonizeNeedsToRun</key><false/>" SKIP_PLIST_TAIL,1},
+ {"/private/var/mobile/Library/Preferences/com.apple.purplebuddy.notbackedup.plist",
+  SKIP_PLIST_HEAD "<key>ShouldRunDiagnosticsMiniBuddy</key><false/><key>ShouldRunHSA2MiniBuddy</key><false/>"
+  "<key>ShouldRunKeychainSyncMiniBuddy</key><false/><key>ShouldRunMesaMiniBuddy</key><false/><key>ShouldRunPaymentMiniBuddy</key><false/>"
+  "<key>ShouldRunStandardMiniBuddy</key><false/><key>SilentICDPUpgrade</key><false/>" SKIP_PLIST_TAIL,1},
+ {"/private/var/mobile/Library/Preferences/com.apple.migration.plist",
+  SKIP_PLIST_HEAD "<key>LastSystemVersion</key><string>24A446</string><key>DMUserDataDisposition</key><dict>"
+  "<key>SyntheticDidUpgrade</key><false/><key>buildVersion</key><string>24A446</string></dict>" SKIP_PLIST_TAIL,0},
+ {"/private/var/mobile/Library/Preferences/com.apple.managedconfiguration.notbackedup.plist",
+  SKIP_PLIST_HEAD "<key>LockdownActivationIndicatesCloudConfigurationAvailable</key><false/>" SKIP_PLIST_TAIL,0},
+ {"/private/var/mobile/Library/Preferences/com.apple.springboard.plist",
+  SKIP_PLIST_HEAD "<key>BKNoWatchdogs</key><true/><key>FBLaunchWatchdogExceptions</key><dict><key>com.apple.purplebuddy</key>"
+  "<real>100</real></dict><key>MCForceShowCloudConfigurationUI</key><false/>" SKIP_PLIST_TAIL,0},
+};
+volatile int amethyst_skip_setup_status=-1;   // -1 off, 0 written, else the first error; amethyst_skip_setup_written counts files
+volatile int amethyst_skip_setup_written;
+
+static int skip_setup_mkdir(proc_t p,uint64_t scratch,const char *path) {
+ int32_t result=0;
+ int error=copyout(path,scratch,strlen(path)+1);
+ if(error)return error;
+ struct mkdir_args md={.path=scratch,.mode=0755};
+ error=mkdir(p,&md,&result);
+ if(error==EEXIST)return 0;
+ if(error)return error;
+ struct chown_args ch={.path=scratch,.uid=501,.gid=501};
+ return chown(p,&ch,&result);
+}
+static int skip_setup_write(proc_t p,uint64_t scratch,const char *path,const char *body,int replace) {
+ int32_t result=0;int fd=-1;
+ int error=copyout(path,scratch,strlen(path)+1);
+ if(error)return error;
+ struct open_args op={.path=scratch,.flags=O_WRONLY|O_CREAT|O_NOFOLLOW|(replace?O_TRUNC:O_EXCL),.mode=0600};
+ error=open(p,&op,&result);
+ if(error==EEXIST && !replace)return 0;
+ if(error)return error;
+ fd=result;
+ for(size_t sent=0,total=strlen(body);sent<total;) {
+  size_t piece=total-sent<0x1f0?total-sent:0x1f0;
+  if((error=copyout(body+sent,scratch+0x200,piece)))goto done;
+  struct write_args wr={.fd=fd,.cbuf=scratch+0x200,.nbyte=piece};
+  user_ssize_t written=0;
+  if((error=write(p,&wr,&written)))goto done;
+  if(written!=(user_ssize_t)piece){error=EIO;goto done;}
+  sent+=piece;
+ }
+ {struct fchown_args owner={.fd=fd,.uid=501,.gid=501};if((error=fchown(p,&owner,&result)))goto done;}
+ {struct fchmod_args mode={.fd=fd,.mode=0600};if((error=fchmod(p,&mode,&result)))goto done;}
+ {struct fsync_args sync={.fd=fd};error=fsync(p,&sync,&result);}
+ if(!error)amethyst_skip_setup_written=amethyst_skip_setup_written+1;
+ done:
+ {struct close_args cl={.fd=fd};int e=sys_close(p,&cl,&result);if(!error)error=e;}
+ return error;
+}
+static int amethyst_skip_setup(proc_t p,uint64_t scratch) {
+ int error=skip_setup_mkdir(p,scratch,"/private/var/mobile/Library");
+ if(!error)error=skip_setup_mkdir(p,scratch,"/private/var/mobile/Library/Preferences");
+ for(unsigned i=0;!error && i<sizeof(skip_setup_files)/sizeof(skip_setup_files[0]);++i)
+  error=skip_setup_write(p,scratch,skip_setup_files[i].path,skip_setup_files[i].body,skip_setup_files[i].replace);
+ amethyst_skip_setup_status=error;
+ printf("amethyst skip-setup: %d (%d files written)\n",error,amethyst_skip_setup_written);
+ return error;
+}
+
 // One comma-separated label at *c into the policy as a disabled key; advances *c past it.
 static int append_job(const char **cursor) {
  const char *c=*cursor,*e=c;while(*e && *e!=',')++e;
@@ -92,6 +166,10 @@ int sheng_boot_watchdog_policy(void *process, uint64_t scratch) {
   return error;
  }
  if(setup==1)printf("sheng setup flags reset: Hello page on this boot\n");
+ // Not fatal: a failure leaves the Hello page and the launch policy below still applies.
+ // On by default (boot arguments are at the 1023-byte limit); amethyst-skip-setup=0 shows the Hello page.
+ int skip=1;PE_parse_boot_argn("amethyst-skip-setup",&skip,sizeof(skip));
+ if(skip==1 && setup!=1)(void)amethyst_skip_setup(p,scratch);
  if(!enabled && !jobs[0] && !lite)return 0;
  policy[0]=0;strlcat(policy,policy_head,sizeof(policy));
  if(enabled)strlcat(policy,policy_watchdogd,sizeof(policy));

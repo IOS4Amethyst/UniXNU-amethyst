@@ -46,6 +46,10 @@ void native_touch_published(void) {
 volatile uint32_t amethyst_hid_events[8];
 volatile int amethyst_hid_results[8]={-1,-1,-1,-1,-1,-1,-1,-1};
 volatile uint32_t amethyst_hid_published_flags;   // bit 0: Built-In/PrimaryUsage set on the event driver
+// The same counts under sheng's name: CpuFreqProbe's touch boost and GpuPowerProbe's DCVS touch boost watch
+// native_hid_input_events[6] (weak); without a definition both boosts never fired (b23: [cpu gov] boosts=0).
+volatile uint32_t native_hid_input_events[8];
+volatile int native_hid_input_results[8]={-1,-1,-1,-1,-1,-1,-1,-1};
 // From UniXNU-asteroids package/HidInputProbe.cpp native_hid_live_checkpoint (property part only): backboardd
 // drops digitizer events unless the sending event service has PrimaryUsagePage 0x0D / PrimaryUsage 4 and
 // Built-In; the combined device lists its keyboard collection first, so the services would publish (1,6).
@@ -85,7 +89,10 @@ void native_hid_live_checkpoint(IOService *device) {
     amethyst_hid_published_flags=amethyst_hid_published_flags|1;
 }
 void native_hid_input_observed(unsigned event,int result) {
-    if(event<8){amethyst_hid_events[event]=amethyst_hid_events[event]+1;amethyst_hid_results[event]=result;}
+    if(event<8){
+        amethyst_hid_events[event]=amethyst_hid_events[event]+1;amethyst_hid_results[event]=result;
+        native_hid_input_events[event]=native_hid_input_events[event]+1;native_hid_input_results[event]=result;
+    }
     if(event==6)return;                                           // touch reports: counted only
     if(event==3) {
         static int previous=-1;

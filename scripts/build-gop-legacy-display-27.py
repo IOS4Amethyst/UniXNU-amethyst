@@ -14,6 +14,7 @@ callers authenticate with, so every original slot is declared under a name whose
 code is bound at its fileset address plus the collection slide; no original instruction or vtable is changed.
 """
 import hashlib
+import shutil
 import json
 from pathlib import Path
 import struct
@@ -383,6 +384,139 @@ keystore_source = ROOT / 'kits' / KIT / 'KeyStoreProbe.cpp'
 compile_cpp(keystore_source, OUT / 'KeyStoreProbe.o')
 # The EPSS CPU frequency governor (sheng-cpufreq=4), our iPadOS 17 CpuFreqProbe.cpp; its idle helper is an XNU patch.
 compile_cpp(ROOT / 'kits' / KIT / 'CpuFreqProbe.cpp', OUT / 'CpuFreqProbe.o')
+
+# Touch and buttons: the iPadOS 17 amethyst drivers (Goodix Berlin over GENI SPI, PMIC keys) delivering through UniXNU-sheng's
+# NativeHidInput, compiled against the public IOHIDFamily headers (source API, so every IOHIDDevice virtual keeps its real name and
+# discriminator) and bound to the ORIGINAL IOHIDDevice of this fileset (scripts/hid-device-24A446-d94ap.json, gen-hid27-abi-d94.py),
+# as sheng's iPadOS 27 recipe does. Started each log round by AmethystTouchSnapshot.cpp; every stage is gated by its boot argument.
+def compile_c(src, dst, extra=()):
+    rc_ = json.loads((ROOT / OBJECT_TREE / 'osfmk' / CONFIG_LEVEL / 'startup.o.json').read_text().strip().rstrip(','))
+    cmd, args, i = [], rc_['arguments'], 0
+    while i < len(args):
+        value = args[i]
+        if value == rc_['file']:
+            cmd.append(str(src))
+        elif value == '-o':
+            cmd += ['-o', str(dst)]
+            i += 1
+        elif value in ('-MF', '-MT', '-MJ'):
+            i += 1
+        elif value == '-Xclang' and args[i + 1].startswith('-W'):
+            i += 1
+        elif not value.startswith('-W'):
+            cmd.append(value)
+        i += 1
+    cmd += ['-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-mgeneral-regs-only', '-I', str(ROOT / '.cache/xnu-work/osfmk'), *extra]
+    run(cmd, cwd=rc_['directory'])
+TOUCH = ROOT / 'kits' / KIT / 'touch'
+GENI = TOUCH   # core drivers/QcomGeniSpi GeniSpi.c/.h, vendored (the component is not selected for this board)
+require((GENI / 'GeniSpi.c').is_file(), 'GeniSpi.c in the board touch kit')
+HIDSRC = ROOT / 'build/d94-hid/IOHIDFamily'
+if not (HIDSRC / 'IOHIDFamily/IOHIDDevice.h').is_file():
+    HIDSRC.parent.mkdir(parents=True, exist_ok=True)
+    run(['git', 'clone', '--depth', '1', '--branch', 'IOHIDFamily-2238.120.5',
+         'https://github.com/apple-oss-distributions/IOHIDFamily.git', str(HIDSRC)])
+hid_include = ROOT / 'build/d94-hid/include'
+for source_dir, relative in ((HIDSRC / 'IOHIDFamily', 'IOKit/hid'), (HIDSRC / 'IOHIDSystem/IOKit/hidsystem', 'IOKit/hidsystem')):
+    (hid_include / relative).mkdir(parents=True, exist_ok=True)
+    for h in sorted(source_dir.glob('*.h')):
+        shutil.copyfile(h, hid_include / relative / h.name)
+sdk_kernel = Path(sdk) / 'System/Library/Frameworks/Kernel.framework/Versions/A/Headers'
+hid_flags = ('-I', str(hid_include), '-idirafter', str(sdk_kernel), '-DNATIVE_HID_SOURCE_API=1', '-mgeneral-regs-only')
+hid_obj = OUT / 'NativeHidInput.o'
+compile_cpp(TOUCH / 'NativeHidInput.cpp', hid_obj, hid_flags)   # UniXNU/ShengHidInput d1ffc9d (In Range fix), unchanged
+hid_abi = json.loads(Path(__file__).resolve().with_name('hid-device-24A446-d94ap.json').read_text())
+require(hid_abi['kernelcache_sha256'] == abi['kernelcache_sha256'] if 'kernelcache_sha256' in abi else True, 'HID ABI for this kernelcache')
+hid_slots = [(int(t_, 16), int(d_, 16)) for t_, d_ in hid_abi['slots']]
+hid_pure = {i for i, (t_, _) in enumerate(hid_slots) if t_ == slots[214][0]}
+require(hid_pure == {180}, 'IOHIDDevice abstract slot 180 only')
+
+
+def object_symbols(data):
+    commands = macho(data)['commands']
+    st = next(p_ for c_, p_, _ in commands if c_ == 2)
+    sy, count, strings, _ = struct.unpack_from('<4I', data, st + 8)
+    found = []
+    for i in range(count):
+        ix, kind, _, _, va = struct.unpack_from('<IBBHQ', data, sy + i * 16)
+        found.append((data[strings + ix:data.index(b'\0', strings + ix)].decode(), va, kind))
+    return found
+
+
+def object_vtable(data, found, name, count):
+    va = next(v for n, v, _ in found if n == name)
+    entries = {}
+    for segment in macho(data)['segments']:
+        for sec in segment['sections']:
+            if sec['va'] <= va < sec['va'] + sec['size']:
+                ro, rcount = struct.unpack_from('<2I', data, sec['command_offset'] + 56)
+                for i in range(rcount):
+                    offset, bits = struct.unpack_from('<2I', data, ro + i * 8)
+                    if bits >> 27 & 1 and bits >> 25 & 3 == 3 and bits >> 28 == 11:
+                        entries[sec['va'] + offset] = (found[bits & 0xffffff][0],
+                                                       struct.unpack_from('<Q', data, sec['fileoff'] + offset)[0])
+    return [entries.get(va + 16 + i * 8) for i in range(count)]
+
+
+hid_raw = hid_obj.read_bytes()
+hid_found = object_symbols(hid_raw)
+hid_bindings = {n: int(v, 16) + slide for n, v in hid_abi['bindings'].items()}
+by_diversity = {}
+for i, (_, d_) in enumerate(hid_slots):
+    by_diversity.setdefault(d_, []).append(i)
+hid_vtables = [n for n, _, k in hid_found if n.startswith('__ZTV') and k != 1 and '9MetaClassE' not in n]
+slot_of = {}
+for vt_name in hid_vtables:
+    for i, entry in enumerate(object_vtable(hid_raw, hid_found, vt_name, len(hid_slots))):
+        if entry and '11IOHIDDevice' in entry[0]:
+            require(slot_of.setdefault(entry[0], i) == i, f'{entry[0]}: one slot in every owned vtable')
+for name in sorted({n for n, _, k in hid_found if k == 1 and ('11IOHIDDevice' in n)} - set(hid_bindings)):
+    if name in slot_of:
+        slot = slot_of[name]
+    else:
+        matches = by_diversity.get(discriminator(name[1:]), [])
+        require(len(matches) == 1, f'{name}: one original IOHIDDevice slot with its discriminator')
+        slot = matches[0]
+    require(slot not in hid_pure, f'{name}: not an abstract original slot')
+    hid_bindings[name] = hid_slots[slot][0] + slide
+for vt_name in hid_vtables:
+    entries = object_vtable(hid_raw, hid_found, vt_name, len(hid_slots))
+    require(all(entries), f'{vt_name}: at least the {len(hid_slots)} IOHIDDevice entries')
+    for i, (name, word) in enumerate(entries):
+        require(word >> 63 and word >> 48 & 1 and word >> 49 & 3 == 0 and (word >> 32) & 0xffff == hid_slots[i][1],
+                f'{vt_name} slot {i} ({name}) signed with the original diversity {hid_slots[i][1]:#x}')
+        if '11IOHIDDevice' in name:
+            require(hid_bindings.get(name) == hid_slots[i][0] + slide, f'{vt_name} slot {i} ({name}) is the original entry')
+HID_DATA = {'__ZN11IOHIDDevice10gMetaClassE', '__ZTV11IOHIDDevice'}
+hid_text, hid_addresses = '.text\n.p2align 2\n', ''
+for name, va in sorted(hid_bindings.items()):
+    if name in HID_DATA:
+        hid_addresses += f'.globl {name}\n.set {name}, {va:#x}\n'
+    else:
+        hid_addresses += f'.globl {name}.original\n.set {name}.original, {va:#x}\n'
+        hid_text += f'.globl {name}\n{name}:\n bti c\n b {name}.original\n'
+(OUT / 'hid-bindings.S').write_text(hid_text)
+(OUT / 'hid-addresses.S').write_text(hid_addresses)
+for stem in ('hid-bindings', 'hid-addresses'):
+    run(['xcrun', 'clang', '-target', TRIPLE, '-isysroot', sdk, '-c', OUT / (stem + '.S'), '-o', OUT / (stem + '.o')])
+hid_late = OUT / 'NativeHidInput.late.o'
+run([llvm / 'llvm-objcopy', '--remove-section=__DATA,__mod_init_func', '--globalize-symbol=__GLOBAL__sub_I_NativeHidInput.cpp',
+     hid_obj, hid_late])
+print(f'HID: {len(hid_bindings)} original IOHIDDevice bindings, vtables {hid_vtables} match the original diversities')
+touch_flags = ('-I', str(TOUCH), '-I', str(GENI))
+# iPadOS 17 compile-touch.py: keep the recipe's own -Wno- suppressions (XNU/IOKit header warnings), our sources stay -Werror.
+touch_cpp_kept = tuple(a for a in r['arguments'] if a.startswith('-Wno-'))
+touch_c_kept = tuple(a for a in json.loads((ROOT / OBJECT_TREE / 'osfmk' / CONFIG_LEVEL / 'startup.o.json').read_text().strip().rstrip(','))['arguments']
+                     if a.startswith('-Wno-'))
+touch_objects = []
+for name in ('AmethystTouchSnapshot.cpp', 'AmethystTouchDma.cpp', 'AmethystTouchLoopbackStage.cpp', 'AmethystTouchGoodixStage.cpp',
+             'AmethystTouchEvents.cpp', 'AmethystButtonsHid.cpp', 'AmethystButtons.cpp'):
+    compile_cpp(TOUCH / name, OUT / (Path(name).stem + '.o'), touch_flags + ('-mgeneral-regs-only',) + touch_cpp_kept)
+    touch_objects.append(OUT / (Path(name).stem + '.o'))
+for src in (TOUCH / 'AmethystTouchLoopback.c', TOUCH / 'GoodixBerlinGeni.c', TOUCH / 'QcomRpmh.c', GENI / 'GeniSpi.c'):
+    compile_c(src, OUT / (src.stem + '.o'), touch_flags + touch_c_kept)
+    touch_objects.append(OUT / (src.stem + '.o'))
+input_objects = [hid_late, OUT / 'hid-bindings.o', OUT / 'hid-addresses.o', *touch_objects]
 print(run(['python3', ROOT / 'scripts/build-arm-driver.py', 'NativeKeyStoreEvents'], text=True), end='')
 keyevents = ROOT / 'build/apple-key-store-state'
 keyevents_late = keyevents / 'NativeKeyStoreEvents.late.o'
@@ -393,8 +527,6 @@ gop = ROOT / 'build/native-gop-presenter'
 gop_late = gop / 'NativeGOPPresenter.late.o'
 run([llvm / 'llvm-objcopy', '--remove-section=__DATA,__mod_init_func', '--globalize-symbol=__GLOBAL__sub_I_NativeGOPPresenter.cpp',
      gop / 'NativeGOPPresenter.o', gop_late])
-# ishtar: no HID, touch or board drivers here yet (sheng builds its iPadOS 17 set at this point).
-input_objects = []
 archive = OUT / 'libNativeLegacyDisplay.late.a'
 archive.unlink(missing_ok=True)
 run(['xcrun', 'ar', 'rcs', archive, late, OUT / 'original-bindings.o', OUT / 'original-addresses.o', OUT / 'LegacyDisplayProbe.o', OUT / 'LegacyDisplaySupport27.o', gop_late,

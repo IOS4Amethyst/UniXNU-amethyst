@@ -113,6 +113,10 @@ extern volatile uint32_t native_adreno_wptr_fence[4] __attribute__((weak_import)
 extern volatile uint64_t native_adreno_wait_outer[5] __attribute__((weak_import));
 extern volatile uint32_t native_adreno_export_stats[4] __attribute__((weak_import));
 extern volatile int32_t native_touch_strokes[16][7] __attribute__((weak_import));
+// iOS 27 D94 touch/buttons (package/touch, the iPadOS 17 drivers): rows of AmethystTouchSnapshot.cpp, and its per-round entry.
+extern char amethyst_touch_snapshot_rows[50][128] __attribute__((weak_import));
+extern unsigned amethyst_touch_snapshot_count __attribute__((weak_import));
+extern void amethyst_touch_snapshot(void) __attribute__((weak_import));
 extern volatile uint32_t native_touch_stroke_count __attribute__((weak_import));
 extern volatile uint32_t native_wifi_stats[29] __attribute__((weak_import));
 extern volatile uint64_t native_bluetooth_stats[32] __attribute__((weak_import));
@@ -447,12 +451,18 @@ DISPLAY_GLOBAL(uint64_t, transfer_bytes); DISPLAY_GLOBAL(uint64_t, copy_n); DISP
 DISPLAY_GLOBAL(uint64_t, gop_map); DISPLAY_GLOBAL(uint64_t, gop_physical); DISPLAY_GLOBAL(uint64_t, gop_virtual); DISPLAY_GLOBAL(uint64_t, gop_bytes);
 DISPLAY_GLOBAL(uint64_t, console_display); DISPLAY_GLOBAL(uint64_t, console_depth); DISPLAY_GLOBAL(uint64_t, console_stride); DISPLAY_GLOBAL(uint64_t, console_rotation);
 #undef DISPLAY_GLOBAL
-static uint32_t log_gpu_on, log_display_on;
+static uint32_t log_gpu_on, log_display_on, log_input_on;
 static size_t compose(char *out, size_t cap, uint32_t slot, unsigned now) {
   size_t at = 0;
   char head[96];
   snprintf(head, sizeof head, "#slot %u t=%us tag=%s", slot, now, &boot_progress_tag ? boot_progress_tag() : "");
   at = put(out, at, cap, head, sizeof head);
+  if (log_input_on && &amethyst_touch_snapshot_count && &amethyst_touch_snapshot_rows) {
+    unsigned count = __atomic_load_n(&amethyst_touch_snapshot_count, __ATOMIC_ACQUIRE);
+    if (count > 50) count = 50;
+    at = put(out, at, cap, "[touch snapshot]", 17);
+    for (unsigned i = 0; i < count; ++i) at = put(out, at, cap, amethyst_touch_snapshot_rows[i], 128);
+  }
   // Best-effort numeric snapshot, not an atomic transaction. Keep zeros/-1 and
   // put this before large sections so a bounded slot retains early failures.
   if (log_display_on) {
@@ -1799,6 +1809,7 @@ static void log_groups_read(void) {
   for (unsigned g = 0; g < LogGroups; ++g) {uint32_t v = 0; if (PE_parse_boot_argn(log_group_arg[g], &v, sizeof v) && v == 1) log_group_on |= 1u << g;}
   log_gpu_on = !!(log_group_on & (1u << LogGpu));
   log_display_on = !!(log_group_on & (1u << LogDisplay));
+  log_input_on = !!(log_group_on & (1u << LogInput));
 }
 // Drops, in place, the sections of the groups that are off; returns the new length.
 static size_t log_groups_filter(char *text, size_t length) {
@@ -1905,6 +1916,8 @@ static void writer(void *arg, wait_result_t result) {
     if (!ok) {boot_log_errors = ++errors;} else errors = 0;
     if (errors >= LogMaxErrors) {boot_log_state = 3; return;}
     if (h.gpt_last != h.gpt_open) {boot_log_state = 4; return;}
+    // Touch, buttons and their rows (iPadOS 17 drivers): normal thread context, after a durable round, as on iPadOS 17.
+    if (ok && &amethyst_touch_snapshot) amethyst_touch_snapshot();
     if (autoreset && now >= autoreset && !reset_tried && !ok) ++reset_held;
     snprintf(boot_log_autoreset_text, sizeof boot_log_autoreset_text, "armed=%us probe_ok=%d tried=%d tried_at=%us held_by_write_errors=%u diag_export_at=%us now=%us",
              autoreset, reset_ok, reset_tried, reset_tried_at, reset_held, diag_at, now);

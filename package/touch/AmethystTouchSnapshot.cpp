@@ -152,8 +152,7 @@ extern "C" void amethyst_buttons_hid_start(void) __attribute__((weak_import));
 extern "C" void sheng_gpu_power_probe(void) __attribute__((weak_import));
 extern "C" void native_keystore_probe(void) __attribute__((weak_import));   // KeyStoreProbe.cpp (asteroids), V47   // GpuPowerProbe.cpp (asteroids), V42
 extern "C" void sheng_cpufreq_probe(void) __attribute__((weak_import));
-// iOS 27 D94: AmethystPanel.cpp is not linked; a weak import would stay undefined in the kernel link.
-static void (*const amethyst_panel_probe)(void)=nullptr;   // AmethystPanel.cpp: DCS brightness, amethyst-panel=N
+extern "C" void amethyst_panel_probe(void) __attribute__((weak_import));   // AmethystPanel.cpp: DCS brightness + AppleARMBacklight service (amethyst-panel=3)   // AmethystPanel.cpp: DCS brightness, amethyst-panel=N
 extern "C" void sheng_cpufreq_poll(void) __attribute__((weak_import));
 // iOS 27 D94: no ArmCpu SIGP mask export.
 static uint32_t (*const amethyst_sigp_disabled_mask)(void)=nullptr;

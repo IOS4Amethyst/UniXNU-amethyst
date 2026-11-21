@@ -515,12 +515,17 @@ touch_c_kept = tuple(a for a in json.loads((ROOT / OBJECT_TREE / 'osfmk' / CONFI
                      if a.startswith('-Wno-'))
 touch_objects = []
 for name in ('AmethystTouchSnapshot.cpp', 'AmethystTouchDma.cpp', 'AmethystTouchLoopbackStage.cpp', 'AmethystTouchGoodixStage.cpp',
-             'AmethystTouchEvents.cpp', 'AmethystButtonsHid.cpp', 'AmethystButtons.cpp'):
+             'AmethystTouchEvents.cpp', 'AmethystButtonsHid.cpp', 'AmethystButtons.cpp', 'AmethystPanel.cpp', 'AmethystBacklight.cpp'):
     compile_cpp(TOUCH / name, OUT / (Path(name).stem + '.o'), touch_flags + ('-mgeneral-regs-only',) + touch_cpp_kept)
     touch_objects.append(OUT / (Path(name).stem + '.o'))
 for src in (TOUCH / 'AmethystTouchLoopback.c', TOUCH / 'GoodixBerlinGeni.c', TOUCH / 'QcomRpmh.c', GENI / 'GeniSpi.c'):
     compile_c(src, OUT / (src.stem + '.o'), touch_flags + touch_c_kept)
     touch_objects.append(OUT / (src.stem + '.o'))
+# AmethystBacklight registers under the kext lock (AmethystPanel.cpp OSKextRegisterBoardClasses) and runs its globalized initializer there.
+backlight_late = OUT / 'AmethystBacklight.late.o'
+run([llvm / 'llvm-objcopy', '--remove-section=__DATA,__mod_init_func', '--globalize-symbol=__GLOBAL__sub_I_AmethystBacklight.cpp',
+     OUT / 'AmethystBacklight.o', backlight_late])
+touch_objects = [backlight_late if o == OUT / 'AmethystBacklight.o' else o for o in touch_objects]
 input_objects = [hid_late, OUT / 'hid-bindings.o', OUT / 'hid-addresses.o', *touch_objects]
 print(run(['python3', ROOT / 'scripts/build-arm-driver.py', 'NativeKeyStoreEvents'], text=True), end='')
 keyevents = ROOT / 'build/apple-key-store-state'

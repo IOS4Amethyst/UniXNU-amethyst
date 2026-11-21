@@ -86,6 +86,38 @@ class AmethystBacklight : public IOService {
         }
         OSSafeReleaseNULL(min); OSSafeReleaseNULL(max); OSSafeReleaseNULL(current); OSSafeReleaseNULL(brightness); OSSafeReleaseNULL(parameters);
     }
+    // CoreBrightness (24A446, iPhone17,2 cache 1892d244) DisplayCreateWithCapabilitiesAndID needs both of these on the AppleARMBacklight
+    // service; a real Apple backlight always has them, so neither absence is checked:
+    //  - backlight-calibration-parameters (-[CBBacklightNode getBacklightCalibrationParser:]): lMax/lMid/lMin Product and Panel nits as
+    //    16.16 numbers. Without it the function falls back to defaults and reads the not yet built nits table through NULL (b21:
+    //    backboardd SIGSEGV at DisplayCreateWithCapabilitiesAndID+1096, then launchd rebooted).
+    //  - backlight-marketing-table (-[CBBacklightNode copyMarketingTable], loadIOFixedArray): data of 16.16 nits, user brightness 0..1
+    //    evenly spaced, at least 3 entries. Without it the display is not created ("Failed to load marketing table from the device").
+    void publishCalibration() {
+        constexpr uint32_t kMaxNits = 500, kMidNits = 100, kMinNits = 2;
+        const struct {const char *key; uint32_t nits;} keys[] = {
+            {"lMaxProduct", kMaxNits}, {"lMidProduct", kMidNits}, {"lMinProduct", kMinNits},
+            {"lMaxPanel", kMaxNits}, {"lMidPanel", kMidNits}, {"lMinPanel", kMinNits}};
+        OSDictionary *calibration = OSDictionary::withCapacity(6);
+        if (calibration) {
+            for (const auto &k : keys) {
+                OSNumber *n = OSNumber::withNumber((unsigned long long)k.nits << 16, 32);
+                if (n) {calibration->setObject(k.key, n); n->release();}
+            }
+            setProperty("backlight-calibration-parameters", calibration);
+            calibration->release();
+        }
+        // 17 points, roughly perceptual (quadratic) from kMinNits to kMaxNits.
+        constexpr unsigned kPoints = 17;
+        uint32_t table[kPoints];
+        for (unsigned i = 0; i < kPoints; ++i) {
+            const uint64_t t2 = (uint64_t)i * i, d2 = (uint64_t)(kPoints - 1) * (kPoints - 1);
+            const uint64_t nits16 = ((uint64_t)kMinNits << 16) + (((uint64_t)(kMaxNits - kMinNits) << 16) * t2) / d2;
+            table[i] = (uint32_t)nits16;
+        }
+        OSData *marketing = OSData::withBytes(table, sizeof table);
+        if (marketing) {setProperty("backlight-marketing-table", marketing); marketing->release();}
+    }
     // As sheng's: the vtable is copied and getMetaClass (slot 7) answers AppleARMBacklight's metaclass, so IOObjectConformsTo and the
     // sandbox's class check see AppleARMBacklight, while OSDynamicCast to IOService still works; the actions therefore cast statically.
     static inline const OSMetaClass *gAppleClass = nullptr;
@@ -125,6 +157,7 @@ public:
         uint32_t control = 1;
         PE_parse_boot_argn("amethyst-backlight-control", &control, sizeof control);
         if (control == 1 && impersonate()) {setProperty("NativeSandboxGrantProcess", "backboardd"); setProperty("backlight-control", true);}
+        publishCalibration();
         publish(level);
         registerService();
         native_panel_stats[0] = control == 1 && gAppleClass ? 4 : 3;

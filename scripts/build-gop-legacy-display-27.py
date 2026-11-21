@@ -381,6 +381,8 @@ compile_cpp(support, OUT / 'LegacyDisplaySupport27.o')
 # libaks/MobileKeyBag (no keybag, no passcode, unlocked). ishtar left these out for __DATA_CONST room; the strict prelink checks it.
 keystore_source = ROOT / 'kits' / KIT / 'KeyStoreProbe.cpp'
 compile_cpp(keystore_source, OUT / 'KeyStoreProbe.o')
+# The EPSS CPU frequency governor (sheng-cpufreq=4), our iPadOS 17 CpuFreqProbe.cpp; its idle helper is an XNU patch.
+compile_cpp(ROOT / 'kits' / KIT / 'CpuFreqProbe.cpp', OUT / 'CpuFreqProbe.o')
 print(run(['python3', ROOT / 'scripts/build-arm-driver.py', 'NativeKeyStoreEvents'], text=True), end='')
 keyevents = ROOT / 'build/apple-key-store-state'
 keyevents_late = keyevents / 'NativeKeyStoreEvents.late.o'
@@ -396,7 +398,7 @@ input_objects = []
 archive = OUT / 'libNativeLegacyDisplay.late.a'
 archive.unlink(missing_ok=True)
 run(['xcrun', 'ar', 'rcs', archive, late, OUT / 'original-bindings.o', OUT / 'original-addresses.o', OUT / 'LegacyDisplayProbe.o', OUT / 'LegacyDisplaySupport27.o', gop_late,
-     OUT / 'KeyStoreProbe.o', keyevents_late, *input_objects])
+     OUT / 'KeyStoreProbe.o', OUT / 'CpuFreqProbe.o', keyevents_late, *input_objects])
 sources = [ROOT / 'drivers/GopFramebuffer/NativeLegacyDisplay.cpp', ROOT / 'drivers/GopFramebuffer/NativeLegacyRequest.h',
            ROOT / 'drivers/GopFramebuffer/NativeGOPPresenter.cpp', ROOT / 'drivers/GopFramebuffer/NativeGOPWire.h',
             ROOT / 'drivers/GopFramebuffer/NativeHalfCodes.h', ROOT / 'drivers/GopFramebuffer/NativeGpuTrace.h', source,

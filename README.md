@@ -1,29 +1,77 @@
 # UniXNU for Xiaomi Redmi Note 14 Pro+ 5G (`amethyst`)
 
-**Active iOS 27 donor: iPhone17,2 / D94AP / 24A446.** Install the checked-in
-profile/fixture with `python3 scripts/prepare-d94-build.py --core ../UniXNU --device .`
-in a disposable core/board checkout, then select `--os ios-27.0.1-24A446-d94ap`.
-Kernel/root-policy/Data workflows now default to D94. The iPadOS17 fallback stays
-unchanged. iPhone15,4 images and address-specific bring-up scripts are historical
-rollback material, not D94 packaging inputs. D94 still has five unsupported private
-imports; no D94 hardware boot is qualified. Phone root replacement is not authorized.
-
 Device port of [UniXNU](https://github.com/UniXNU/UniXNU) for the Xiaomi Redmi Note 14 Pro+ 5G.
 
-> **Branch `ios27`:** experimental iOS 27.0.1 (`24A446`) port with an iPhone 15 identity (arm64e). The RELEASE kernel links and prelinks; see [iOS 27](#ios-27-ios27).
+> **iOS 27.0.1 (`24A446`) boots to the home screen** with the iPhone17,2 / D94AP identity:
+> GPU-composited UI, working touch, smooth frames, Setup skipped (branch `ios27-d94-build-audit`,
+> hardware-confirmed 2026-11-22). iPadOS 17.7.11 (`21H461`) stays the fallback.
 
 | Property | Value |
 |---|---|
 | Device | Xiaomi Redmi Note 14 Pro+ 5G |
 | Codename | `amethyst` |
 | SoC | `SM7635` (Adreno 810 GPU) |
-| Architecture | ARM64 |
-| Main OS target | iPadOS 17.7.11 (`21H461`) |
+| Architecture | ARM64 (arm64e for iOS 27) |
+| Active OS target | iOS 27.0.1 (`24A446`), iPhone17,2 / D94AP identity |
+| Fallback OS target | iPadOS 17.7.11 (`21H461`) |
 | Device repository | [IOS4Amethyst/UniXNU-amethyst](https://github.com/IOS4Amethyst/UniXNU-amethyst) |
 | UEFI repository | [IOS4Amethyst/uefi-amethyst](https://github.com/IOS4Amethyst/uefi-amethyst/tree/amethyst) |
-| Status | **iPadOS 17 boots from RAM to a usable home screen with GPU-accelerated UI and touch** |
+| Status | **iOS 27 boots from RAM to the lock screen and home screen; GPU, touch and buttons work** |
 
-## Current status (2026-11-07)
+## iOS 27 status (2026-11-22)
+
+Latest hardware-tested images: **b24/b25** (RAM-only `fastboot boot`), branch
+`ios27-d94-build-audit`.
+
+- **Boot:** UEFI → DarwinBoot → XNU (RELEASE, arm64e, D94 prelink) → launchd → SpringBoard.
+  First frame about 6 minutes after power-on. Setup is skipped on every boot: the kernel writes
+  Setup's completion preferences to the fresh Data volume before launchd (`amethyst-skip-setup`,
+  on by default).
+- **GPU:** Metal runs on the Adreno 810 through the native Adreno kernel driver and the
+  Metal → Vulkan (Turnip) add-on. backboardd, SpringBoard and apps render on the GPU, and the
+  GPU hand-off presenter shows each frame at 120 Hz.
+- **Brightness:** `AmethystBacklight` presents itself to CoreBrightness as `AppleARMBacklight`
+  and publishes `backlight-calibration-parameters` and `backlight-marketing-table`. Without the
+  conformance QuartzCore waited 5 s per frame for the libEDR server; without the two
+  properties backboardd crashed in `DisplayCreateWithCapabilitiesAndID`.
+- **Touch and buttons:** the Goodix controller is delivered as a HID digitizer. The driver
+  re-publishes the digitizer usage pair (0x0D, 4) whenever the DriverKit HID driver resets it,
+  otherwise backboardd discards every touch. Side buttons work.
+- **Launch policy:** `sheng-lite` and `sheng-disable-watchdogd` apply before launchd (from b24),
+  turning off about 30 services that have nothing to do on this phone.
+
+### Known issues (iOS 27)
+
+- **Lag:** the GPU stalls and needs recovery kicks (b24: 1,177 kicks in 20 minutes, longest
+  5 s). b25 enables GPU interrupts, GPU frequency scaling and the CPU/GPU touch boost, which
+  never fired before because the touch counter had another name. Results pending.
+- **Power off from iOS panics** on the way down: launchd unmounts the system cryptex and then
+  faults running code from it (`initproc exited`). Data is already unmounted; harmless.
+- **No persistence:** Data is fresh on every boot (`sheng-data-persist=0`).
+- **Not implemented:** audio, Wi-Fi, Bluetooth, cellular, cameras, sensors, battery reporting,
+  suspend. Brightness levels use estimated panel values (2–500 nits).
+
+### iOS 27 hardware support
+
+| Area | Status | Notes |
+|---|---|---|
+| UEFI boot (`fastboot boot`) | ✅ Working | RAM only, nothing is flashed |
+| XNU kernel, SMP, CPU frequency | ✅ Working | RELEASE arm64e kernel with the D94 prelink |
+| Root and Data | ✅ Working | Root from the `unixnu` partition; Data is volatile |
+| Display | ✅ Working | GPU hand-off presenter, 120 Hz |
+| Brightness | 🟡 Working | Calibration values are estimates |
+| GPU (Adreno 810, Metal) | 🟡 Working | Stalls cause lag |
+| Touch | ✅ Working | |
+| Buttons | ✅ Working | |
+| Lock screen / Setup | ✅ Working | Setup skipped in-kernel; swipe up to the home screen |
+| Persistence | ⏳ Not started | |
+| Audio, Wi-Fi, Bluetooth, cellular, cameras, sensors | ⏳ Not started | |
+
+The per-build record (CI runs, kernel hashes, boot arguments, log evidence) is in
+[`scripts/bringup-24A446/HANDOFF.md`](scripts/bringup-24A446/HANDOFF.md) and
+[IOS27-BRINGUP.md](IOS27-BRINGUP.md).
+
+## iPadOS 17 status (fallback, 2026-11-07)
 
 Latest hardware-tested image: **V52** (RAM-only `fastboot boot`).
 
@@ -96,27 +144,12 @@ in [ROOT-BRINGUP.md](ROOT-BRINGUP.md), [UFS-AUDIT.md](UFS-AUDIT.md) and
 
 | Branch | Purpose |
 |---|---|
-| `main` | Hardware-confirmed Apple UI checkpoint (2026-11-02). Base of every other branch. |
-| `amethyst-touch-gpu-bringup` | Touch, SMP, CPU governor and GPU bring-up sources (V18–V44). |
-| `skip-setup-seed` | CI job that builds the Data seed: skips Setup, disables crash-looping daemons, turns off compressed/deep framebuffers. |
-| `gpu-addon` | CI job that builds the GPU add-on (Metal plugin + Turnip) and owner trust bundle. Artifacts are encrypted. |
-| `ios27` | Experimental iOS 27.0.1 (`24A446`) port with an iPhone 15 identity (arm64e). The RELEASE kernel links and prelinks; the payload and Data seed are next. |
-| `ios27-iphone15-pins` | Root image pins for iPhone15,4 `24A446`, used by `ios27`. |
+| `main` | Hardware-confirmed iPadOS 17 Apple UI checkpoint (2026-11-02). |
+| `ios27-d94-build-audit` | Active iOS 27 (`24A446`) D94 port: kernel CI, touch, display, backlight, GPU link, launch policy. |
 
-The V45–V52 kernel sources (AppleKeyStore stand-in, sandbox grant, corner guard,
-swap diagnostics, `pack-log.py --aks/--fb-gpu`) are not on any branch yet.
-
-### iOS 27 (`ios27`)
-
-Nothing has been tested on hardware yet. The source-storage root path has been
-ported, and the kernel now builds at the RELEASE configuration, which its
-constants need: the iOS 27 prelink places `com.apple.kernel` in a `0xd8000`
-`__DATA_CONST` slot, while a DEVELOPMENT kernel measures `0x120000` and a
-RELEASE one `0xb8000`. The reference-enabled and the plain RELEASE link both
-pass, and the prelink emits a kernel collection; the payload and the Data seed
-are the next steps. Kernel CI runs on GitHub `macos-26` runners. The numbers,
-the open prelink gaps and the next steps are in
-[IOS27-BRINGUP.md](IOS27-BRINGUP.md).
+Retired branches are kept as tags: `archive/ios27-iphone15-pins` (iPhone15,4 root-image pins)
+and `archive/springboard-oslog` (SpringBoard unified-log export diagnostic). The former `ios27`
+branch is fully contained in `ios27-d94-build-audit`.
 
 ## Safety
 
@@ -129,11 +162,10 @@ the open prelink gaps and the next steps are in
   [`scripts/log/pull-log.py`](scripts/log/pull-log.py).
 - Board defaults keep `sheng-data-persist=0`, `sheng-log=0` and
   `payload.adt.persistent_data=false`; test images enable the log explicitly.
-- Automatic UFS controller takeover is off (`native-ufs-root=0`).
+- iPadOS 17 board default: automatic UFS controller takeover is off (`native-ufs-root=0`).
+  The iOS 27 D94 test images set `native-ufs-root=1` to read the root from the `unixnu` partition.
   See [UFS-AUDIT.md](UFS-AUDIT.md).
-- Branch `ios27`: selects the iOS 27 (`24A446`) profile and RELEASE; the prelink
-  baseline is bounded by
-  [`scripts/policies/ios-27.0.1-24A446/prelink-regression.json`](scripts/policies/ios-27.0.1-24A446/prelink-regression.json).
+- iOS 27 images keep `sheng-data-persist=0`; the boot log is the only thing written to the phone.
 - Proprietary firmware, IPSW-derived files and decrypted artifacts are kept out
   of git.
 

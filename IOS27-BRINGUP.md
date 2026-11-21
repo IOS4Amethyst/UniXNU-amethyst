@@ -1,3 +1,14 @@
+# Current state (2026-11-22): iOS 27 D94 reaches the home screen
+
+Branch `ios27-d94-build-audit`. b24 (CI 44938482037, kernel `ba6c3ef1`) boots from RAM to the
+lock screen and home screen with GPU compositing, touch and smooth frames, Setup skipped.
+b25 (CI 44942054764, kernel `785e59ce`) adds GPU interrupts, GPU DCVS and the CPU/GPU touch boost.
+The fixes that got there, and the per-build log evidence, are in
+[`scripts/bringup-24A446/HANDOFF.md`](scripts/bringup-24A446/HANDOFF.md) (top entries) and the
+README's iOS 27 section. The sections below are the donor migration and older bring-up record.
+
+---
+
 # Active donor migration — iPhone17,2 / D94AP
 
 Use `ios-27.0.1-24A446-d94ap`, checked-in donor profile and reviewed fixture

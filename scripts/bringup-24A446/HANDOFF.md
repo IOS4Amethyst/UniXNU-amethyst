@@ -3737,3 +3737,12 @@ scripts/bringup-24A446/prepare-d94-kernel.py (reproduces the shipped b29 kernel 
 - **b35** (`11401234…`): b34 + kernel `2d3f4703…` (run 45003726957 at fe706ab), which adds the read-only Wi-Fi stage 1 SMEM probe
   (`AmethystWifi:` rows). If b35 panics early and b34 does not, suspect the SMEM read (`amethyst-wifi=0`).
 - b31a swap timeline: frames every ~41 ms (~24 fps) with ~215 ms offer-to-done, the residual lag to chase after the addon test.
+
+## 2026-11-23: b34/b35 results, b36
+
+- b34 on hardware: no GPU hangs, offer-to-done ~21 ms (was ~215 ms), "way better" but app-switcher blur ghosting and tearing.
+- b35: booted fine; no AmethystWifi rows because snapshotLog drops rows once rows 46-49 set the count to 50 (fixed: rows 34-42,
+  `amethyst_touch_row_at`, d50e234).
+- **b36** (`a9a1402a…`): kernel `c7942936…` (run 45051123451) + addon run 45050908304 with 0065 extended to the iOS page-permission
+  checks (mapped_writable was false on iOS, so copied host buffers dropped GPU writes: suspected ghosting cause, 1149944).
+- Tearing: display transfer is not vsync-paced (`[scanout prepare] sent=0 arms=0`); next display task.

@@ -3717,3 +3717,13 @@ initproc exited. Log: [gpu unstick] kick=1177 longest=5090, [fence wait] 4.66M t
 which nothing defined (the amethyst driver counted amethyst_hid_events); now both are counted. Args: +sheng-gpu-dcvs=1,
 -sheng-gpu-irq=0 (driver default 1; =0 dated from iPadOS 17 V46). b25b = same kernel with sheng-gpu-irq=0 kept,
 -sheng-gpu-trace=0 (default 0) for length. b25 booted 2026-11-22; result pending.
+
+**b26-b29c** (2026-11-22): b29 (fcf94e4, CI 44964828618) = NativeAdreno a81c173 5 ms nudge + brightness-nits fix. HW: brightness
+slider works; no freezes at GPU level 6 but laggy (fence waits 99 s / 527 s). Level 8 (b29b) and level 7 (b29c): frames mostly
+< 4 ms, then a permanent GPU freeze (hangs 49/40, restarts 0) with touch alive. SoC id 636 (plain Volcano) - level 8 is in-bin.
+Cause: the board never installed native_adreno_set_restart, so NativeAdrenoPublish's hangcheck only counted hangs.
+**b30** (board 07fd4aa on branch a810-gpu-restart, f50c3d8/1fb3c9e, compile 44991058715, CI 44991539720, kernel a41145bc):
+gpuRestart for the A810 (sheng's gmu-wrapper reset: SQE halt, GBIF drain incl. A8XX RBBM_GBIF_HALT 0x0a, RBBM_SW_RESET_CMD
+0x73, hw_init, CP start, secure-mode exit). b30 = level 6, b30b = level 7. Log: [gpu recovery] restarts / native_gpu_restart.
+The /tmp prepare-bNN.py chain was lost in a WSL /tmp wipe; its five post-link patches are now
+scripts/bringup-24A446/prepare-d94-kernel.py (reproduces the shipped b29 kernel byte-for-byte from CI 44964828618).

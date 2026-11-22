@@ -1,0 +1,15 @@
+diff --git a/crates/metal2vulkan-runtime/src/copied.rs b/crates/metal2vulkan-runtime/src/copied.rs
+index d303f93..2dd0331 100644
+--- a/crates/metal2vulkan-runtime/src/copied.rs
++++ b/crates/metal2vulkan-runtime/src/copied.rs
+@@ -2669,8 +2669,8 @@ pub(crate) fn read_pages(pages: NonNull<u8>, into: &mut [u8]) -> bool {
+     true
+ }
+ 
+-/// [`read_pages`] on macOS.
+-#[cfg(target_os = "macos")]
++/// [`read_pages`] on macOS and iOS (`mach_vm_read_overwrite` exists on both; iOS has no other variant).
++#[cfg(any(target_os = "macos", target_os = "ios"))]
+ pub(crate) fn read_pages(pages: NonNull<u8>, into: &mut [u8]) -> bool {
+     unsafe extern "C" {
+         /// `<mach/mach_init.h>`: the port of this process's task.

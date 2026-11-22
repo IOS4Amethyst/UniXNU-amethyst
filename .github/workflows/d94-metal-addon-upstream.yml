@@ -5,6 +5,11 @@ on:
     branches: [ios27-d94-build-audit]
     paths: [.github/workflows/d94-metal-addon-upstream.yml]
   workflow_dispatch:
+    inputs:
+      skip_0063:
+        description: 'Bisect: build the translator without AdrenoMetal 0063 (main optimizations); 0064 and 0065 still apply'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -90,13 +95,20 @@ jobs:
           # Upstream 0063 added read_pages for Linux, macOS and Windows only, so the ios27 bridge does not compile
           # (E0425 at copied.rs:1252). 0065 gives iOS the macOS mach_vm_read_overwrite variant; recorded as a third bridge patch.
           cp ../scripts/patches/metal2vulkan/0065-ios-read-pages.patch drivers/AdrenoMetal/bridge/patches/
-          python3 - <<'PY'
+          SKIP_0063='${{ inputs.skip_0063 }}' python3 - <<'PY'
+          import os
           from pathlib import Path
           p = Path('scripts/build-adreno-metal-bridge.py')
           s = p.read_text()
           old = "    '0064-copies-leave-unreachable-pages-alone.patch']]"
           assert s.count(old) == 1
-          p.write_text(s.replace(old, "    '0064-copies-leave-unreachable-pages-alone.patch',\n    '0065-ios-read-pages.patch']]"))
+          s = s.replace(old, "    '0064-copies-leave-unreachable-pages-alone.patch',\n    '0065-ios-read-pages.patch']]")
+          if os.environ.get('SKIP_0063') == 'true':
+              first = "    '0063-main-optimizations-on-development-46e7cc96.patch',\n"
+              assert s.count(first) == 1
+              s = s.replace(first, '')
+              print('bisect: translator without 0063')
+          p.write_text(s)
           PY
           for repo in . ../gpu-helper drivers/AdrenoMetal drivers/Adreno740 kits/AdrenoPM4 drivers/GopFramebuffer .cache/mesa-work .cache/gpu-reference/metal2vulkan; do
             printf '%s ' "$repo"

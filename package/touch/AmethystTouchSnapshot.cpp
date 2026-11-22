@@ -154,6 +154,7 @@ extern "C" void native_keystore_probe(void) __attribute__((weak_import));   // K
 extern "C" void sheng_cpufreq_probe(void) __attribute__((weak_import));
 extern "C" void amethyst_panel_probe(void) __attribute__((weak_import));   // AmethystPanel.cpp: DCS brightness + AppleARMBacklight service (amethyst-panel=3)   // AmethystPanel.cpp: DCS brightness, amethyst-panel=N
 extern "C" void sheng_cpufreq_poll(void) __attribute__((weak_import));
+extern "C" void amethyst_wifi_probe(void) __attribute__((weak_import));   // AmethystWifiProbe.cpp: read-only WPSS SMEM inventory, once
 // iOS 27 D94: no ArmCpu SIGP mask export.
 static uint32_t (*const amethyst_sigp_disabled_mask)(void)=nullptr;
 extern "C" volatile uint32_t armcpu_core_sgi[8] __attribute__((weak_import));
@@ -229,6 +230,7 @@ extern "C" void amethyst_touch_snapshot(void) {
     if(sheng_cpufreq_probe)sheng_cpufreq_probe();
     if(sheng_cpufreq_poll)sheng_cpufreq_poll();
     if(amethyst_buttons_hid_start)amethyst_buttons_hid_start();
+    if(amethyst_wifi_probe)amethyst_wifi_probe();
     if(amethyst_panel_probe)amethyst_panel_probe();   // once; returns at once without amethyst-panel or after its first run
     // AppleKeyStore stand-in (V47): only with sheng-aks=1 here (KeyStoreProbe defaults it on otherwise).
     {unsigned aks=0;if(native_keystore_probe && PE_parse_boot_argn("sheng-aks",&aks,sizeof aks) && aks==1)native_keystore_probe();}

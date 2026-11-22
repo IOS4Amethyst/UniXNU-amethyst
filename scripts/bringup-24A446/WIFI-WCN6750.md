@@ -1,6 +1,7 @@
 # Wi-Fi on amethyst: WCN6750 (qca6750) bring-up plan
 
-Status 2026-11-22: survey only, nothing runs yet. Written per RULE 0 and https://unixnu.com/porting/drivers (step 6).
+Status 2026-11-22: stage 1 probe written (`package/touch/AmethystWifiProbe.cpp`, read-only, default on, `amethyst-wifi=0` off;
+rows `AmethystWifi:` in the touch snapshot), not yet run on hardware. Written per RULE 0 and https://unixnu.com/porting/drivers (step 6).
 
 ## Hardware (stock vendor_boot DT, Volcano msm-id 0x27c = soc_id 636 read on the phone, and dtbo overlay)
 

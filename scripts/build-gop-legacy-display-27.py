@@ -515,7 +515,7 @@ touch_c_kept = tuple(a for a in json.loads((ROOT / OBJECT_TREE / 'osfmk' / CONFI
                      if a.startswith('-Wno-'))
 touch_objects = []
 for name in ('AmethystTouchSnapshot.cpp', 'AmethystTouchDma.cpp', 'AmethystTouchLoopbackStage.cpp', 'AmethystTouchGoodixStage.cpp',
-             'AmethystTouchEvents.cpp', 'AmethystButtonsHid.cpp', 'AmethystButtons.cpp', 'AmethystPanel.cpp', 'AmethystBacklight.cpp'):
+             'AmethystTouchEvents.cpp', 'AmethystButtonsHid.cpp', 'AmethystButtons.cpp', 'AmethystPanel.cpp', 'AmethystBacklight.cpp', 'AmethystWifiProbe.cpp'):
     compile_cpp(TOUCH / name, OUT / (Path(name).stem + '.o'), touch_flags + ('-mgeneral-regs-only',) + touch_cpp_kept)
     touch_objects.append(OUT / (Path(name).stem + '.o'))
 for src in (TOUCH / 'AmethystTouchLoopback.c', TOUCH / 'GoodixBerlinGeni.c', TOUCH / 'QcomRpmh.c', GENI / 'GeniSpi.c'):

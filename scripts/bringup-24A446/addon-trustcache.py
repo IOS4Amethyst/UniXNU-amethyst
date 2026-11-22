@@ -7,6 +7,7 @@ addon's, keeping each entry's hash type, flags and category, and the module sort
 
   addon-trustcache.py show ADDON [TRUSTCACHE]
   addon-trustcache.py replace OLD_ADDON NEW_ADDON TRUSTCACHE OUT
+  addon-trustcache.py add ADDON NAME TEXT OUT    (a plain data file, e.g. tu_debug -> /private/var/ngpu/tu_debug; no CDHash)
 
 Addon (make-gpu-addon.py): "NGPUADD2", u32 count, u32 0, u64 total; per file u32 path bytes (with NUL), u32 mode, u64 size, u64 packed
 size, the path and the zlib data, each padded to 8. Trust cache container: u32 module count, u32 offsets; module: u32 version 2,
@@ -100,7 +101,29 @@ def build(mods):
     return struct.pack('<I', len(blobs)) + struct.pack('<%dI' % len(blobs), *offs) + b''.join(blobs)
 
 
+def build_addon(files):
+    body = b''
+    for name, (mode, data) in files.items():
+        raw = name.encode() + b'\0'
+        packed = zlib.compress(data, 9)
+        body += struct.pack('<IIQQ', len(raw), mode, len(data), len(packed))
+        body += raw + bytes(pad8(len(raw)) - len(raw)) + packed + bytes(pad8(len(packed)) - len(packed))
+    return b'NGPUADD2' + struct.pack('<IIQ', len(files), 0, 24 + len(body)) + body
+
+
 def main():
+    if sys.argv[1] == 'add':
+        blob = open(sys.argv[2], 'rb').read()
+        files = addon_files(blob)
+        # Before the *.publish markers, which the plugin's install treats as the last step.
+        added = {sys.argv[3]: (0o644, sys.argv[4].encode() + b'\n')}
+        files = {**{k: v for k, v in files.items() if not k.endswith('.publish')}, **added,
+                 **{k: v for k, v in files.items() if k.endswith('.publish')}}
+        out = build_addon(files)
+        assert addon_files(out) == files
+        open(sys.argv[5], 'wb').write(out)
+        print(f'{len(files)} files, {len(out)} bytes', hashlib.sha256(out).hexdigest())
+        return
     if sys.argv[1] == 'show':
         hashes = addon_cdhashes(open(sys.argv[2], 'rb').read())
         mods = modules(open(sys.argv[3], 'rb').read()) if len(sys.argv) > 3 else []

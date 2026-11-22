@@ -20,7 +20,7 @@ import subprocess
 import sys
 
 PIN = 'a81c17363989213d5cc29fa9d7ff9de628b1d52e'
-BOARD_PIN = '9a9a7cb628209d79a81d63e6e936c3e5735d9a59'
+BOARD_PIN = '07fd4aa4ac36c97de9fd047be2b4ac88ffe7075c'
 DONOR = 'fa07057bf34f33af1ec26681ad0c87c13e5aaa548a300740eddb0e92876e5f95'
 CONTRACTS = ('amethyst_generated_inputs_review', 'gmu_pool_loader_reservation_review',
              'ios27_userclient_iosurface_import_review', 'release_late_probe_hook_review')

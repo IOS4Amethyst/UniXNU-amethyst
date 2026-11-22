@@ -57,9 +57,10 @@ jobs:
           xcrun --sdk iphoneos --show-sdk-version
           xcrun --sdk iphoneos --show-sdk-build-version
           xcrun clang --version
-          brew install llvm glslang shaderc ninja
+          brew install llvm glslang shaderc ninja bison
           command -v glslc
-          export PATH="$(brew --prefix llvm)/bin:$HOME/.cargo/bin:$PATH"
+          export PATH="$(brew --prefix bison)/bin:$(brew --prefix llvm)/bin:$HOME/.cargo/bin:$PATH"
+          bison --version | head -1
           llvm-as --version
           glslangValidator --version
           ninja --version

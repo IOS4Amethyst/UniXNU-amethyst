@@ -45,7 +45,7 @@ enum {
     GoodixDiffHold = 3,
     GoodixDiffDrift = 60,
     GoodixDiffRing = 6,
-    GoodixDiffStuckFrames = 1500,   // ~30-45 s at the measured 32-58 fps
+    GoodixDiffStuckFrames = 600,    // ~10-18 s at the measured 32-58 fps (iOS 27 b30b: 1500 held ghost presses ~40 s)
     GoodixDiffTrack = 64,           // baseline follows any slow change at d/64 per frame
     GoodixDiffReleaseFrames = 3,    // V30 swipes: a press ends only after 3 frames above -release
     GoodixDiffShort = 6,            // presses shorter than this many frames are counted (split swipes)
@@ -59,6 +59,10 @@ enum {
                                     // centroid of a finger rolling off a tap shifted up to half a node
     GoodixDiffCentroidFloor = 150,  // centroid weight is depth minus this, so a node joins it gradually (a node
                                     // crossing -300 with its whole depth moved it up to half a node, ~17 pt)
+    GoodixDiffMaxDepth = 2500,      // iOS 27 b30b: real taps -1250..-1630, the ghost taps after heavy tapping -1670..-4700;
+                                    // a press never starts deeper than this
+    GoodixDiffNoiseNodes = 40,      // a fingertip is ~9 nodes at or below -release, a flat thumb ~20: more is panel noise
+    GoodixDiffRelearnFrames = 90,   // that many noisy frames in a row with no press: the baseline is taken again
     GoodixDiffSupport = 150,        // adjacent-line neighbour depth that backs a dip (an edge
                                     // tap in V20: -1124 on the edge line, -200..-245 next to it)
 };
@@ -66,6 +70,7 @@ enum {
 struct GoodixDiffPress { uint16_t index; int16_t value; uint16_t row16, col16; };
 struct GoodixDiffState {
     unsigned nodes, rows, cols, learned, frames, active, presses, candidate, held, stuck, isolated, weak, shorts;
+    unsigned noisy, toodeep, relearn, noisyRun;    // iOS 27 b31: frames refused as noise / too deep, baseline retakes
     int32_t sum[GoodixDiffMaxNodes];
     int32_t base[GoodixDiffMaxNodes];
     int32_t d[GoodixDiffMaxNodes];              // this frame's difference, line shift removed
@@ -162,9 +167,10 @@ static inline int goodix_diff_frame(struct GoodixDiffState *s, const uint8_t *gr
         return 0;
     }
     goodix_diff_compute(s, grid);
-    int32_t low = 0; unsigned at = 0, lone = 0;
+    int32_t low = 0; unsigned at = 0, lone = 0, deep = 0;
     for (unsigned i = 0; i < s->nodes; ++i) {
         int32_t d = goodix_diff_at(s, grid, i);
+        if (d <= -GoodixDiffRelease) ++deep;
         if (d < low && d <= -GoodixDiffRelease && !goodix_diff_supported(s, grid, i)) {
             lone = 1;                                       // lone dip: not a finger
             continue;
@@ -175,6 +181,17 @@ static inline int goodix_diff_frame(struct GoodixDiffState *s, const uint8_t *gr
     if (low < INT16_MIN) low = INT16_MIN;
     s->peak = (int16_t)low; s->peakIndex = (uint16_t)at;
     if (low < s->extreme) { s->extreme = (int16_t)low; s->extremeIndex = (uint16_t)at; }
+    // iOS 27 b31 (ghost taps after heavy tapping, at any brightness): a frame with a dip deeper than any finger, or with dips spread
+    // over more nodes than a finger covers, starts no press; a run of them with no press open is a stale baseline, taken again.
+    const int noisy = deep > GoodixDiffNoiseNodes || low < -GoodixDiffMaxDepth;
+    if (noisy) { ++s->noisy; if (low < -GoodixDiffMaxDepth) ++s->toodeep; }
+    if (!s->pressed && noisy) {
+        if (++s->noisyRun >= GoodixDiffRelearnFrames) {
+            for (unsigned i = 0; i < s->nodes; ++i) s->base[i] = goodix_grid_value(grid, i);
+            ++s->relearn; s->noisyRun = 0; s->candidate = 0;
+            return 0;
+        }
+    } else s->noisyRun = 0;
     // While pressed, only the finger's own neighbourhood counts: the deepest supported node within
     // GoodixDiffFollow of the live position. A far dip neither moves the press nor keeps it alive.
     if (s->pressed) {
@@ -195,7 +212,7 @@ static inline int goodix_diff_frame(struct GoodixDiffState *s, const uint8_t *gr
     }
     int started = 0;
     if (!s->pressed) {
-        s->candidate = low <= -GoodixDiffPress ? s->candidate + 1 : 0;
+        s->candidate = !noisy && low <= -GoodixDiffPress ? s->candidate + 1 : 0;
         if (s->candidate >= GoodixDiffHold) {
             s->pressed = 1; started = 1; ++s->presses; s->candidate = 0;
             s->current.index = (uint16_t)at; s->current.value = (int16_t)low;

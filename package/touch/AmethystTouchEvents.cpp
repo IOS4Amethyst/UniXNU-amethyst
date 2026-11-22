@@ -198,9 +198,9 @@ void worker(void *,wait_result_t) {
 void framePublish() {
     const GoodixDiffState &d=diff;
     amethyst_touch_row_set(46,
-        "AmethystTouch: fr %ux%u rd=%u/%u nr=%u hb=%u clr=%u/%u act=%u pr=%u st=%u iso=%u ext=%d@%u now=%d@%u\n",
-        layout.drvNum,layout.senNum,fstats.reads,fstats.readErrors,fstats.notReady,fstats.headBad,
-        fstats.clears,fstats.clearErrors,d.active,d.presses,d.stuck,d.isolated,d.extreme,d.extremeIndex,d.peak,d.peakIndex);
+        "AmethystTouch: fr rd=%u/%u act=%u pr=%u st=%u iso=%u ext=%d@%u now=%d@%u nz=%u/%u/%u ex=%d/%u/%u\n",
+        fstats.reads,fstats.readErrors,d.active,d.presses,d.stuck,d.isolated,d.extreme,d.extremeIndex,d.peak,d.peakIndex,
+        d.noisy,d.toodeep,d.relearn,exportStatus,exportGeneration,ringCount);
     // Presses in order: newest is (pr-1)%6. index = node of the strongest diff, value signed.
     amethyst_touch_row_set(47,
         "AmethystTouch: press %d %u,%u:%d %u,%u:%d %u,%u:%d %u,%u:%d %u,%u:%d %u,%u:%d\n",

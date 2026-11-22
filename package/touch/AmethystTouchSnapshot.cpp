@@ -44,6 +44,18 @@ extern "C" void amethyst_touch_row_set(unsigned index,const char *format,...) {
     if(__atomic_load_n(&amethyst_touch_snapshot_count,__ATOMIC_ACQUIRE)<=index)
         __atomic_store_n(&amethyst_touch_snapshot_count,index+1,__ATOMIC_RELEASE);
 }
+// Rows 34-42 for one-shot probes that run after the live rows (46-49) raised the count past snapshotLog's 43-row limit (the Wi-Fi
+// SMEM probe's rows were dropped that way in b35). Writes the row in place and logs it.
+extern "C" void amethyst_touch_row_at(unsigned index,const char *format,...);
+extern "C" void amethyst_touch_row_at(unsigned index,const char *format,...) {
+    if(index<34 || index>42)return;
+    va_list arguments;va_start(arguments,format);
+    vsnprintf(amethyst_touch_snapshot_rows[index],128,format,arguments);
+    va_end(arguments);
+    IOLog("%s",amethyst_touch_snapshot_rows[index]);
+    if(__atomic_load_n(&amethyst_touch_snapshot_count,__ATOMIC_ACQUIRE)<=index)
+        __atomic_store_n(&amethyst_touch_snapshot_count,index+1,__ATOMIC_RELEASE);
+}
 namespace {
 uint32_t observerRead(void *p,unsigned offset) {
     uint32_t value;uintptr_t address=reinterpret_cast<uintptr_t>(p)+offset;

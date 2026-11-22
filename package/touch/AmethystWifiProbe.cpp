@@ -5,7 +5,7 @@
 // that include the APPS host (0) or the global partition are read, the same ones Linux on the AP touches, so no XPU-protected
 // pair partition of another processor is dereferenced.
 //
-// Rows (snapshotLog, once): the TOC's partitions, the APPS<->WPSS (host 13) partition's items, and the WPSS SMP2P inbound
+// Rows 34-42 (amethyst_touch_row_at, once): the TOC's partitions, the APPS<->WPSS (host 13) partition's items, and the WPSS SMP2P inbound
 // (0x269) / outbound (0x268) entries plus the GLINK descriptor (478). Stock Android boots WPSS from the kernel, so before stage 2
 // the expected result is a WPSS partition with no SMP2P/GLINK items. Default on (read-only); amethyst-wifi=0 turns it off.
 #include <IOKit/IOLib.h>
@@ -15,7 +15,13 @@
 #include <stdint.h>
 #include <string.h>
 
-extern "C" void snapshotLog(const char *format,...);
+extern "C" void amethyst_touch_row_at(unsigned index,const char *format,...);
+
+namespace {
+unsigned gRow=34;
+}
+// Next free probe row (34-42); later lines past 42 are dropped.
+#define snapshotLog(...) amethyst_touch_row_at(gRow++,__VA_ARGS__)
 
 namespace {
 constexpr uint64_t kSmemBase=0x81d00000ull,kSmemBytes=0x200000ull;   // stock DT smem_region@81d00000

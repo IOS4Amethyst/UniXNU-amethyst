@@ -20,7 +20,7 @@ import re
 import subprocess
 
 
-ADRENO_PIN = 'a81c17363989213d5cc29fa9d7ff9de628b1d52e'
+ADRENO_PIN = 'ed61ae43dee356f6c7e4b699d1c6acb1a39be4b6'
 D94_SHA256 = 'fa07057bf34f33af1ec26681ad0c87c13e5aaa548a300740eddb0e92876e5f95'
 CPP = '''Memory SmmuMemory Vm GmuMemory SmmuContext GmuContext Cpu Sha256
 GpuContext Ring CpInit Pwrup Submit Timer Profile UserClient Publish Accelerator'''.split()

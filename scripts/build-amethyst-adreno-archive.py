@@ -19,7 +19,7 @@ import struct
 import subprocess
 import sys
 
-PIN = 'a81c17363989213d5cc29fa9d7ff9de628b1d52e'
+PIN = 'ed61ae43dee356f6c7e4b699d1c6acb1a39be4b6'
 BOARD_PIN = '07fd4aa4ac36c97de9fd047be2b4ac88ffe7075c'
 DONOR = 'fa07057bf34f33af1ec26681ad0c87c13e5aaa548a300740eddb0e92876e5f95'
 CONTRACTS = ('amethyst_generated_inputs_review', 'gmu_pool_loader_reservation_review',

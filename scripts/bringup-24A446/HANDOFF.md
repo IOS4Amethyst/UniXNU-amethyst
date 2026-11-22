@@ -3727,3 +3727,13 @@ gpuRestart for the A810 (sheng's gmu-wrapper reset: SQE halt, GBIF drain incl. A
 0x73, hw_init, CP start, secure-mode exit). b30 = level 6, b30b = level 7. Log: [gpu recovery] restarts / native_gpu_restart.
 The /tmp prepare-bNN.py chain was lost in a WSL /tmp wipe; its five post-link patches are now
 scripts/bringup-24A446/prepare-d94-kernel.py (reproduces the shipped b29 kernel byte-for-byte from CI 44964828618).
+
+## 2026-11-22 night: b34 / b35 (built, not yet booted)
+
+- **b34** (`afa72876…`): b33 kernel `e429a9d5` + the GPU addon rebuilt from current upstream (`d94-metal-addon-upstream.yml` run
+  45003697041: core 8542980, AdrenoMetal c9ebd2f, metal2vulkan 46e7cc96 + 0063/0064 + our 0065 iOS `read_pages`, Turnip keep-device-
+  after-restart). Trust cache module 1 CDHashes swapped with `addon-trustcache.py` (NativeAdrenoMetal f6a4b6d1…, Turnip 0f369bb8…).
+  The 30 symbols the new plugin imports beyond the old one all resolve in the iPhone17,2 dyld cache.
+- **b35** (`11401234…`): b34 + kernel `2d3f4703…` (run 45003726957 at fe706ab), which adds the read-only Wi-Fi stage 1 SMEM probe
+  (`AmethystWifi:` rows). If b35 panics early and b34 does not, suspect the SMEM read (`amethyst-wifi=0`).
+- b31a swap timeline: frames every ~41 ms (~24 fps) with ~215 ms offer-to-done, the residual lag to chase after the addon test.

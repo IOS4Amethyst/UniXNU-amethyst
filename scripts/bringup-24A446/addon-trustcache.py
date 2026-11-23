@@ -8,6 +8,9 @@ addon's, keeping each entry's hash type, flags and category, and the module sort
   addon-trustcache.py show ADDON [TRUSTCACHE]
   addon-trustcache.py replace OLD_ADDON NEW_ADDON TRUSTCACHE OUT
   addon-trustcache.py add ADDON NAME TEXT OUT    (a plain data file, e.g. tu_debug -> /private/var/ngpu/tu_debug; no CDHash)
+  addon-trustcache.py addfiles ADDON OUT FILE... (data files by basename, e.g. the WPSS firmware wpss.mdt wpss.bNN for
+                                                  AmethystWifiProbe stage 2; wpss.* are zlib stored blocks, which the kernel
+                                                  reads in place without inflating)
 
 Addon (make-gpu-addon.py): "NGPUADD2", u32 count, u32 0, u64 total; per file u32 path bytes (with NUL), u32 mode, u64 size, u64 packed
 size, the path and the zlib data, each padded to 8. Trust cache container: u32 module count, u32 offsets; module: u32 version 2,
@@ -101,17 +104,32 @@ def build(mods):
     return struct.pack('<I', len(blobs)) + struct.pack('<%dI' % len(blobs), *offs) + b''.join(blobs)
 
 
+STORED = ('wpss.',)   # read in place by the kernel (AmethystWifiProbe.cpp unstore): zlib level 0
+
+
 def build_addon(files):
     body = b''
     for name, (mode, data) in files.items():
         raw = name.encode() + b'\0'
-        packed = zlib.compress(data, 9)
+        packed = zlib.compress(data, 0 if name.startswith(STORED) else 9)
         body += struct.pack('<IIQQ', len(raw), mode, len(data), len(packed))
         body += raw + bytes(pad8(len(raw)) - len(raw)) + packed + bytes(pad8(len(packed)) - len(packed))
     return b'NGPUADD2' + struct.pack('<IIQ', len(files), 0, 24 + len(body)) + body
 
 
 def main():
+    if sys.argv[1] == 'addfiles':
+        import os
+        files = addon_files(open(sys.argv[2], 'rb').read())
+        added = {os.path.basename(f): (0o644, open(f, 'rb').read()) for f in sys.argv[4:]}
+        files = {**{k: v for k, v in files.items() if not k.endswith('.publish') and k not in added}, **added,
+                 **{k: v for k, v in files.items() if k.endswith('.publish')}}
+        out = build_addon(files)
+        assert addon_files(out) == files
+        assert len(out) <= 64 << 20, 'DarwinBoot caps the addon at 64 MiB'
+        open(sys.argv[3], 'wb').write(out)
+        print(f'{len(files)} files, {len(out)} bytes', hashlib.sha256(out).hexdigest())
+        return
     if sys.argv[1] == 'add':
         blob = open(sys.argv[2], 'rb').read()
         files = addon_files(blob)

@@ -1,7 +1,9 @@
 # Wi-Fi on amethyst: WCN6750 (qca6750) bring-up plan
 
-Status 2026-11-22: stage 1 probe written (`package/touch/AmethystWifiProbe.cpp`, read-only, default on, `amethyst-wifi=0` off;
-rows `AmethystWifi:` in the touch snapshot), not yet run on hardware. Written per RULE 0 and https://unixnu.com/porting/drivers (step 6).
+Status 2026-11-24: stage 1 ran on b36: the APPS-WPSS partition holds GLINK 478/479 (AP side) but no 480 and no SMP2P items,
+so the WPSS is not running. Stage 2 written (`package/touch/AmethystWifiProbe.cpp`, commit after 1e1d7f0-era b07efe7): it boots
+the WPSS with PAS id 6 when the GPU addon carries `wpss.mdt` + `wpss.b01..b10` (`addon-trustcache.py addfiles`, stored zlib).
+The UEFI PIL route (uefipil.cfg `FULL_WPSS`, SubsysID 6) is out while PILDxe/UFSDxe stay disabled in amethystPkg.
 
 ## Hardware (stock vendor_boot DT, Volcano msm-id 0x27c = soc_id 636 read on the phone, and dtbo overlay)
 

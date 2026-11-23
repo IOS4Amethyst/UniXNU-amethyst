@@ -100,23 +100,8 @@ jobs:
           git -C .cache/gpu-reference/metal2vulkan init
           git -C .cache/gpu-reference/metal2vulkan fetch --depth 1 https://github.com/steelbrain/metal2vulkan "$TRANSLATOR"
           git -C .cache/gpu-reference/metal2vulkan checkout --detach FETCH_HEAD
-          # Upstream 0063 added read_pages for Linux, macOS and Windows only, so the ios27 bridge does not compile
-          # (E0425 at copied.rs:1252). 0065 gives iOS the macOS mach_vm_read_overwrite variant; recorded as a third bridge patch.
-          cp ../scripts/patches/metal2vulkan/0065-ios-read-pages.patch drivers/AdrenoMetal/bridge/patches/
-          # Older checkpoints (one main-optimizations patch, no read_pages) build as upstream recorded them.
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('scripts/build-adreno-metal-bridge.py')
-          s = p.read_text()
-          old = "    '0064-copies-leave-unreachable-pages-alone.patch']]"
-          if '0063-main-optimizations-on-development-46e7cc96.patch' in s:
-              assert s.count(old) == 1
-              s = s.replace(old, "    '0064-copies-leave-unreachable-pages-alone.patch',\n    '0065-ios-read-pages.patch']]")
-              print('0065 appended')
-          else:
-              print('checkpoint without 0063: no 0065')
-          p.write_text(s)
-          PY
+          # iOS cfg patch 0065 for this checkpoint's translator (E0425 read_pages otherwise), registered as the last bridge patch.
+          python3 ../scripts/gen-ios-bridge-patch.py "$PWD"
           for repo in . ../gpu-helper drivers/AdrenoMetal drivers/Adreno740 kits/AdrenoPM4 drivers/GopFramebuffer .cache/mesa-work .cache/gpu-reference/metal2vulkan; do
             printf '%s ' "$repo"
             git -C "$repo" rev-parse HEAD

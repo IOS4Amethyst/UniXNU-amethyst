@@ -6,10 +6,10 @@ on:
     paths: [.github/workflows/d94-metal-addon-upstream.yml]
   workflow_dispatch:
     inputs:
-      skip_0063:
-        description: 'Bisect: build the translator without AdrenoMetal 0063 (main optimizations); 0064 and 0065 still apply'
-        type: boolean
-        default: false
+      core_ref:
+        description: 'Bisect: UniXNU core commit whose AdrenoMetal + translator checkpoint to build (default = qualified 8542980)'
+        type: string
+        default: 8542980d02b4d2cc5c32ee3542de1760b2562aac
 
 permissions:
   contents: read
@@ -33,8 +33,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: UniXNU/UniXNU
-          ref: 8542980d02b4d2cc5c32ee3542de1760b2562aac
+          ref: ${{ inputs.core_ref }}
           path: unixnu-core
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
@@ -72,10 +73,14 @@ jobs:
           rustup toolchain install 1.98.0 --profile minimal --component rust-src
           rustc +1.98.0 -Vv
           cd unixnu-core
-          test "$(git rev-parse HEAD)" = 8542980d02b4d2cc5c32ee3542de1760b2562aac
+          CORE_REF='${{ inputs.core_ref }}'
+          case "$(git rev-parse HEAD)" in "$CORE_REF"*) ;; *) echo 'core ref mismatch'; exit 1;; esac
+          QUALIFIED=0; test "$(git rev-parse HEAD)" = 8542980d02b4d2cc5c32ee3542de1760b2562aac && QUALIFIED=1
+          echo "core $(git rev-parse HEAD) qualified=$QUALIFIED"
           test "$(git -C ../gpu-helper rev-parse HEAD)" = d468023cd3f79ebd6093c644dc38356f232667f4
           git submodule update --init drivers/AdrenoMetal kits/AdrenoPM4 drivers/GopFramebuffer
-          test "$(git -C drivers/AdrenoMetal rev-parse HEAD)" = c9ebd2fb17253996f0a8d835c9ab7c2f740778e1
+          test "$QUALIFIED" = 0 || test "$(git -C drivers/AdrenoMetal rev-parse HEAD)" = c9ebd2fb17253996f0a8d835c9ab7c2f740778e1
+          echo "AdrenoMetal $(git -C drivers/AdrenoMetal rev-parse HEAD)"
           test "$(git -C kits/AdrenoPM4 rev-parse HEAD)" = 282606b528b2595bc4274ea7490b62b323f35a5f
           test "$(git -C drivers/GopFramebuffer rev-parse HEAD)" = b0d812d578efa2acb005b66f73168891719af09a
           test -e drivers/NativeMobileDisplay || ln -s GopFramebuffer drivers/NativeMobileDisplay
@@ -87,27 +92,29 @@ jobs:
           python3 ../gpu-helper/scripts/prepare-asteroids-turnip.py --unixnu "$PWD" --fetch-only
           .cache/mesa-venv/bin/pip install -r scripts/requirements-adreno-compiler.txt
           .cache/mesa-venv/bin/pip freeze
-          test "$(git -C .cache/mesa-work rev-parse HEAD)" = 85fda3b36405bcaea8bffc64aa4f2651dc90770d
+          echo "mesa-work $(git -C .cache/mesa-work rev-parse HEAD)"
+          test "$QUALIFIED" = 0 || test "$(git -C .cache/mesa-work rev-parse HEAD)" = 85fda3b36405bcaea8bffc64aa4f2651dc90770d
+          TRANSLATOR=$(python3 -c "import json;print(json.load(open('scripts/data/gpu-metal-vulkan-inputs.json'))['translator']['commit'])")
+          echo "translator $TRANSLATOR"
           mkdir -p .cache/gpu-reference/metal2vulkan
           git -C .cache/gpu-reference/metal2vulkan init
-          git -C .cache/gpu-reference/metal2vulkan fetch --depth 1 https://github.com/steelbrain/metal2vulkan 46e7cc96a284150bdf19b4a6a7890b0a8bc0ef71
+          git -C .cache/gpu-reference/metal2vulkan fetch --depth 1 https://github.com/steelbrain/metal2vulkan "$TRANSLATOR"
           git -C .cache/gpu-reference/metal2vulkan checkout --detach FETCH_HEAD
           # Upstream 0063 added read_pages for Linux, macOS and Windows only, so the ios27 bridge does not compile
           # (E0425 at copied.rs:1252). 0065 gives iOS the macOS mach_vm_read_overwrite variant; recorded as a third bridge patch.
           cp ../scripts/patches/metal2vulkan/0065-ios-read-pages.patch drivers/AdrenoMetal/bridge/patches/
-          SKIP_0063='${{ inputs.skip_0063 }}' python3 - <<'PY'
-          import os
+          # Older checkpoints (one main-optimizations patch, no read_pages) build as upstream recorded them.
+          python3 - <<'PY'
           from pathlib import Path
           p = Path('scripts/build-adreno-metal-bridge.py')
           s = p.read_text()
           old = "    '0064-copies-leave-unreachable-pages-alone.patch']]"
-          assert s.count(old) == 1
-          s = s.replace(old, "    '0064-copies-leave-unreachable-pages-alone.patch',\n    '0065-ios-read-pages.patch']]")
-          if os.environ.get('SKIP_0063') == 'true':
-              first = "    '0063-main-optimizations-on-development-46e7cc96.patch',\n"
-              assert s.count(first) == 1
-              s = s.replace(first, '')
-              print('bisect: translator without 0063')
+          if '0063-main-optimizations-on-development-46e7cc96.patch' in s:
+              assert s.count(old) == 1
+              s = s.replace(old, "    '0064-copies-leave-unreachable-pages-alone.patch',\n    '0065-ios-read-pages.patch']]")
+              print('0065 appended')
+          else:
+              print('checkpoint without 0063: no 0065')
           p.write_text(s)
           PY
           for repo in . ../gpu-helper drivers/AdrenoMetal drivers/Adreno740 kits/AdrenoPM4 drivers/GopFramebuffer .cache/mesa-work .cache/gpu-reference/metal2vulkan; do

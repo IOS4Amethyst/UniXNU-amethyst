@@ -3757,3 +3757,14 @@ scripts/bringup-24A446/prepare-d94-kernel.py (reproduces the shipped b29 kernel 
   run 45253773470).
 - **b39** (`86d3a0d5…`): kernel run 45254504886 (Wi-Fi stage 2) + b33's old addon with wpss.mdt/wpss.b01-b10 added (stored zlib).
   Rows 40-42 `AmethystWifi: s2`; row 42 says `WPSS UP` or where it stopped.
+
+## 2026-11-24: Wi-Fi stage 2 works (b43) — WPSS boots
+
+- b39: stage 2 stopped at once: a 16 KiB physically contiguous buffer under 4 GiB was refused. Fixed (8 KiB, 32-bit then 40-bit mask).
+- **b43** (`a7ff0727…`, kernel run 45330135860 + b33 addon + wpss firmware): QMP load_state, PAS init_image/mem_setup/auth_and_reset
+  all 0 (firmware written 24.9 MB in 69 ms, auth done at 114 ms), **WPSS up after 100 ms**: it created its SMP2P item 0x269
+  (v1, 13->0, 0/16 entries yet), the GLINK RX FIFO 480, and items 0x25d, 0x263 (4096), 0x270 (52) in the APPS-WPSS partition.
+  Booted to the home screen normally. Next: stage 3 (GLINK-SMEM handshake on IPCC client 0x18 signal 0, then QRTR / WLFW service 69).
+- Ghosting bisect: b40 (core c4b7651), b41 (1ded189) and b42 (b36 + tu_debug=nocb, the old plugin's default) all ghost, so it is
+  older than the Nov 16 runtime switch and not the Turnip render-mode default. b38 (5cc0b4e) hung the GPU at fence 6821 (no recovery
+  fired), untested for ghosting. Queued: control (e6795bf, b33's own core) then Nov 10 (8288924) and Nov 11 (9c74c08) checkpoints.

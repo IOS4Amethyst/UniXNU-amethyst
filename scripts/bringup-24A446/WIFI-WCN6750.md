@@ -1,6 +1,7 @@
 # Wi-Fi on amethyst: WCN6750 (qca6750) bring-up plan
 
-Status 2026-11-24: stage 1 ran on b36: the APPS-WPSS partition holds GLINK 478/479 (AP side) but no 480 and no SMP2P items,
+Status 2026-11-24 (b43): **stage 2 works: the WPSS boots** (PAS 6 auth_and_reset 0, SMP2P 0x269 and GLINK RX FIFO 480
+appear 100 ms later). Stage 3 (GLINK + QRTR) is next. Earlier: stage 1 ran on b36: the APPS-WPSS partition holds GLINK 478/479 (AP side) but no 480 and no SMP2P items,
 so the WPSS is not running. Stage 2 written (`package/touch/AmethystWifiProbe.cpp`): it boots
 the WPSS with PAS id 6 when the GPU addon carries `wpss.mdt` + `wpss.b01..b10` (`addon-trustcache.py addfiles`, stored zlib).
 The UEFI PIL route (uefipil.cfg `FULL_WPSS`, SubsysID 6) is out while PILDxe/UFSDxe stay disabled in amethystPkg.

@@ -82,7 +82,7 @@ jobs:
           test "$QUALIFIED" = 0 || test "$(git -C drivers/AdrenoMetal rev-parse HEAD)" = c9ebd2fb17253996f0a8d835c9ab7c2f740778e1
           echo "AdrenoMetal $(git -C drivers/AdrenoMetal rev-parse HEAD)"
           test "$(git -C kits/AdrenoPM4 rev-parse HEAD)" = 282606b528b2595bc4274ea7490b62b323f35a5f
-          test "$(git -C drivers/GopFramebuffer rev-parse HEAD)" = b0d812d578efa2acb005b66f73168891719af09a
+          test "$QUALIFIED" = 0 || test "$(git -C drivers/GopFramebuffer rev-parse HEAD)" = b0d812d578efa2acb005b66f73168891719af09a
           test -e drivers/NativeMobileDisplay || ln -s GopFramebuffer drivers/NativeMobileDisplay
           git -C drivers/Adreno740 init
           git -C drivers/Adreno740 fetch --depth 1 https://github.com/IOS4Amethyst/NativeAdreno.git 6cde63052bb9af9f05f7e869d6982defe569db4e

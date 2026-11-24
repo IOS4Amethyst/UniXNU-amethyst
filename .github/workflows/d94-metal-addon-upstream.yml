@@ -89,6 +89,17 @@ jobs:
           git -C drivers/Adreno740 checkout --detach FETCH_HEAD
           test "$(git -C drivers/Adreno740 rev-parse HEAD)" = 6cde63052bb9af9f05f7e869d6982defe569db4e
           echo '889f361ff6903d68f48c95fdbdfcb6922431284be1dec2004a2a233cd1b09457  drivers/Adreno740/NativeAdrenoABI.h' | shasum -a 256 -c -
+          # Older cores' turnip-frame-diagnostics.patch creates a header without Git's new-file metadata (d94-metal-addon.yml fix).
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('patches/mesa/turnip-frame-diagnostics.patch')
+          if p.exists():
+              text = p.read_text()
+              old = 'diff --git a/src/freedreno/vulkan/tu_frame_diagnostic.h b/src/freedreno/vulkan/tu_frame_diagnostic.h\n--- /dev/null'
+              if text.count(old) == 1:
+                  p.write_text(text.replace(old, old.replace('\n---', '\nnew file mode 100644\n---'), 1))
+                  print('turnip-frame-diagnostics.patch: new-file metadata added')
+          PY
           python3 ../gpu-helper/scripts/prepare-asteroids-turnip.py --unixnu "$PWD" --fetch-only
           .cache/mesa-venv/bin/pip install -r scripts/requirements-adreno-compiler.txt
           .cache/mesa-venv/bin/pip freeze

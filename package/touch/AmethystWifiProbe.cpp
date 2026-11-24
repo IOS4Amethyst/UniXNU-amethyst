@@ -291,17 +291,27 @@ void stage2(void *,int) {
     const uint8_t *blob=nullptr;uint64_t total=0;
     native_ram_block_gpu_addon(&blob,&total);
     AddonFile mdt{};
-    if(!blob || !addonFile(blob,total,"wpss.mdt",mdt) || mdt.size<0x34 || mdt.size>0x4000) {
+    if(!blob || !addonFile(blob,total,"wpss.mdt",mdt) || mdt.size<0x34 || mdt.size>0x2000) {
         resultLog("AmethystWifi: s2 wpss.mdt %s\n",blob?"bad":"no addon");return;
     }
     // wpss.mdt: ELF32 headers then the hash segment (qcom_mdt_read_metadata's split form), i.e. the PAS metadata as is.
-    IOBufferMemoryDescriptor *meta=IOBufferMemoryDescriptor::inTaskWithPhysicalMask(kernel_task,
-        static_cast<IOOptionBits>(kIODirectionInOut)|static_cast<IOOptionBits>(kIOMemoryPhysicallyContiguous),0x4000,0xfffff000ull);
-    if(!meta || meta->prepare()!=kIOReturnSuccess){resultLog("AmethystWifi: s2 metadata buffer refused\n");return;}
+    // b39: a 16 KiB contiguous buffer under 4 GiB was refused. The touch DMA buffer's form (40-bit mask) is tried after the 32-bit one,
+    // 8 KiB (wpss.mdt is 4844 bytes); each refusal is counted in the row.
+    constexpr uint64_t kMetaBytes=0x2000;
+    IOBufferMemoryDescriptor *meta=nullptr;unsigned refused=0;
+    static const uint64_t kMasks[]={0xfffff000ull,0xfffffff000ull};
+    for(const uint64_t mask:kMasks) {
+        meta=IOBufferMemoryDescriptor::inTaskWithPhysicalMask(kernel_task,
+            static_cast<IOOptionBits>(kIODirectionInOut)|static_cast<IOOptionBits>(kIOMemoryPhysicallyContiguous),kMetaBytes,mask);
+        if(meta && meta->prepare()==kIOReturnSuccess)break;
+        refused=refused*10+(meta?2:1);
+        if(meta){meta->release();meta=nullptr;}
+    }
+    if(!meta){resultLog("AmethystWifi: s2 metadata buffer refused %u\n",refused);return;}
     uint8_t *mv=static_cast<uint8_t *>(meta->getBytesNoCopy());
     IOByteCount length=0;const uint64_t mpa=meta->getPhysicalSegment(0,&length,kIOMemoryMapperNone);
-    if(!mv || !mpa || length<mdt.size){resultLog("AmethystWifi: s2 metadata buffer has no address\n");return;}
-    memset(mv,0,0x4000);
+    if(!mv || !mpa || length<mdt.size){resultLog("AmethystWifi: s2 metadata buffer has no address (%llx+%llx)\n",mpa,length);return;}
+    memset(mv,0,kMetaBytes);
     if(!unstore(mdt,[&](uint64_t at,const uint8_t *p,uint32_t n){memcpy(mv+at,p,n);})){resultLog("AmethystWifi: s2 wpss.mdt not stored zlib\n");return;}
     // Program headers: load segments (PT_LOAD, memsz != 0, not the hash segment) relative to the lowest address.
     const uint8_t *e=mv;

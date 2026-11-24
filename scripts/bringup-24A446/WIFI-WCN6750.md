@@ -28,6 +28,8 @@ Firmware (NON-HLOS.bin, FAT `::/image/qca6750/`, ~12.8 MB folder): `wpss.mdt` + 
 
 ## Linux reference
 
+**Stage 3 version-only probe (host-tested):** `amethyst-wifi=3` runs the b43 boot path, then polls the WPSS GLINK edge for up to five seconds. Row 42 `s3 version rc=1 sent=1 replied=1 agreed=1` means both sides agreed on v1 with no optional features; `rc=0` is a timeout. The default remains stage 2. Channel OPEN is left queued for a future IPCRTR client. No device result yet.
+
 This is Linux **ath11k** (`drivers/net/wireless/ath/ath11k/ahb.c`, hw rev `ATH11K_HW_WCN6750_HW10`) on SC7280-class SoCs
 (`qcom,wcn6750-wifi`, ChromeOS herobrine), with WPSS booted by `qcom_q6v5_pas` (`qcom,sc7280-wpss-pas`, PAS id 6). Control path:
 QMI WLFW over QRTR over GLINK-SMEM to WPSS; data path: ath11k copy engines + DP SRNG rings in host memory, interrupts as SPIs.

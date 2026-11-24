@@ -24,6 +24,7 @@
 #include <pexpert/pexpert.h>
 #include <stdint.h>
 #include <string.h>
+#include "WpssGlinkVersion.h"
 
 extern "C" void amethyst_touch_row_at(unsigned index,const char *format,...);
 extern "C" int native_ram_block_gpu_addon(const uint8_t **data,uint64_t *bytes) __attribute__((weak_import));   // NativeRamBlock.cpp
@@ -42,6 +43,7 @@ constexpr uint16_t kSmp2pIn=0x269,kSmp2pOut=0x268,kGlinkDesc=478,kGlinkTx=479,kG
 struct Part { uint32_t offset,bytes,uncached,cached,cacheline; uint16_t host0,host1; };
 
 uintptr_t gVa;
+bool gStage3;
 uint32_t rd32(uint32_t off) { uint32_t v; const uintptr_t a=gVa+off; __asm__ volatile("ldr %w0, [%1]" : "=r"(v) : "r"(a) : "memory"); return v; }
 uint16_t rd16(uint32_t off) { return (uint16_t)(rd32(off&~3u)>>((off&2)*8)); }
 bool span(uint32_t limit,uint32_t off,uint32_t n) { return off<=limit && n<=limit-off; }
@@ -51,7 +53,7 @@ bool span(uint32_t limit,uint32_t off,uint32_t n) { return off<=limit && n<=limi
 template<class F> int walk(const Part &p,F f) {
     int n=0;
     for(uint32_t off=32;off<p.uncached;) {
-        if(!span(p.uncached,off,16))return -1;
+        if((off&3) || !span(p.uncached,off,16))return -1;
         const uint32_t h=rd32(p.offset+off),bytes=rd32(p.offset+off+4),padgap=rd32(p.offset+off+8);
         const uint32_t pad=padgap&0xffff,gap=padgap>>16;
         if((h&0xffff)!=0xa5a5 || pad>bytes || !span(p.uncached,off+16,gap) || !span(p.uncached,off+16+gap,bytes))return -2;
@@ -63,6 +65,7 @@ template<class F> int walk(const Part &p,F f) {
     const uint32_t stride=(16+cl-1)&~(cl-1);
     if(stride>p.bytes)return -3;
     for(uint32_t off=p.bytes-stride;off>p.cached;) {
+        if(off&3)return -4;
         const uint32_t h=rd32(p.offset+off),bytes=rd32(p.offset+off+4),pad=rd32(p.offset+off+8)&0xffff;
         if((h&0xffff)!=0xa5a5 || pad>bytes || bytes>off || off-bytes<p.cached)return -4;
         f((uint16_t)(h>>16),p.offset+off-bytes,bytes-pad);n++;
@@ -97,7 +100,7 @@ struct Scan {
     Part wpss{},global{};
     int wpssItems=0,globalItems=0;
     int64_t in=-1,out=-1,desc=-1,tx=-1,rx=-1;
-    uint32_t inBytes=0,outBytes=0;
+    uint32_t inBytes=0,outBytes=0,descBytes=0,txBytes=0,rxBytes=0,edgeItems=0;
     char hosts[100]{},items[100]{};
 };
 void scan(Scan &s) {
@@ -131,9 +134,9 @@ void scan(Scan &s) {
         s.wpssItems=walk(s.wpss,[&](uint16_t item,uint32_t off,uint32_t bytes){
             if(item==kSmp2pIn){s.in=off;s.inBytes=bytes;}
             if(item==kSmp2pOut){s.out=off;s.outBytes=bytes;}
-            if(item==kGlinkDesc)s.desc=off;
-            if(item==kGlinkTx)s.tx=off;
-            if(item==kGlinkRx)s.rx=off;
+            if(item==kGlinkDesc){s.desc=off;s.descBytes=bytes;++s.edgeItems;}
+            if(item==kGlinkTx){s.tx=off;s.txBytes=bytes;++s.edgeItems;}
+            if(item==kGlinkRx){s.rx=off;s.rxBytes=bytes;++s.edgeItems;}
             int k=snprintf(s.items+at,sizeof s.items-at," %x:%u",item,bytes);
             if(k>0 && (size_t)k<sizeof s.items-at)at+=(size_t)k;
         });
@@ -382,6 +385,19 @@ void stage2(void *,int) {
     resultLog("AmethystWifi: s2 WPSS %s after %u ms: smp2p-in=%d entry0=%x glink rx=%d\n",s.in>=0&&s.rx>=0?"UP":"no answer",
         waited,s.in>=0,bits,s.rx>=0);
     gRow=34;inventory();
+    if(!gStage3)return;
+    if(s.wpssItems<0 || s.edgeItems!=3 || s.desc<0 || s.tx<0 || s.rx<0 ||
+       (s.desc|s.tx|s.rx)&3 || s.descBytes!=32){resultLog("AmethystWifi: s3 invalid edge\n");return;}
+    IOMemoryMap *im=mapDevice(kIpcc,0x1000,kIOMapInhibitCache);
+    if(!im){resultLog("AmethystWifi: s3 IPCC map failed\n");return;}
+    auto word=[](int64_t off){return reinterpret_cast<volatile uint32_t *>(gVa+off);};
+    WpssVersion link{};link.d=word(s.desc);link.tx=word(s.tx);link.rx=word(s.rx);
+    link.tn=s.txBytes;link.rn=s.rxBytes;
+    auto sendID=reinterpret_cast<volatile uint32_t *>(im->getVirtualAddress()+0x0c);
+    int rc=0;
+    for(unsigned i=0;i<500 && !rc;++i){rc=link.step([&]{*sendID=0x18u<<16;});if(!rc)IOSleep(10);}
+    resultLog("AmethystWifi: s3 version rc=%d sent=%u replied=%u agreed=%u\n",rc,link.sent,link.replied,link.agreed);
+    im->release();
 }
 }
 
@@ -392,7 +408,8 @@ extern "C" void amethyst_wifi_probe(void) {
     done=true;
     unsigned mode=2;PE_parse_boot_argn("amethyst-wifi",&mode,sizeof mode);
     if(!mode)return;
-    IOMemoryMap *map=mapDevice(kSmemBase,kSmemBytes,kIOMapInhibitCache|kIOMapReadOnly);
+    gStage3=(mode==3);
+    IOMemoryMap *map=mapDevice(kSmemBase,kSmemBytes,kIOMapInhibitCache|(gStage3?0:kIOMapReadOnly));
     if(!map) { snapshotLog("AmethystWifi: smem map failed\n");return; }
     gVa=(uintptr_t)map->getVirtualAddress();   // kept mapped for stage 2
     inventory();

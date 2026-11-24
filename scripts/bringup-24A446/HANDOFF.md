@@ -3746,3 +3746,14 @@ scripts/bringup-24A446/prepare-d94-kernel.py (reproduces the shipped b29 kernel 
 - **b36** (`a9a1402a…`): kernel `c7942936…` (run 45051123451) + addon run 45050908304 with 0065 extended to the iOS page-permission
   checks (mapped_writable was false on iOS, so copied host buffers dropped GPU writes: suspected ghosting cause, 1149944).
 - Tearing: display transfer is not vsync-paced (`[scanout prepare] sent=0 arms=0`); next display task.
+
+## 2026-11-24: ghosting bisect (b38, b40) and Wi-Fi stage 2 (b39)
+
+- b33 (old addon) has no app-switcher ghosting, so the upstream addon introduced it. `d94-metal-addon-upstream.yml` now takes
+  `core_ref` (a UniXNU core commit = one AdrenoMetal + translator checkpoint); `scripts/gen-ios-bridge-patch.py` generates the iOS
+  cfg patch 0065 for any checkpoint. Only one macOS runner is acquired at a time: dispatch serially.
+- **b38** (`03695a0b…`): b33/b34 kernel + addon core 5cc0b4e (AdrenoMetal 2ab9328, translator 33186454; run 45253794735).
+- **b40** (`01c65346…`): b33/b34 kernel + addon core c4b7651 (AdrenoMetal 54c18dc, translator 8b9b2875 "regression midpoint";
+  run 45253773470).
+- **b39** (`86d3a0d5…`): kernel run 45254504886 (Wi-Fi stage 2) + b33's old addon with wpss.mdt/wpss.b01-b10 added (stored zlib).
+  Rows 40-42 `AmethystWifi: s2`; row 42 says `WPSS UP` or where it stopped.

@@ -611,6 +611,7 @@ findings = [
   "D94 images are packed for RAM-only boot with volatile Data and extracted to verify their actual contents.",
   "D94 GPU qualification checks pristine source revisions before applying the board recovery patch.",
   "The qualification recipe applies the no-replay-on-context-fault patch after the original recovery-isolation patch.",
+  "The GPU qualification archive also captures the stalled job's queue, ASID and mapping handles before the reset rewrites the ring.",
   "Test kernels use the unchanged original pe_init.o object; hand-assembled pe_init flags caused an earlier regression.",
   "pack-log.py --aks adds sheng-aks=1; --fb-gpu adds sheng-fb-gpu=1 sheng-vsync=120 and requires --gpu-addon.",
 ]
@@ -676,6 +677,7 @@ findings = [
   "D94 adds current-boot GPU and display logs, prelink checks and host fixtures for the D94 ABI and timing. Swap logs distinguish missing offer timestamps from observed retirements.",
   "The recovery relink verifies the downloaded qualification digest, all GPU archive members and private-header provenance before linking.",
   "The context-fault replay relink pins both the encrypted artifact and archive digest from qualification run 45546635968.",
+  "The recovery log retains a pre-reset job snapshot independently of later fence wait timeouts.",
   "The panic hook does not write UFS; periodic writes continue during normal operation.",
   "The log is found by partition name in recovery because this device keeps its root image in a split partition.",
   "Row 48 shows the swap rejection reason (why=, surface format and planes) once a swap is refused.",

@@ -197,6 +197,7 @@ extern unsigned NativeAdrenoGpuContextInputBits(void) __attribute__((weak_import
 extern volatile uint32_t native_adreno_recovery[8] __attribute__((weak_import));
 extern volatile uint32_t native_adreno_recovery_fault[5] __attribute__((weak_import));
 extern volatile uint32_t native_adreno_recover_trace[4] __attribute__((weak_import));
+extern volatile uint64_t native_adreno_hang_job[9] __attribute__((weak_import));
 extern volatile uint64_t native_adreno_fault_place[4] __attribute__((weak_import));
 extern char native_adreno_fault_owner[20] __attribute__((weak_import));
 extern uint32_t native_gpu_restart[4] __attribute__((weak_import));
@@ -908,6 +909,14 @@ static size_t compose(char *out, size_t cap, uint32_t slot, unsigned now) {
              &native_adreno_recovery_fault ? native_adreno_recovery_fault[4] : 0);
     at = put(out, at, cap, row, sizeof row);
     // Where the last recover() stopped: step (1 fence read, 2 restart hook, 3 table write, 4 nop, 5 replay vm, 6 replay submit), the status there, fence, last submitted.
+    if (&native_adreno_hang_job && native_adreno_hang_job[0]) {
+      const volatile uint64_t *j = native_adreno_hang_job;
+      snprintf(row, sizeof row, "[gpu hang job] fence %llu queue %llx ctx %llu asid %llu next %llu ib %llx handle %llu far %llx handle %llu",
+               (unsigned long long)j[0], (unsigned long long)j[1], (unsigned long long)j[2], (unsigned long long)j[3],
+               (unsigned long long)j[4], (unsigned long long)j[5], (unsigned long long)j[6],
+               (unsigned long long)j[7], (unsigned long long)j[8]);
+      at = put(out, at, cap, row, sizeof row);
+    }
     if (&native_adreno_recover_trace && native_adreno_recover_trace[0]) {
       snprintf(row, sizeof row, "[gpu recover stop] step %u st %x fence %u last %u", native_adreno_recover_trace[0], native_adreno_recover_trace[1],
                native_adreno_recover_trace[2], native_adreno_recover_trace[3]);

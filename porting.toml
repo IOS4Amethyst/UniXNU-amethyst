@@ -614,6 +614,7 @@ findings = [
   "The qualification recipe applies the no-replay-on-context-fault patch after the original recovery-isolation patch.",
   "The GPU qualification archive also captures the stalled job's queue, ASID and mapping handles before the reset rewrites the ring.",
   "The qualification recipe includes an opt-in A810 recovery control that skips the stalled job on the first reset.",
+  "Object qualification patches only its pinned A810 board-source copy so required reset MMIO failures stop recovery at the failing step; the checked sequence passed host fixtures but has not been built for the target.",
   "Test kernels use the unchanged original pe_init.o object; hand-assembled pe_init flags caused an earlier regression.",
   "pack-log.py --aks adds sheng-aks=1; --fb-gpu adds sheng-fb-gpu=1 sheng-vsync=120 and requires --gpu-addon.",
 ]

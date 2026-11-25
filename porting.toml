@@ -41,7 +41,7 @@ procedure = [
   "./unixnu status --json to confirm the resolved overrides and patch order.",
 ]
 findings = [
-  "The D94 iOS 27 bring-up and V60 iPadOS 17 fallback share the device repository; the D94 kernel, GPU and seed workflows run by manual dispatch. The context-fault replay candidate relinks the archive from run 45546635968.",
+  "The D94 iOS 27 bring-up and V60 iPadOS 17 fallback share the device repository; the D94 kernel, GPU and seed workflows run by manual dispatch. The hung-job diagnostic candidate relinks the archive from run 45551735339.",
   "Sm7635Platform is not selected: board services are provided by board-package code and test kernels instead.",
   "The board ADT keeps arm_io_base 0x01000000; a zero parent base made pe_identify_machine return early and skip clock-frequency initialisation.",
   "drivers/Adreno740 is fetched from IOS4Amethyst/NativeAdreno (main = 38227e7, the A810 branch of rootstockos/NativeAdreno); the add-on and seed workflows run by hand from main.",
@@ -677,7 +677,7 @@ findings = [
   "D94 adds current-boot GPU and display logs, prelink checks and host fixtures for the D94 ABI and timing. Swap logs distinguish missing offer timestamps from observed retirements.",
   "The recovery relink verifies the downloaded qualification digest, all GPU archive members and private-header provenance before linking.",
   "The context-fault replay relink pins both the encrypted artifact and archive digest from qualification run 45546635968.",
-  "The recovery log retains a pre-reset job snapshot independently of later fence wait timeouts.",
+  "The recovery log retains a pre-reset job snapshot independently of later fence wait timeouts. The relink pins the verified archive from qualification run 45551735339.",
   "The panic hook does not write UFS; periodic writes continue during normal operation.",
   "The log is found by partition name in recovery because this device keeps its root image in a split partition.",
   "Row 48 shows the swap rejection reason (why=, surface format and planes) once a swap is refused.",

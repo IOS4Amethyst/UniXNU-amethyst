@@ -11,8 +11,8 @@ import subprocess
 import tarfile
 import tomllib
 
-ENCRYPTED = 'e7cbe0bd5ff606ae2cf75a43e2254f7dd0a7f076376fd168368493f1630e20d7'
-ARCHIVE = '4db158c6f6f0c6352cf3253a35ed857c15fc340776ea7a7accbf5eba2f46f72a'
+ENCRYPTED = '414126e1d072ffe7558c680bae18b10e9f2328c86e4c453fbc1d876162664f2f'
+ARCHIVE = '70084d071b775357d3298420e6287e1fea2daf1f618c1bbac3b5dff02d0e1dde'
 NAME = 'libAmethystAdreno.qualification.late.a'
 
 

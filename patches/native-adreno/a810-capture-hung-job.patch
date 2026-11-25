@@ -1,0 +1,96 @@
+diff --git a/NativeAdrenoPublish.cpp b/NativeAdrenoPublish.cpp
+index cb4a431..57d3e67 100644
+--- a/NativeAdrenoPublish.cpp
++++ b/NativeAdrenoPublish.cpp
+@@ -181,7 +181,7 @@ static void nativeAdrenoHangcheck(void *,wait_result_t)
+                     for(unsigned i=0;i<4;++i)native_adreno_recovery_fault[1+i]=fault[i];
+                 }
+                 NativeAdrenoRecovery result{};
+-                const IOReturn status=g.submit->recover(g.restart,g.restart_cookie,&g.clock,&result,contextFault);
++                const IOReturn status=g.submit->recover(g.restart,g.restart_cookie,&g.clock,&result,contextFault?fault:nullptr);
+                 native_adreno_recovery[3]=result.fence;native_adreno_recovery[4]=uint32_t(status?status:result.status);
+                 native_adreno_recovery[5]=native_adreno_recovery[5]+result.replayed;
+                 if(result.guilty)native_adreno_recovery[6]=native_adreno_recovery[6]+1;
+diff --git a/NativeAdrenoSubmit.cpp b/NativeAdrenoSubmit.cpp
+index 4a48459..1758e00 100644
+--- a/NativeAdrenoSubmit.cpp
++++ b/NativeAdrenoSubmit.cpp
+@@ -532,8 +532,10 @@ IOReturn NativeAdrenoSubmit::hangCheck(bool *hung)
+     progress_retries_=0;++stats_.hangs;*hung=true;
+     return kIOReturnSuccess;
+ }
++// Last pre-reset sample, independent of ordinary wait timeouts.
++extern "C" {volatile uint64_t native_adreno_hang_job[9];}
+ IOReturn NativeAdrenoSubmit::recover(NativeAdrenoRestart restart,void *cookie,const NativeAdrenoRingClock *clock,
+-    NativeAdrenoRecovery *out,bool contextFault)
++    NativeAdrenoRecovery *out,const uint32_t *contextFault)
+ {
+     if(!out)return kIOReturnBadArgument;*out={};
+     if(!attached_)return kIOReturnNotReady;
+@@ -550,10 +552,28 @@ IOReturn NativeAdrenoSubmit::recover(NativeAdrenoRestart restart,void *cookie,co
+     const uint32_t hung=fence<last?fence+1:fence;
+     Job *guilty=fence<last?find(hung):nullptr;
+     out->fence=hung;
++    // Capture in the hung job's address space before restart rewrites the ring.
++    native_adreno_hang_job[0]=0;
++    for(unsigned i=1;i<9;++i)native_adreno_hang_job[i]=0;
+     if(guilty) {
+         NativeAdrenoVm *vm=guilty->vm?guilty->vm:vm_;
+         vm->noteHang(vm!=vm_);out->guilty=vm;
++        native_adreno_hang_job[1]=guilty->queue;
++        native_adreno_hang_job[2]=guilty->context;
++        native_adreno_hang_job[3]=vm->asid();
++        native_adreno_hang_job[4]=guilty->vm_next;
++        if(guilty->word_count>=4) {
++            const uint64_t ib=uint64_t(guilty->words[2])<<32|guilty->words[1];
++            native_adreno_hang_job[5]=ib;
++            native_adreno_hang_job[6]=vm->handleAt(ib);
++        }
++        if(contextFault) {
++            const uint64_t far=uint64_t(contextFault[2])<<32|contextFault[1];
++            native_adreno_hang_job[7]=far;
++            native_adreno_hang_job[8]=vm->handleAt(far);
++        }
+     }
++    native_adreno_hang_job[0]=hung;
+     /* amethyst b31a: dropping the hung job (msm's recover) lost one of backboardd's frames, and the render server exited right after a
+      * restart that otherwise succeeded, taking SpringBoard with it. The A810's hangs are a CP that stopped taking work, not a bad
+      * command stream, so the hung job runs again once; the same fence hanging a second time is dropped as before. */
+diff --git a/NativeAdrenoSubmit.h b/NativeAdrenoSubmit.h
+index 926ebf3..2134cec 100644
+--- a/NativeAdrenoSubmit.h
++++ b/NativeAdrenoSubmit.h
+@@ -133,7 +133,7 @@ public:
+     /* msm's recover_worker: the job on the hung fence is the guilty one (its VM is marked, NativeAdrenoVm::noteHang), the ring fence
+      * moves past it, restart resets the GPU, the guilty job is retired, then every later job is submitted again with its own fence
+      * (a job of an unusable VM without its buffers). Callers serialize this with every other method. A failed restart poisons. */
+-    IOReturn recover(NativeAdrenoRestart restart,void *cookie,const NativeAdrenoRingClock *,NativeAdrenoRecovery *,bool contextFault=false);
++    IOReturn recover(NativeAdrenoRestart restart,void *cookie,const NativeAdrenoRingClock *,NativeAdrenoRecovery *,const uint32_t *contextFault=nullptr);
+     bool poisoned() const {return poisoned_;}
+     size_t outstanding() const;
+     NativeAdrenoSubmitStats stats() const {return stats_;}
+diff --git a/tests/test_submit.cpp b/tests/test_submit.cpp
+index 21adaba..2462366 100644
+--- a/tests/test_submit.cpp
++++ b/tests/test_submit.cpp
+@@ -8,6 +8,7 @@
+ #define CHECK(x) do {if(!(x)){std::fprintf(stderr,"line %d: %s\n",__LINE__,#x);std::exit(1);}}while(0)
+ #define SMMU_BYTES 0x40000
+ #define CB 0x22000
++extern "C" volatile uint64_t native_adreno_hang_job[9];
+ IOReturn NativeAdrenoQueryCpu4K(NativeAdrenoCpuState *out)
+ {CHECK(out);*out={};return kIOReturnSuccess;}
+ IOReturn NativeAdrenoMaintainOwnedPages(void *mapping,size_t bytes,NativeAdrenoCacheOperation op)
+@@ -281,8 +282,11 @@ int main()
+         CHECK(p.submit.outstanding()==0);
+         CHECK(p.submit.submit(&buffer,1,0,&fence)==kIOReturnSuccess && fence==4);
+         CHECK(p.submit.submit(&buffer,1,0,&fence)==kIOReturnSuccess && fence==5);
+-        CHECK(p.submit.recover(restart,nullptr,&ringclock,&result,true)==kIOReturnSuccess);
++        const uint32_t fault[]={2,0x800004,0,0};
++        CHECK(p.submit.recover(restart,nullptr,&ringclock,&result,fault)==kIOReturnSuccess);
+         CHECK(restarted==4 && result.fence==4 && result.replayed==1 && p.submit.outstanding()==1);
++        CHECK(native_adreno_hang_job[0]==4 && native_adreno_hang_job[3]==1 && native_adreno_hang_job[5]==0x800000 &&
++              native_adreno_hang_job[6]==p.handle && native_adreno_hang_job[7]==0x800004 && native_adreno_hang_job[8]==p.handle);
+         /* A restart that fails leaves the submit object poisoned. */
+         CHECK(p.submit.recover([](void *,NativeAdrenoRing *,uint32_t)->IOReturn {return kIOReturnIOError;},nullptr,&ringclock,&result)==kIOReturnIOError);
+         CHECK(p.submit.poisoned());

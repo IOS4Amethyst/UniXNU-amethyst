@@ -1,0 +1,176 @@
+diff --git a/NativeAdrenoGpuContext.cpp b/NativeAdrenoGpuContext.cpp
+index 0fd7607..7053377 100644
+--- a/NativeAdrenoGpuContext.cpp
++++ b/NativeAdrenoGpuContext.cpp
+@@ -49,8 +49,10 @@ IOReturn NativeAdrenoGpuContext::bringUp(const ArmSmmu4KIo *io,unsigned bank,uns
+         if(NativeAdrenoMemory::poolBytes() && native_adreno_wc_enabled && !native_adreno_owned_coherent)
+             (void)NativeAdrenoMemory::writeCombinePool();
+     }
+-    for(unsigned i=0;!status && i<GpuBufferCount;++i)
++    for(unsigned i=0;!status && i<GpuBufferCount;++i) {
+         status=buffers_[i].allocate(kBytes[i],report->output_bits,true,kBytes[i]);
++        if(!status)buffers_[i].declareSharedContext();
++    }
+     if(!status) {
+         step(Prepare);
+         const uint64_t aperture=UINT64_C(1)<<input_bits_;
+diff --git a/NativeAdrenoMemory.h b/NativeAdrenoMemory.h
+index b28c956..55b0326 100644
+--- a/NativeAdrenoMemory.h
++++ b/NativeAdrenoMemory.h
+@@ -51,6 +51,7 @@ class NativeAdrenoMemory final {
+     size_t bytes_=0,span_count_=0,span_capacity_=0;
+     uint32_t device_references_=0;
+     bool prepared_=false,quarantined_=false,write_combined_=false,system_=false,borrowed_=false,owned_=false,pooled_=false;
++    bool sharedContext_=false;
+     unsigned pool_chunk_=0;
+     size_t pool_offset_=0;
+     IOReturn takeSegments(IOBufferMemoryDescriptor *,size_t bytes,uint64_t limit,bool contiguous);
+@@ -127,6 +128,8 @@ public:
+     IOReturn holdForDevice();
+     IOReturn retireAfterQuiescence();
+     void quarantine() {quarantined_=true;}
++    void declareSharedContext() {sharedContext_=true;}
++    void quarantineProcessMapping() {if(!sharedContext_)quarantine();}
+     /* Requires real CPU/device exclusion and retained ownership. Before GPU
+      * writes, clean+invalidate; after genuine completion, invalidate only.
+      * CPU must not dirty these pages while the device owns access. */
+diff --git a/NativeAdrenoSubmit.cpp b/NativeAdrenoSubmit.cpp
+index 91725fc..a4a049a 100644
+--- a/NativeAdrenoSubmit.cpp
++++ b/NativeAdrenoSubmit.cpp
+@@ -131,6 +131,9 @@ IOReturn NativeAdrenoSubmit::release(Job &job)
+ {
+     IOReturn status=kIOReturnSuccess;
+     NativeAdrenoVm *vm=job.vm?job.vm:vm_;
++    // A poisoned process VM retains its quarantined mappings and references.
++    // Discard only the scheduler record; the kernel VM still fails closed.
++    if(vm!=vm_ && vm->poisoned()) {job={};return kIOReturnSuccess;}
+     for(size_t i=0;i<job.count;++i) {
+         IOReturn retired=vm->retireJobAfterCompletion(job.handles[i]);
+         if(retired)status=retired;else ++stats_.references_retired;
+@@ -535,6 +538,7 @@ IOReturn NativeAdrenoSubmit::recover(NativeAdrenoRestart restart,void *cookie,co
+     if(!out)return kIOReturnBadArgument;*out={};
+     if(!attached_)return kIOReturnNotReady;
+     if(!restart)return kIOReturnUnsupported;
++    if(vm_->poisoned())return poison();
+     const uint32_t last=ring_->lastSubmitted();
+     uint32_t fence=0;
+     if(ring_->fenceValue(&fence) || fence>last)return poison();
+@@ -572,7 +576,8 @@ IOReturn NativeAdrenoSubmit::recover(NativeAdrenoRestart restart,void *cookie,co
+     for(uint32_t next=retry?hung:hung+1;next && next<=last;++next) {
+         Job *job=find(next);
+         NativeAdrenoVm *vm=job && job->vm?job->vm:vm_;
+-        const bool run=job && !vm->unusable() && job->word_count;
++        const bool run=job && !vm->poisoned() && !vm->unusable() && job->word_count;
++        if(!run)vm=vm_;  // A placeholder fence must not install the failed process table.
+         if(table_mode_==1 && vm!=table_vm_) {
+             /* amethyst b31: useVm's waitAll also waits for the jobs not replayed yet, whose fences cannot pass, so the first
+              * replayed job of another address space timed out after 2 s and the restart failed every client (SpringBoard crashed,
+@@ -588,7 +593,7 @@ IOReturn NativeAdrenoSubmit::recover(NativeAdrenoRestart restart,void *cookie,co
+             status=useVm(vm,clock);
+             if(status)return poison();
+         }
+-        ring_->useContext(job?job->context:0);
++        ring_->useContext(run?job->context:0);
+         uint32_t value=0;
+         status=ring_->submitFramed(run?job->words:&nop,run?job->word_count:1,&value);
+         if(status || value!=next)return poison();
+diff --git a/NativeAdrenoVm.cpp b/NativeAdrenoVm.cpp
+index f260d6c..387381c 100644
+--- a/NativeAdrenoVm.cpp
++++ b/NativeAdrenoVm.cpp
+@@ -110,7 +110,11 @@ ArmSmmu4KStatus NativeAdrenoVm::observeCheap()
+ IOReturn NativeAdrenoVm::fail(ArmSmmu4KStatus status)
+ {
+     poisoned_=true;result_.operation=status;result_.complete=false;
+-    for(size_t i=0;mappings_ && i<high_;++i)if(mappings_[i].memory)mappings_[i].memory->quarantine();
++    for(size_t i=0;mappings_ && i<high_;++i)if(auto *memory=mappings_[i].memory) {
++        // Keep the failed VM's reference, but leave the immutable set of shared context buffers usable by other tables.
++        if(fault_streams_)memory->quarantine();
++        else memory->quarantineProcessMapping();
++    }
+     for(auto &r:regions_)if(r.arena) {r.tables->quarantine();r.state->poisoned=1;}
+     if(fault_streams_) {
+         ArmSmmu4KStreamResult routes;
+diff --git a/tests/test_submit.cpp b/tests/test_submit.cpp
+index 14b0d8c..ffb5302 100644
+--- a/tests/test_submit.cpp
++++ b/tests/test_submit.cpp
+@@ -271,24 +271,70 @@ int main()
+         NativeAdrenoRecovery result{};
+         const uint32_t refs=p.object.deviceReferences();
+         CHECK(p.submit.recover(restart,nullptr,&ringclock,&result)==kIOReturnSuccess);
+-        CHECK(restarted==1 && result.fence==1 && result.replayed==2 && result.guilty==&p.vm && p.vm.faults()==1 && !p.vm.unusable());
++        CHECK(restarted==0 && result.fence==1 && result.replayed==3 && result.guilty==&p.vm && p.vm.hangs()==1 && !p.vm.unusable());
++        CHECK(p.submit.recover(restart,nullptr,&ringclock,&result)==kIOReturnSuccess);
++        CHECK(restarted==1 && result.fence==1 && result.replayed==2 && p.vm.hangs()==2);
+         CHECK(fencemem[1]==1 && p.ring.lastSubmitted()==3 && p.submit.outstanding()==2 && p.object.deviceReferences()==refs-1);
+-        CHECK(p.submit.stats().restarts==1);
++        CHECK(p.submit.stats().restarts==2);
+         fencemem[1]=3;
+         CHECK(p.submit.wait(3,&ringclock,1000)==kIOReturnSuccess && p.submit.wait(2,&ringclock,1000)==kIOReturnSuccess);
+         CHECK(p.submit.outstanding()==0);
+-        /* A VM a hang made unusable submits nothing more. */
+-        p.vm.noteHang(true);
+-        CHECK(p.submit.submit(&buffer,1,0,&fence)==kIOReturnNotPermitted);
+         /* A restart that fails leaves the submit object poisoned. */
+         CHECK(p.submit.recover([](void *,NativeAdrenoRing *,uint32_t)->IOReturn {return kIOReturnIOError;},nullptr,&ringclock,&result)==kIOReturnIOError);
+         CHECK(p.submit.poisoned());
+     }
+-    std::printf("PASS: 1 execbuf submission with exact IB packet and fence, 8 pre-reference refusals, 1 duplicate-buffer reference case and 1 poisoned-commit retention case over software SMMU/CP peers; 2 write-combine audit cases (trusted, dirty and failed); 1 hangcheck and 1 recovery with replay, 1 unusable-VM refusal and 1 failed restart\n");
++    /* A process VM's failed cache maintenance quarantines its pages, not the ring. */
++    {
++        Path p;CHECK(exposed(p)==kIOReturnSuccess);
++        NativeAdrenoVm process;
++        process.keepStreamsOnFailure();
++        NativeAdrenoTablePages tables;
++        ArmSmmu4KLiveArena arena;
++        ArmSmmu4KLiveState state{};
++        ArmSmmu4KLiveVisibility visibility;
++        CHECK(NativeAdrenoPrepareSmmuMemory(&tables,32,40,0x800000,65536,0,16,&arena,&state,&visibility)==kIOReturnSuccess);
++        ArmSmmu4KContextConfig config=context;
++        config.lower=&arena.config;config.lower_tables=&state.tables;config.asid=2;config.ttbr0_switched=1;
++        state.detached=1;state.context_offset=CB;
++        NativeAdrenoVmRegion lower={&tables,&arena,&state};
++        CHECK(process.attach(&smmuio,&config,&streams,&lower,nullptr,32,1000)==kIOReturnSuccess);
++        NativeAdrenoMemory bad;
++        CHECK(bad.allocate(8192,40,false,8192)==kIOReturnSuccess);
++        uint64_t handle=0;
++        CHECK(process.map(&bad,0,0x802000,3,0,2,&handle)==kIOReturnSuccess);
++        p.object.declareSharedContext();
++        uint64_t shared=0;
++        CHECK(process.map(&p.object,0,0x804000,3,0,2,&shared)==kIOReturnSuccess);
++        NativeAdrenoSubmitBuffer broken{handle,0x802000,4096}, healthy{p.handle,0x800000,4096};
++        uint32_t fence=0;
++        CHECK(p.submit.submit(&process,&broken,1,1,&fence,&ringclock)==kIOReturnSuccess && fence==1);
++        CHECK(p.submit.submit(&healthy,1,0,&fence)==kIOReturnSuccess && fence==2);
++        fixture.cache_fail_call=fixture.cache_calls+1;
++        CHECK(process.publishMapped()==kIOReturnIOError && process.poisoned() && bad.quarantined());
++        fixture.cache_fail_call=0;
++        CHECK(!p.object.quarantined() && p.object.deviceReferences()==3);
++        NativeAdrenoRecovery result{};
++        auto restart=[](void *,NativeAdrenoRing *ring,uint32_t completed)->IOReturn {return ring->restart(completed);};
++        CHECK(p.submit.recover(restart,nullptr,&ringclock,&result)==kIOReturnSuccess && result.replayed==2);
++        CHECK(std::find(ringmem,ringmem+cp.regs[0x0807],0x70108000u)!=ringmem+cp.regs[0x0807]);  // CP_NOP
++        CHECK(std::find(ringmem,ringmem+cp.regs[0x0807],0x802000u)==ringmem+cp.regs[0x0807]);  // No failed VM IB
++        const auto refs=bad.deviceReferences();
++        CHECK(refs==2);
++        fencemem[1]=2;
++        CHECK(p.submit.waitAll(&ringclock,1000)==kIOReturnSuccess && !p.submit.poisoned());
++        CHECK(bad.quarantined() && bad.deviceReferences()==refs && p.submit.outstanding()==0);
++        CHECK(p.submit.submit(&healthy,1,0,&fence)==kIOReturnSuccess && fence==3);
++        fixture.cache_fail_call=fixture.cache_calls+1;
++        CHECK(p.vm.publishMapped()==kIOReturnIOError && p.vm.poisoned() && p.object.quarantined());
++        fixture.cache_fail_call=0;
++        CHECK(p.submit.recover(restart,nullptr,&ringclock,&result)==kIOReturnIOError && p.submit.poisoned());
++    }
++    std::printf("PASS: submit, hang replay, failed restart, and poisoned process VM isolation\n");
+ }
+ /* Physical-page maintenance (imported BOs): record it; no host page is touched. */
+ /* Host double: the page attribute change of user BOs has no host equivalent (no host page is touched). */
+ IOReturn NativeAdrenoSetPagesCacheMode(const NativeAdrenoPhysicalSpan *spans,size_t count,bool){return spans && count?kIOReturnSuccess:kIOReturnBadArgument;}
++bool NativeAdrenoPagesUncached(const NativeAdrenoPhysicalSpan *,size_t){return false;}
+ IOReturn NativeAdrenoReassertWriteCombined(const NativeAdrenoPhysicalSpan *spans,size_t count,uint32_t *reset)
+ {return spans && count && reset?kIOReturnSuccess:kIOReturnBadArgument;}
+ IOReturn NativeAdrenoMaintainPhysicalPages(uint64_t physical,size_t bytes,NativeAdrenoCacheOperation op)

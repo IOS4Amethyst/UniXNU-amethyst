@@ -75,6 +75,13 @@ def stage(archive, output):
     require({p.name for p in generated.iterdir()} == {
         'ShengGmuSource.h', 'ShengGmuVotesSource.h', 'ShengGmuCommandDbSource.h',
         'ShengGmuFirmware.h', 'ShengSqeFirmware.h', 'ShengZapFirmware.h'}, 'unexpected generated includes')
+    # Patch the staged BOARD_PIN copy, not scripts/log in the device checkout.
+    patches = Path(__file__).resolve().parents[1] / 'patches'
+    run(['git', 'apply', '--whitespace=error', patches / 'gpu-board/a810-reset-check-mmio.patch'],
+        cwd=board, env=dict(os.environ, GIT_CEILING_DIRECTORIES=str(board.parent.resolve())))
+    for name in ('a810-recovery-isolate-vm.patch', 'a810-no-replay-on-context-fault.patch',
+                 'a810-capture-hung-job.patch', 'a810-optional-hung-replay.patch'):
+        run(['git', '-C', output / 'NativeAdreno', 'apply', '--whitespace=error', patches / 'native-adreno' / name])
 
 
 def source_inventory(inputs, device):

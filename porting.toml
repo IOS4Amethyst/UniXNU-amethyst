@@ -265,7 +265,7 @@ procedure = [
   "pack-log.py --display-probe --display-pm --display-unit-scale 2 --display-validate --display-cpu-present, then boot.",
 ]
 findings = [
-  "The D94 display reaches the UI with the board backlight and GPU copy presenter; physical cadence remains unverified.",
+  "The D94 display reaches the UI with the board backlight and GPU copy presenter; physical cadence remains unverified. The swap timeline reports an unobserved offer as missing rather than substituting retirement time.",
   "NativeLegacyDisplay rejects pipeline-disabled swaps and keeps accepted requests in its tracking table.",
   "validateSwap accepts plain BGRA or one-plane &BGA only; Apple-compressed two-plane framebuffers are refused, so the Data seed disables CA framebuffer compression.",
   "Presenting by CPU copy costs about 170 ms per frame; the GPU hand-off presenter (sheng-fb-gpu=1, sheng-vsync=120) brings swaps to about 10 ms.",

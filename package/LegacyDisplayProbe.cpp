@@ -211,7 +211,8 @@ extern "C" void native_legacy_swap_stage(unsigned stage) {
     for(uint32_t i=first;i<total;++i) {
         SwapEvent &e=swapEvents[i%64];
         if(stage==1 && !e.offered && !e.done){e.offered=now;return;}
-        if(stage==2 && !e.done){e.done=now;if(!e.offered)e.offered=now;return;}
+        // Retirement does not prove that the offer timestamp was observed.
+        if(stage==2 && !e.done){e.done=now;return;}
     }
 }
 extern "C" unsigned native_legacy_swap_timeline(char *out,unsigned cap) {

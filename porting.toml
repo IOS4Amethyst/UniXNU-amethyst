@@ -392,6 +392,7 @@ findings = [
   "The host-tested A810 recovery patch skips work from failed process address spaces while retaining their quarantined mappings. ARM Mac object qualification passed (run 45534196052); kernel and hardware qualification are pending.",
   "b49 resumed GPU work after four resets, but the user observed a SpringBoard restart and artifacts. A host-tested follow-up skips replay of the stalled command buffer when recovery has captured an SMMU context fault; progress-only stalls still allow one retry.",
   "The host-tested gpu-replay=0 control skips the stalled job on first recovery while replaying later jobs. The default remains one retry on a progress-only stall.",
+  "The A810 soft reset now stops if a required register operation fails; the existing successful operation order is unchanged.",
   "CX GDSC, SMMU vote and the GMU pool round trip pass once firmware reserves GMU_Pool.",
   "Zap loads through SCM PAS 13 with amethyst's own gen80300_zap.mbn; CP init, CP_MEM_WRITE and the first IB pass.",
   "The sandbox grant matches exact process names: it must name backboardd for the render server to open the GPU.",

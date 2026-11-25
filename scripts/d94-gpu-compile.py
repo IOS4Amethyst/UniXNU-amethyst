@@ -78,7 +78,7 @@ def stage(archive, output):
     # Apply the reviewed board patch only after verifying the pristine source pin.
     patches = Path(__file__).resolve().parents[1] / 'patches/native-adreno'
     for name in ('a810-recovery-isolate-vm.patch', 'a810-no-replay-on-context-fault.patch',
-                 'a810-capture-hung-job.patch'):
+                 'a810-capture-hung-job.patch', 'a810-optional-hung-replay.patch'):
         run(['git', '-C', output / 'NativeAdreno', 'apply', '--whitespace=error', patches / name])
 
 

@@ -672,6 +672,7 @@ procedure = [
 ]
 findings = [
   "D94 adds current-boot GPU and display logs, prelink checks and host fixtures for the D94 ABI and timing. Swap logs distinguish missing offer timestamps from observed retirements.",
+  "The recovery relink verifies the downloaded qualification digest, all GPU archive members and private-header provenance before linking.",
   "The panic hook does not write UFS; periodic writes continue during normal operation.",
   "The log is found by partition name in recovery because this device keeps its root image in a split partition.",
   "Row 48 shows the swap rejection reason (why=, surface format and planes) once a swap is refused.",

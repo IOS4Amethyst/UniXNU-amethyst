@@ -2,9 +2,6 @@ name: iOS 27 RAM Data seed
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ios27]
-    paths: [.github/workflows/ios27-data-seed.yml]
 
 permissions:
   contents: read

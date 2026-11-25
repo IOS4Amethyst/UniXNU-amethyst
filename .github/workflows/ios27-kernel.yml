@@ -2,8 +2,6 @@
 name: iOS 27 kernel
 
 on:
-  push:
-    branches: [ios27]
   workflow_dispatch:
     inputs:
       gpu_full_link:

@@ -1,9 +1,6 @@
 name: D94 source-backed RAM Data ownership repair
 on:
   workflow_dispatch:
-  push:
-    branches: [ios27-d94-build-audit]
-    paths: [.github/workflows/d94-seed-ownership.yml]
 permissions:
   contents: read
   actions: read

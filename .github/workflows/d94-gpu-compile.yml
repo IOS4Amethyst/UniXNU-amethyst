@@ -1,9 +1,6 @@
 name: D94 GPU object qualification
 
 on:
-  push:
-    branches: [ios27-d94-build-audit]
-    paths: [.github/workflows/d94-gpu-compile.yml]
   workflow_dispatch:
     inputs:
       input_run:

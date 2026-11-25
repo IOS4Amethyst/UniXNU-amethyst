@@ -46,7 +46,7 @@ Device port of [UniXNU](https://github.com/UniXNU/UniXNU) for the Xiaomi Redmi N
 - **Power off from iOS panics** on the way down: launchd unmounts the system cryptex and then
   faults running code from it (`initproc exited`). Data is already unmounted; harmless.
 - **No persistence:** Data is fresh on every boot (`sheng-data-persist=0`).
-- **Not implemented:** audio, Wi-Fi, Bluetooth, cellular, cameras, sensors, battery reporting,
+- **Not implemented:** audio, Bluetooth, cellular, cameras, sensors, battery reporting,
   suspend. Brightness levels use estimated panel values (2–500 nits).
 
 ### iOS 27 hardware support

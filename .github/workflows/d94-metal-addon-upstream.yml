@@ -1,9 +1,6 @@
 name: D94 upstream ios27 Metal addon
 
 on:
-  push:
-    branches: [ios27-d94-build-audit]
-    paths: [.github/workflows/d94-metal-addon-upstream.yml]
   workflow_dispatch:
     inputs:
       core_ref:

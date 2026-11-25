@@ -12,11 +12,6 @@ on:
         description: Export encrypted verified OS/SystemOS inputs for host root-image assembly
         type: boolean
         default: false
-  push:
-    branches: [ios27]
-    paths:
-      - .github/workflows/ios27-root-policies.yml
-      - scripts/build-ios27-root-policies.py
       - scripts/prepare-ios27-root-images.py
 
 permissions:

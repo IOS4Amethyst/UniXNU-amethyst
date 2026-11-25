@@ -75,6 +75,9 @@ def stage(archive, output):
     require({p.name for p in generated.iterdir()} == {
         'ShengGmuSource.h', 'ShengGmuVotesSource.h', 'ShengGmuCommandDbSource.h',
         'ShengGmuFirmware.h', 'ShengSqeFirmware.h', 'ShengZapFirmware.h'}, 'unexpected generated includes')
+    # Apply the reviewed board patch only after verifying the pristine source pin.
+    patch = Path(__file__).resolve().parents[1] / 'patches/native-adreno/a810-recovery-isolate-vm.patch'
+    run(['git', '-C', output / 'NativeAdreno', 'apply', '--whitespace=error', patch])
 
 
 def source_inventory(inputs, device):

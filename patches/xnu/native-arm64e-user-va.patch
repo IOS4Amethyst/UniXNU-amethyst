@@ -1,0 +1,254 @@
+# Ported as a unit from UniXNU-sheng zzzz-sheng-ipados27-bringup.patch.
+# Widen TTBR0 before signing, select matching user page-table geometry, retain TTBR1 geometry.
+diff --git a/osfmk/arm/arm_init.c b/osfmk/arm/arm_init.c
+index 72d3561..e8db5d8 100644
+--- a/osfmk/arm/arm_init.c
++++ b/osfmk/arm/arm_init.c
+@@ -357,6 +357,12 @@ arm_init(
+ 	DTEntry chosen = NULL;
+ 	unsigned int dt_entry_size = 0;
+ 
++#if T0SZ_USER != T0SZ_BOOT
++	/* Final TTBR0 size before the first pointer is signed (see TCR_EL1_KVA_ENTRY). */
++	set_tcr(TCR_EL1_KVA_ENTRY);
++	flush_core_tlb();
++#endif /* T0SZ_USER != T0SZ_BOOT */
++
+ 	arm_slide_rebase_and_sign_image();
+ 
+ 	arm_static_if_init(args);
+
+diff --git a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
+index 9760c9c..2eadcf0 100644
+--- a/osfmk/arm/pmap/pmap.c
++++ b/osfmk/arm/pmap/pmap.c
+@@ -335,6 +335,50 @@ const struct page_table_attr * const native_pt_attr = &pmap_pt_attr_16k;
+ const struct page_table_attr * const native_pt_attr = &pmap_pt_attr_4k;
+ #endif /* !__ARM_16K_PG__ */
+ 
++#if T0SZ_USER != T0SZ_BOOT
++/* User pmaps: the 4K layout with a TTBR0 root at T0SZ_USER (L0 for a 47-bit range). */
++const struct page_table_attr pmap_pt_attr_4k_user = {
++	.pta_level_info = pmap_table_level_info_4k,
++	.pta_root_level = (T0SZ_USER - 16) / 9,
++	.pta_commpage_level = PMAP_TT_L1_LEVEL,
++	.pta_max_level  = PMAP_TT_L3_LEVEL,
++	.pta_ops = &native_pt_ops,
++	.ap_ro = ARM_PTE_AP(AP_RORO),
++	.ap_rw = ARM_PTE_AP(AP_RWRW),
++	.ap_rona = ARM_PTE_AP(AP_RONA),
++	.ap_rwna = ARM_PTE_AP(AP_RWNA),
++	.ap_xn = ARM_PTE_PNX | ARM_PTE_NX,
++	.ap_x = ARM_PTE_PNX,
++	.pta_page_size  = 4096,
++	.pta_pagezero_size = 4096,
++	.pta_page_shift = 12,
++	.pta_va_valid_mask = ARM_PTE_REGION_MASK(T0SZ_USER),
++};
++const struct page_table_attr * const native_user_pt_attr = &pmap_pt_attr_4k_user;
++_Static_assert((ARM_PTE_REGION_MASK(T0SZ_USER) >> ARM_4K_TT_L0_SHIFT) + 1 == PMAP_ROOT_ALLOC_SIZE / sizeof(tt_entry_t),
++    "the user L0 root must fit the root allocation size");
++
++static inline uint64_t
++pmap_user_tcr(uint64_t tcr)
++{
++	return (tcr & ~((TCR_TSZ_MASK << TCR_T0SZ_SHIFT) | TCR_EPD0_DISABLE)) | (T0SZ_USER << TCR_T0SZ_SHIFT);
++}
++
++/*
++ * Turn TTBR0 walks on at the user range. The caller has pointed TTBR0 at the empty table
++ * (or a user root), so no walk sees a table of the boot format.
++ */
++MARK_AS_PMAP_TEXT void
++pmap_apply_user_tcr(void)
++{
++	const uint64_t tcr = get_tcr();
++	if (tcr != pmap_user_tcr(tcr)) {
++		set_tcr(pmap_user_tcr(tcr));
++		flush_core_tlb();
++	}
++}
++#endif /* T0SZ_USER != T0SZ_BOOT */
++
+ 
+ #if DEVELOPMENT || DEBUG
+ int vm_footprint_suspend_allowed = 1;
+@@ -2277,6 +2321,8 @@ pmap_bootstrap(
+ 	/*
+ 	 *	Initialize the kernel pmap.
+ 	 */
++	/* First: the pmap's type selects its page table attributes (see T0SZ_USER). */
++	kernel_pmap->type = PMAP_TYPE_KERNEL;
+ #if ARM_PARAMETERIZED_PMAP
+ 	kernel_pmap->pmap_pt_attr = native_pt_attr;
+ #endif /* ARM_PARAMETERIZED_PMAP */
+@@ -7962,6 +8014,12 @@ pmap_switch_user_ttb(pmap_t pmap, pmap_cpu_data_t *cpu_data_ptr)
+ 
+ 
+ 	if (pmap != kernel_pmap) {
++#if T0SZ_USER != T0SZ_BOOT
++		if (__improbable(get_tcr() != pmap_user_tcr(get_tcr()))) {
++			set_mmu_ttb(invalid_ttep & TTBR_BADDR_MASK);
++			pmap_apply_user_tcr();
++		}
++#endif /* T0SZ_USER != T0SZ_BOOT */
+ 		set_mmu_ttb((pmap->ttep & TTBR_BADDR_MASK) | (((uint64_t)pmap->hw_asid) << TTBR_ASID_SHIFT));
+ 	} else if (!pmap_user_ttb_is_clear()) {
+ 		pmap_clear_user_ttb_internal();
+@@ -7972,6 +8030,9 @@ MARK_AS_PMAP_TEXT void
+ pmap_clear_user_ttb_internal(void)
+ {
+ 	set_mmu_ttb(invalid_ttep & TTBR_BADDR_MASK);
++#if T0SZ_USER != T0SZ_BOOT
++	pmap_apply_user_tcr();
++#endif /* T0SZ_USER != T0SZ_BOOT */
+ }
+ 
+ void
+@@ -12965,7 +13034,7 @@ pmap_user_va_bits(pmap_t pmap __unused)
+ 	uint64_t tcr_value = pmap_get_pt_attr(pmap)->pta_tcr_value;
+ 	return 64 - ((tcr_value >> TCR_T0SZ_SHIFT) & TCR_TSZ_MASK);
+ #else
+-	return 64 - T0SZ_BOOT;
++	return 64 - T0SZ_USER;
+ #endif
+ }
+ 
+diff --git a/osfmk/arm/pmap/pmap.h b/osfmk/arm/pmap/pmap.h
+index 0c6ba7c..9b9da2b 100644
+--- a/osfmk/arm/pmap/pmap.h
++++ b/osfmk/arm/pmap/pmap.h
+@@ -295,6 +295,9 @@ extern void set_mmu_ttb(uint64_t);
+ extern void set_mmu_ttb_alternate(uint64_t);
+ extern uint64_t get_tcr(void);
+ extern void set_tcr(uint64_t);
++#if T0SZ_USER != T0SZ_BOOT
++extern void pmap_apply_user_tcr(void);
++#endif
+ extern uint64_t pmap_get_arm64_prot(pmap_t, vm_offset_t);
+ #else /* defined(__arm64__) */
+ #error Unsupported architecture
+
+diff --git a/osfmk/arm/pmap/pmap_pt_geometry.h b/osfmk/arm/pmap/pmap_pt_geometry.h
+index fc64830..dd93d91 100644
+--- a/osfmk/arm/pmap/pmap_pt_geometry.h
++++ b/osfmk/arm/pmap/pmap_pt_geometry.h
+@@ -168,8 +168,14 @@ extern const struct page_table_ops native_pt_ops;
+ 
+ #else /* ARM_PARAMETERIZED_PMAP */
+ 
++#if T0SZ_USER != T0SZ_BOOT
++/* User pmaps use a wider TTBR0 range than the kernel's TTBR1 (see T0SZ_USER). */
++extern const struct page_table_attr * const native_user_pt_attr;
++#define pmap_get_pt_attr(pmap) ((pmap)->type == PMAP_TYPE_KERNEL ? native_pt_attr : native_user_pt_attr)
++#else
+ /* The page table attributes are fixed (to allow for const propagation) */
+ #define pmap_get_pt_attr(pmap) (native_pt_attr)
++#endif
+ #define pmap_get_pt_ops(pmap) (&native_pt_ops)
+ 
+ #endif /* ARM_PARAMETERIZED_PMAP */
+
+diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
+index 01ab93b..f2e883b 100644
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -2182,6 +2182,9 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ #endif
+ 
+ 	set_mmu_ttb(invalid_ttep & TTBR_BADDR_MASK);
++#if T0SZ_USER != T0SZ_BOOT
++	pmap_apply_user_tcr();
++#endif
+ 
+ 	flush_mmu_tlb();
+ 	kva_active = TRUE;
+
+diff --git a/osfmk/arm64/proc_reg.h b/osfmk/arm64/proc_reg.h
+index 51fdc9d..8f83d0a 100644
+--- a/osfmk/arm64/proc_reg.h
++++ b/osfmk/arm64/proc_reg.h
+@@ -1103,6 +1103,17 @@
+ #endif /* __ARM64_PMAP_SUBPAGE_L1__ */
+ #endif /* __ARM_16K_PG__ */
+ 
++/*
++ * TTBR0 size once a CPU is past its V=P bootstrap. arm64e user code expects pointer
++ * authentication codes above bit 46 (libobjc strips isa with a 43-bit mask), so a native
++ * 4K kernel gives user pmaps four-level tables with a 47-bit range; TTBR1 keeps T1SZ_BOOT.
++ */
++#if defined(BCM2837) && !defined(__ARM_16K_PG__) && defined(__arm64e__)
++#define T0SZ_USER 17ULL
++#else
++#define T0SZ_USER T0SZ_BOOT
++#endif
++
+ #if __ARM64_PMAP_SUBPAGE_L1__ && CONFIG_SPTM
+ #define T0SZ_EARLY_BOOT 17ULL
+ #endif /*__ARM64_PMAP_SUBPAGE_L1__ && CONFIG_SPTM */
+@@ -1182,6 +1193,17 @@
+ #define TCR_EL1_4KB  (TCR_EL1_BASE | (T1SZ_BOOT << TCR_T1SZ_SHIFT) | (TCR_TG0_GRANULE_4KB))
+ #define TCR_EL1_16KB (TCR_EL1_BASE | (T1SZ_BOOT << TCR_T1SZ_SHIFT) | (TCR_TG0_GRANULE_16KB))
+ 
++#define TCR_EPD0_DISABLE        (1ULL << 7)
++
++#if T0SZ_USER != T0SZ_BOOT
++/*
++ * TCR once a CPU runs at kernel addresses: TTBR0 already has its final size, so every pointer
++ * signed from then on (NULL included, it is a TTBR0-range value) carries its PAC at the final
++ * position. TTBR0 walks stay off until it holds a T0SZ_USER-format table.
++ */
++#define TCR_EL1_KVA_ENTRY ((TCR_EL1_BOOT & ~(TCR_TSZ_MASK << TCR_T0SZ_SHIFT)) | (T0SZ_USER << TCR_T0SZ_SHIFT) | TCR_EPD0_DISABLE)
++#endif /* T0SZ_USER != T0SZ_BOOT */
++
+ /*
+  * Bit 55 of the VA is used to select which TTBR to use during a translation table walk.
+  */
+diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
+index d6fff49..d8d69a3 100644
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -1663,7 +1663,7 @@ user_fault_matches_pac_error_code(vm_offset_t fault_addr, uint64_t pc, bool data
+ 		 * EnhancedPAC2 CPUs don't encode error codes at fixed positions, so
+ 		 * treat all non-canonical address bits like potential poison bits.
+ 		 */
+-		uint64_t mask = fault_addr_bitmask(64 - T0SZ_BOOT, 54);
++		uint64_t mask = fault_addr_bitmask(64 - T0SZ_USER, 54);
+ 		if (!tbi) {
+ 			mask |= fault_addr_bitmask(56, 63);
+ 		}
+diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
+index ad43956..05d38d6 100644
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -879,6 +879,15 @@ arm_init_tramp:
+ 	 */
+ 
+ 
++#if T0SZ_USER != T0SZ_BOOT
++	MOV64	x1, TCR_EL1_KVA_ENTRY
++	MSR_TCR_EL1_X1
++	isb		sy
++	tlbi	vmalle1
++	dsb		ish
++	isb		sy
++#endif /* T0SZ_USER != T0SZ_BOOT */
++
+ 	mov		x19, lr
+ 	// Convert CPU data PA to VA and set as first argument
+ 	mov		x0, x21
+
+diff --git a/osfmk/mach/arm/vm_param.h b/osfmk/mach/arm/vm_param.h
+index 8d11b54..6b12ab1 100644
+--- a/osfmk/mach/arm/vm_param.h
++++ b/osfmk/mach/arm/vm_param.h
+@@ -293,7 +293,7 @@ extern int PAGE_SHIFT_CONST;
+ 
+ #if XNU_KERNEL_PRIVATE
+ #define VM_KERNEL_STRIP_MASK            (-1ULL << (64 - T1SZ_BOOT))
+-#define VM_USER_STRIP_MASK              (-1ULL >> (T0SZ_BOOT))
++#define VM_USER_STRIP_MASK              (-1ULL >> (T0SZ_USER))
+ #define _VM_KERNEL_STRIP_PTR(_va)       ({((_va) & 1ULL << 55) ? ((_va) | VM_KERNEL_STRIP_MASK) : ((_va) & VM_USER_STRIP_MASK);})
+ #else /* XNU_KERNEL_PRIVATE */
+ 
+

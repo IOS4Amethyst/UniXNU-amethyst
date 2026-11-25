@@ -1,0 +1,29 @@
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -794,6 +794,17 @@
+ 	/* Initialize the file systems. */
+ 	bsd_init_kprintf("calling vfsinit\n");
+ 	vfsinit();
++#if !(DEVELOPMENT || DEBUG) && defined(XNU_NATIVE_LEGACY_DISPLAY) && XNU_NATIVE_LEGACY_DISPLAY
++	/* Real display service lifecycle only; do not enable unrelated debug probes. */
++	int display_load = 0;
++	if (PE_parse_boot_argn("offline-mobile-graphics-load", &display_load, sizeof(display_load)) && display_load) {
++		extern kern_return_t OSKextLoadKextWithIdentifier(const char *);
++		extern void native_legacy_display_probe(void);
++		kern_return_t status = OSKextLoadKextWithIdentifier("com.apple.iokit.IOMobileGraphicsFamily");
++		if (status != KERN_SUCCESS) panic("D94 display family load failed: %x", status);
++		native_legacy_display_probe();
++	}
++#endif
+ 	/* Optional source storage runtime registers after the IOKit bootstrap. */
+ 	extern void native_source_storage_start(void) __attribute__((weak_import));
+ 	if (&native_source_storage_start)
+@@ -1320,7 +1331,7 @@
+ 	}
+ 
+ 	kern_return_t result = IOKitBSDInit();
+-#if (DEVELOPMENT || DEBUG) && defined(XNU_NATIVE_LEGACY_DISPLAY) && XNU_NATIVE_LEGACY_DISPLAY
++#if defined(XNU_NATIVE_LEGACY_DISPLAY) && XNU_NATIVE_LEGACY_DISPLAY
+ 	/* The original IOSurface personality requires the genuine IOBSD resource.
+ 	 * The default-off framebuffer instrument may start only after publication.
+ 	 */

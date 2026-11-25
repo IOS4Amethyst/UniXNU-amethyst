@@ -1,0 +1,127 @@
+name: D94 GPU object qualification
+
+on:
+  push:
+    branches: [ios27-d94-build-audit]
+    paths: [.github/workflows/d94-gpu-compile.yml]
+  workflow_dispatch:
+    inputs:
+      input_run:
+        description: Successful same-repository run holding the encrypted staged input bundle
+        required: false
+        type: string
+      input_artifact:
+        description: Existing artifact name containing exactly d94-gpu-inputs.tar.gz.enc
+        required: false
+        type: string
+      input_release:
+        description: Same-repository release tag holding d94-gpu-inputs.tar.gz.enc (instead of run/artifact)
+        required: false
+        type: string
+      input_sha256:
+        description: SHA256 of encrypted d94-gpu-inputs.tar.gz.enc
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  objects:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    environment: ARTIFACT_PASSPHRASE
+    timeout-minutes: 180
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+      HOMEBREW_NO_ENV_HINTS: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - uses: actions/checkout@v4
+        with:
+          repository: IOS4Amethyst/UniXNU
+          ref: e6795bfe7ae4ef1825cd0be7201a4cc572c6b2cb
+          path: unixnu-core
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify host and fetch existing encrypted inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_RUN: ${{ inputs.input_run }}
+          INPUT_ARTIFACT: ${{ inputs.input_artifact }}
+          INPUT_RELEASE: ${{ inputs.input_release }}
+          INPUT_SHA: ${{ inputs.input_sha256 }}
+          ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          xcodebuild -version | tee "$RUNNER_TEMP/xcode-version.txt"
+          grep -qx 'Xcode 26.6' "$RUNNER_TEMP/xcode-version.txt"
+          test -n "$ARTIFACT_PASSPHRASE"
+          [[ "$INPUT_SHA" =~ ^[0-9a-f]{64}$ ]]
+          if test -n "$INPUT_RELEASE"; then
+            test -z "$INPUT_RUN" && test -z "$INPUT_ARTIFACT"
+            [[ "$INPUT_RELEASE" =~ ^gpu-inputs-[a-zA-Z0-9-]+$ ]]
+            gh release download "$INPUT_RELEASE" -p d94-gpu-inputs.tar.gz.enc -D "$RUNNER_TEMP/download"
+          else
+            [[ "$INPUT_RUN" =~ ^[0-9]+$ ]]
+            test -n "$INPUT_ARTIFACT"
+            test "$(gh run view "$INPUT_RUN" --json conclusion --jq .conclusion)" = success
+            gh run download "$INPUT_RUN" -n "$INPUT_ARTIFACT" -D "$RUNNER_TEMP/download"
+          fi
+          export INPUT_FILE="$RUNNER_TEMP/download/d94-gpu-inputs.tar.gz.enc"
+          python3 - <<'PY'
+          import hashlib, os
+          from pathlib import Path
+          p = Path(os.environ['INPUT_FILE'])
+          assert hashlib.sha256(p.read_bytes()).hexdigest() == os.environ['INPUT_SHA']
+          PY
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:ARTIFACT_PASSPHRASE \
+            -in "$INPUT_FILE" -out "$RUNNER_TEMP/inputs.tar.gz"
+          python3 scripts/d94-gpu-compile.py stage --archive "$RUNNER_TEMP/inputs.tar.gz" --inputs "$RUNNER_TEMP/gpu-inputs"
+      - name: Install native build tools
+        run: |
+          brew install llvm lld mtools dtc
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+          if ! command -v unifdef >/dev/null; then
+            brew install unifdef
+            echo "$(brew --prefix unifdef)/bin" >> "$GITHUB_PATH"
+          fi
+      - name: Prepare disposable D94 source configuration
+        run: |
+          git -C unixnu-core submodule update --init --recursive kits/XnuPrelink
+          python3 scripts/prepare-d94-build.py --core unixnu-core --device .
+          unixnu-core/unixnu defconfig amethyst_defconfig --os ios-27.0.1-24A446-d94ap -D "$GITHUB_WORKSPACE"
+      - name: Bootstrap real exports and compile qualification objects
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          export UNIXNU_KERNELCACHE="$RUNNER_TEMP/gpu-inputs/kernelcache"
+          python3 scripts/d94-gpu-compile.py compile --core "$GITHUB_WORKSPACE/unixnu-core" \
+            --inputs "$RUNNER_TEMP/gpu-inputs" --output "$RUNNER_TEMP/qualification"
+      - name: Encrypt qualification evidence including failures
+        if: always()
+        env:
+          ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          test -n "$ARTIFACT_PASSPHRASE"
+          test -d "$RUNNER_TEMP/qualification" || exit 0
+          mkdir -p "$RUNNER_TEMP/encrypted"
+          tar -C "$RUNNER_TEMP" -czf - qualification \
+            | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:ARTIFACT_PASSPHRASE \
+                -out "$RUNNER_TEMP/encrypted/d94-gpu-qualification.tar.gz.enc"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: d94-gpu-qualification-encrypted
+          path: ${{ runner.temp }}/encrypted/d94-gpu-qualification.tar.gz.enc
+          if-no-files-found: warn
+          retention-days: 7

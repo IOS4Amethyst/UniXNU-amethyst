@@ -1,0 +1,102 @@
+name: iOS 27 RAM Data seed
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios27]
+    paths: [.github/workflows/ios27-data-seed.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    runs-on: macos-15-intel
+    environment: ARTIFACT_PASSPHRASE
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: IOS4Amethyst/UniXNU
+          ref: ios27-release-config-level
+          path: unixnu-core
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install pinned D94 profile and fixture
+        run: python3 scripts/prepare-d94-build.py --core unixnu-core --device .
+      - name: Install image tools
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v3.1.741 -R blacktop/ipsw -p 'ipsw_3.1.741_macOS_x86_64.tar.gz' -D "$RUNNER_TEMP/ipsw"
+          tar -xzf "$RUNNER_TEMP/ipsw/ipsw_3.1.741_macOS_x86_64.tar.gz" -C "$RUNNER_TEMP/ipsw"
+          echo "$RUNNER_TEMP/ipsw" >> "$GITHUB_PATH"
+      - name: Prepare RAM-only Data from the selected iPhone OS
+        working-directory: unixnu-core
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, plistlib, struct, subprocess, sys, tomllib, uuid
+          from pathlib import Path
+          from types import SimpleNamespace
+          sys.path.insert(0, 'scripts')
+          from unixnu.ipsw import Ipsw
+          sys.path.insert(0, 'drivers/DarwinBoot/Test')
+          import packed_ramdisk
+          profile = tomllib.loads(Path('profiles/os/ios-27.0.1-24A446-d94ap/profile.toml').read_text())
+          assert profile['ipsw']['product'] == 'iPhone17,2' and profile['ipsw']['build'] == '24A446'
+          source = Ipsw(SimpleNamespace(board=profile, out_root=Path('out')), spec=profile['ipsw']['url'])
+          image = source.disk_image('OS')
+          mount = Path('out/data-source').resolve()
+          mount.mkdir(parents=True)
+          attached = plistlib.loads(subprocess.check_output(['hdiutil', 'attach', '-readonly', '-nobrowse', '-plist', '-mountpoint', str(mount), str(image)]))
+          volumes = [v for v in attached['system-entities'] if v.get('mount-point') == str(mount)]
+          assert len(volumes) == 1
+          output = Path('out/ios27-data-seed')
+          output.mkdir()
+          # seed-data-grow.py creates its temporary workspace under the core build directory.
+          Path('build').mkdir(exist_ok=True)
+          try:
+              # The decrypted whole OS image is pinned by the D94 profile; record launchd identity below.
+              assert hashlib.sha256(image.read_bytes()).hexdigest() == profile['root']['os_image_sha256']
+              # The upstream creator requires >=3GiB. The verified role tool
+              # shrinks APFS before truncation to the volatile backend's2GiB ceiling.
+              subprocess.run([sys.executable, 'scripts/make-data-seed.py', str(mount), str(output/'initial.dbr'), '--gib', '3', '--build', '24A446'], check=True)
+              _, regions = packed_ramdisk.regions((output/'initial.dbr').read_bytes())
+              identities = set()
+              for _, blob in regions:
+                  for at in range(0, len(blob), 4096):
+                      page = blob[at:at+4096]
+                      if page[32:36] == b'APSB':
+                          identities.add(str(uuid.UUID(bytes=bytes(page[0xf0:0x100]))).upper())
+              assert len(identities) == 1, identities
+              installation_uuid = identities.pop()
+              device_repo = Path.cwd().parent
+              subprocess.run([sys.executable, str(device_repo/'scripts/set-ram-data-role.py'), str(Path.cwd()), str(output/'initial.dbr'), str(output/'data.dbr'), '--uuid', installation_uuid], check=True)
+              report, _ = packed_ramdisk.inspect(output/'data.dbr')
+              assert report['bytes'] == 2 * 1024**3
+              role = json.loads((output/'data.json').read_text())
+              assert role['apfs_role'] == 'Data' and role['volume_uuid'] == installation_uuid
+              report.update(volume_uuid=installation_uuid, apfs_role='Data')
+              report.update(os_build='24A446', product='iPhone17,2', source_launchd_sha256=hashlib.sha256((mount/'sbin/launchd').read_bytes()).hexdigest(), ram_only=True, hardware_tested=False)
+              (output/'seed.json').write_text(json.dumps(report, indent=2)+'\n')
+              print(json.dumps(report, indent=2))
+          finally:
+              subprocess.run(['hdiutil', 'detach', volumes[0]['dev-entry']], check=True)
+          PY
+      - name: Encrypt seed
+        env:
+          ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          test -n "$ARTIFACT_PASSPHRASE"
+          tar -czf - -C unixnu-core/out/ios27-data-seed data.dbr seed.json |
+            openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:ARTIFACT_PASSPHRASE -out ios27-data-seed.tar.gz.enc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios27-d94ap-data-seed-encrypted
+          path: ios27-data-seed.tar.gz.enc
+          if-no-files-found: error
+          retention-days: 7

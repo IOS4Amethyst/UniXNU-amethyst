@@ -2,8 +2,9 @@
 """Build the opt-in, guarded sheng original-PMGR integration instrument for amethyst.
 
 Copied from UniXNU/UniXNU-sheng scripts/build-sheng-platform-power.py (BSD-2-Clause-Patent). The source is sheng's
-package/ShengPlatformPower.cpp, unchanged, in this repository's package/ (kits/amethyst in the build tree); it
-touches no hardware and only publishes an ApplePMGR provider so the unchanged AMFI finds one.
+package/ShengPlatformPower.cpp, unchanged, in this repository's package/ (kits/amethyst in the build tree, which
+links the device package to the directory board.toml [board] kit names); it touches no hardware and only publishes
+an ApplePMGR provider so the unchanged AMFI finds one.
 
 One change: sheng checks the vtable against a prelinked candidate left by an earlier local build. A fresh CI tree has
 none, so without one the two inherited AON slot pointers come from PINNED_AON (read from the prelinked amethyst
@@ -12,15 +13,47 @@ When a candidate exists, every check runs as on sheng.
 """
 import hashlib
 import json
+import os
 from pathlib import Path
+import shutil
 import struct
 import subprocess
 import sys
 
+from kernel_target import CONFIG_LEVEL, OBJECT_TREE
+
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'build/sheng-platform-power'
+# In a resolved build tree this script is a copy under <tree>/scripts, but the device sources are reached through
+# <tree>/kits/<board kit> and the compile records through <tree>/build. The archive recipe runs with the tree as the
+# working directory, so fall back to that when this copy sits outside a device repository layout.
+TREE = Path.cwd() if (Path.cwd() / 'kits' / 'amethyst').is_dir() else ROOT
+
+
+def device_source(relative):
+    # The device sources are always reached through the resolved build tree's kits/<kit> link, whether this run
+    # started in the device repository (--local -D) or in the tree the archive recipe runs from.
+    candidate = TREE / relative
+    if not candidate.is_file():
+        raise SystemExit(f'{candidate} not found; is the device package linked as kits/amethyst?')
+    return candidate
+
+
+if os.environ.get('UNIXNU_XNU_ARCH') == 'arm64e':
+    cache = os.environ.get('UNIXNU_KERNELCACHE')
+    if not cache or not Path(cache).is_file():
+        raise SystemExit('arm64e PMGR requires UNIXNU_KERNELCACHE pointing to the pinned decompressed image')
+    subprocess.run([sys.executable, str(TREE / 'scripts/compile-pmgr-arm64e.py'),
+                    '--tree', str(TREE), '--kernelcache', cache, '--archive'], check=True)
+    destination = TREE / 'build/sheng-platform-power/libShengPlatformPower.a'
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix('.pending.a')
+    shutil.copyfile(TREE / 'build/sheng-platform-power-arm64e/libShengPlatformPower.a', temporary)
+    temporary.replace(destination)
+    print(f'PASS: published audited arm64e PMGR archive: {destination}')
+    raise SystemExit(0)
+OUT = TREE / 'build/sheng-platform-power'
 OUT.mkdir(parents=True, exist_ok=True)
-sys.path.insert(0, str(ROOT / 'kits/XnuPrelink'))
+sys.path.insert(0, str(TREE / 'kits/XnuPrelink'))
 from native_prelink import macho, backed_offset, exports
 
 
@@ -34,10 +67,10 @@ def require(value, message):
 
 
 PINNED_AON = {320: 0xfffffff004a20fbc, 321: 0xfffffff004a20fc4}
-CANDIDATES = sorted((ROOT / 'build/xnu-prelink').glob('*-candidate.macho'), key=lambda f: f.stat().st_mtime)
-ORIGINAL = ROOT / '.cache/firmware/kernelcache.macho/kernelcache.release.ipad7.decompressed'
+CANDIDATES = sorted((TREE / 'build/xnu-prelink').glob('*-candidate.macho'), key=lambda f: f.stat().st_mtime)
+ORIGINAL = TREE / '.cache/firmware/kernelcache.macho/kernelcache.release.ipad7.decompressed'
 if CANDIDATES and ORIGINAL.is_file():
-    print(run(['python3', ROOT / 'scripts/audit-amfi-pmgr-contract.py', '--candidate', CANDIDATES[-1]], text=True), end='')
+    print(run(['python3', TREE / 'scripts/audit-amfi-pmgr-contract.py', '--candidate', CANDIDATES[-1]], text=True), end='')
 elif CANDIDATES:
     # The CI bootstrap candidate is there, the decompressed original kernelcache the contract audit also reads is
     # not: skip only the audit; the slot checks below still run against the candidate.
@@ -64,9 +97,9 @@ for i in range(177, 340):
 header += '};\nstatic_assert(sizeof(ApplePMGR)==0x4b8a8,"Original provider storage");\n'
 (OUT / 'OriginalPMGRABI.h').write_text(header)
 (OUT / 'GuardedPMGRSlots.inc').write_text(guards)
-source = ROOT / 'kits/amethyst/ShengPlatformPower.cpp'
+source = device_source('kits/amethyst/ShengPlatformPower.cpp')
 obj = OUT / 'ShengPlatformPower.o'
-record = json.loads((ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/IOPlatformExpert.cpo.json').read_text().strip().rstrip(','))
+record = json.loads((TREE / OBJECT_TREE / 'iokit' / CONFIG_LEVEL / 'IOPlatformExpert.cpo.json').read_text().strip().rstrip(','))
 command, i = [], 0
 arguments = record['arguments']
 while i < len(arguments):
@@ -83,7 +116,7 @@ while i < len(arguments):
     i += 1
 command += ['-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-Wno-c99-designator',
             '-Wno-reorder-init-list', '-Wno-deprecated-enum-enum-conversion',
-            '-Wno-unnecessary-virtual-specifier', '-I', OUT, '-I', ROOT / '.cache/xnu-work/osfmk']
+            '-Wno-unnecessary-virtual-specifier', '-I', OUT, '-I', TREE / '.cache/xnu-work/osfmk']
 run(command, cwd=record['directory'])
 raw = obj.read_bytes()
 info = macho(raw)

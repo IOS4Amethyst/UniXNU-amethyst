@@ -1,0 +1,75 @@
+name: D94 source-backed RAM Data ownership repair
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios27-d94-build-audit]
+    paths: [.github/workflows/d94-seed-ownership.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  seed:
+    runs-on: macos-15-intel
+    environment: ARTIFACT_PASSPHRASE
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: IOS4Amethyst/UniXNU
+          ref: ios27-release-config-level
+          path: unixnu-core
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Prepare donor and image tools
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/prepare-d94-build.py --core unixnu-core --device .
+          gh release download v3.1.741 -R blacktop/ipsw -p 'ipsw_3.1.741_macOS_x86_64.tar.gz' -D "$RUNNER_TEMP/ipsw"
+          tar -xzf "$RUNNER_TEMP/ipsw/ipsw_3.1.741_macOS_x86_64.tar.gz" -C "$RUNNER_TEMP/ipsw"
+          echo "$RUNNER_TEMP/ipsw" >> "$GITHUB_PATH"
+      - name: Fetch original seed and exact OS metadata source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          gh run download 43564663521 -n d94-watchdog-disabled-ram-seed-encrypted -D input
+          mkdir original output
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:ARTIFACT_PASSPHRASE -in input/d94-watchdog-seed.tar.gz.enc | tar xz -C original
+          python3 scripts/prepare-ios27-root-images.py --core unixnu-core --profile ios-27.0.1-24A446-d94ap --output "$RUNNER_TEMP/roots"
+      - name: Repair new host copy only
+        run: |
+          python3 scripts/test-d94-seed-ownership.py
+          sudo python3 scripts/repair-d94-seed-ownership.py original/data.dbr output/data.dbr --os-image "$RUNNER_TEMP/roots/OS.raw" --packer "$PWD/unixnu-core/drivers/DarwinBoot/Test/packed_ramdisk.py"
+          sudo chown -R "$(id -u):$(id -g)" output
+      - name: Encrypt repaired seed
+        env:
+          ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          tar -czf - -C output data.dbr data.dbr.json | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:ARTIFACT_PASSPHRASE -out d94-ownership-seed.tar.gz.enc
+      - name: Encrypt failed repair report
+        if: failure()
+        env:
+          ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
+        run: |
+          if sudo test -f output/data.dbr.json; then
+            sudo cat output/data.dbr.json | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:ARTIFACT_PASSPHRASE -out d94-ownership-failure.json.enc
+          fi
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: d94-ownership-failure-report-encrypted
+          path: d94-ownership-failure.json.enc
+          retention-days: 7
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        with:
+          name: d94-ownership-repaired-ram-seed-encrypted
+          path: d94-ownership-seed.tar.gz.enc
+          retention-days: 7
+          if-no-files-found: error

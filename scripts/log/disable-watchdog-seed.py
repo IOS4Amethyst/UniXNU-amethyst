@@ -28,6 +28,7 @@ def main():
     parser.add_argument('input', type=Path, nargs='?')
     parser.add_argument('output', type=Path, nargs='?')
     parser.add_argument('--packer', type=Path)
+    parser.add_argument('--expected-uuid', default='A173DCC8-1F31-46ED-9F67-DB2A68FC25DE')
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
     if args.check:
@@ -76,7 +77,7 @@ def main():
     try:
         info = plistlib.loads(subprocess.check_output(['diskutil', 'info', '-plist', str(mount)]))
         volume_uuid = info['VolumeUUID']
-        if volume_uuid != 'A173DCC8-1F31-46ED-9F67-DB2A68FC25DE':
+        if volume_uuid.upper() != args.expected_uuid.upper():
             raise ValueError('unexpected seed volume UUID; kernel configuration must not change')
         policy = mount / 'db/com.apple.xpc.launchd/disabled.plist'
         if policy.is_symlink():

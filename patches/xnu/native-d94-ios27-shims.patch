@@ -1,0 +1,122 @@
+diff --git a/bsd/kern/kern_codesigning.c b/bsd/kern/kern_codesigning.c
+index 2671137..eb7d827 100644
+--- a/bsd/kern/kern_codesigning.c
++++ b/bsd/kern/kern_codesigning.c
+@@ -1671,3 +1671,67 @@ kernel_image4_monitor_trap(
+ 
+ 	return _kernel_image4_monitor_trap(selector, input_data, input_size);
+ }
++
++/*
++ * D94 bring-up shims. The iOS 27 donor kernelcache (fa07057b) has four Image4
++ * secure-channel monitor helpers after kernel_image4_monitor_trap that
++ * xnu-12377 lacks; com.apple.security.Image4 imports them (donor
++ * 0xfffffff00b11beac, bf24, bf90, bfb0). The donor forwards each request to a
++ * co-processor mailbox and returns the reply value, 0xffff when no valid reply
++ * arrives, or 3 for NULL arguments. This hardware has no such monitor, so every
++ * call reports the donor's no-reply result. Not hardware qualified.
++ */
++static uint64_t unixnu_d94_image4_unavailable_calls[4];
++
++extern uint32_t unixnu_d94_image4_unavail_beac(uint64_t arg0, uint64_t arg1, uint64_t arg2);
++extern uint32_t unixnu_d94_image4_unavail_bf24(uint64_t arg0);
++extern uint32_t unixnu_d94_image4_unavail_bf90(const void *arg0, const void *arg1,
++    const void *arg2, const void *arg3);
++extern uint32_t unixnu_d94_image4_unavail_bfb0(const void *arg0, const void *arg1);
++
++/* Donor 0xfffffff00b11beac: monitor query, selector 0x34. */
++__attribute__((used, noinline))
++uint32_t
++unixnu_d94_image4_unavail_beac(uint64_t arg0, uint64_t arg1, uint64_t arg2)
++{
++	(void)arg0;
++	(void)arg1;
++	(void)arg2;
++	__atomic_fetch_add(&unixnu_d94_image4_unavailable_calls[0], 1, __ATOMIC_RELAXED);
++	return 0xffff;
++}
++
++/* Donor 0xfffffff00b11bf24: monitor query, selector 0x35. */
++__attribute__((used, noinline))
++uint32_t
++unixnu_d94_image4_unavail_bf24(uint64_t arg0)
++{
++	(void)arg0;
++	__atomic_fetch_add(&unixnu_d94_image4_unavailable_calls[1], 1, __ATOMIC_RELAXED);
++	return 0xffff;
++}
++
++/* Donor 0xfffffff00b11bf90: four-pointer request, 3 when any pointer is NULL. */
++__attribute__((used, noinline))
++uint32_t
++unixnu_d94_image4_unavail_bf90(const void *arg0, const void *arg1,
++    const void *arg2, const void *arg3)
++{
++	if (arg0 == NULL || arg1 == NULL || arg2 == NULL || arg3 == NULL) {
++		return 3;
++	}
++	__atomic_fetch_add(&unixnu_d94_image4_unavailable_calls[2], 1, __ATOMIC_RELAXED);
++	return 0xffff;
++}
++
++/* Donor 0xfffffff00b11bfb0: two-pointer request (selector 0x37), 3 when either is NULL. */
++__attribute__((used, noinline))
++uint32_t
++unixnu_d94_image4_unavail_bfb0(const void *arg0, const void *arg1)
++{
++	if (arg0 == NULL || arg1 == NULL) {
++		return 3;
++	}
++	__atomic_fetch_add(&unixnu_d94_image4_unavailable_calls[3], 1, __ATOMIC_RELAXED);
++	return 0xffff;
++}
+diff --git a/config/Private.exports b/config/Private.exports
+index 3441d91..4b1cfb0 100644
+--- a/config/Private.exports
++++ b/config/Private.exports
+@@ -1472,3 +1472,8 @@ __ZNK8OSNumber11doubleValueEv
+ __Z34IOInterruptDispatchSourceInterruptP8OSObjectPvP9IOServicei
+ __ZN18IOMemoryDescriptor9withVNodeEP5vnodeyyj
+ _unixnu_task_get_sanitizer_config
++_unixnu_d94_image4_unavail_beac
++_unixnu_d94_image4_unavail_bf24
++_unixnu_d94_image4_unavail_bf90
++_unixnu_d94_image4_unavail_bfb0
++_unixnu_d94_ioservice_rpc_bf66
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 5e28090..04e47cb 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -9398,3 +9398,32 @@ OSMetaClassDefineReservedUnused(IOService, 44);
+ OSMetaClassDefineReservedUnused(IOService, 45);
+ OSMetaClassDefineReservedUnused(IOService, 46);
+ OSMetaClassDefineReservedUnused(IOService, 47);
++
++/*
++ * D94 bring-up shim. The iOS 27 donor kernelcache (fa07057b) has an IOService
++ * DriverKit RPC stub at 0xfffffff00b2ab224 (message ID 0xbf66f4287c60ef85;
++ * arguments OSObject *, bool, OSObject *, OUT OSDictionary **, supermethod)
++ * that xnu-12377 lacks; com.apple.driver.AppleARMPlatform imports it. Answer as
++ * a kernel whose IOService dispatch does not know the message: clear the output
++ * and return kIOReturnUnsupported. Not hardware qualified.
++ */
++static uint64_t unixnu_d94_ioservice_rpc_bf66_calls;
++
++extern "C" IOReturn unixnu_d94_ioservice_rpc_bf66(IOService *service, OSObject *arg1, bool arg2,
++    OSObject *arg3, OSDictionary **result, void *supermethod);
++
++extern "C" __attribute__((used, noinline)) IOReturn
++unixnu_d94_ioservice_rpc_bf66(IOService *service, OSObject *arg1, bool arg2,
++    OSObject *arg3, OSDictionary **result, void *supermethod)
++{
++	(void)service;
++	(void)arg1;
++	(void)arg2;
++	(void)arg3;
++	(void)supermethod;
++	__atomic_fetch_add(&unixnu_d94_ioservice_rpc_bf66_calls, 1, __ATOMIC_RELAXED);
++	if (result != NULL) {
++		*result = NULL;
++	}
++	return kIOReturnUnsupported;
++}

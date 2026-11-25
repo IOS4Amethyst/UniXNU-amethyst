@@ -1,0 +1,39 @@
+"""Run offline: validate the active donor selection, not a firmware/boot test."""
+import hashlib
+import json
+from pathlib import Path
+import tomllib
+from types import SimpleNamespace
+
+root = Path(__file__).resolve().parents[1]
+profile = tomllib.loads((root / 'profiles/os/ios-27.0.1-24A446-d94ap/profile.toml').read_text())
+assert profile['ipsw']['product'] == 'iPhone17,2'
+assert profile['ipsw']['device_class'] == 'd94ap'
+assert profile['kernel']['prelink']['kernelcache_sha256'] == 'fa07057bf34f33af1ec26681ad0c87c13e5aaa548a300740eddb0e92876e5f95'
+assert profile['root']['os_volume_uuid'] == 'E3F4AED0-4454-4D5B-833C-E27E99C4F67B'
+assert profile['root']['systemos_volume_uuid'] == '8B599D21-9ABD-4050-8BA2-C61349890BED'
+assert profile['adt']['filesystems']['u32']['DoNotUseSEP'] == 1
+assert 'CONFIG_XNU_KERNEL_CHAINED_FIXUPS=y' in (root / 'profiles/os/ios-27.0.1-24A446-d94ap/configs/ios.config').read_text()
+assert hashlib.sha256((root / 'scripts/fixtures/fileset-24A446-d94ap-donor.json').read_bytes()).hexdigest() == 'e0e6f72793fd4d27275d677dbb80faaa781af12284c5fdda4f1ec16e1ee54f0a'
+# Exercise the actual preparation guards and quarantine, without changing a checkout.
+prepare = (root / 'scripts/prepare-d94-build.py').read_text()
+guards = prepare[prepare.index('raw = '):prepare.index('additions = ')]
+scope = dict(a=SimpleNamespace(device=root), hashlib=hashlib, json=json)
+exec(compile(guards, 'prepare-d94-build.py:fixture-guards', 'exec'), scope)
+binding, = [x for x in scope['f']['functions'] if x['original'] == '0xfffffff00ad4d8dc']
+assert binding['native_symbol'] == '_absolutetime_to_microtime'
+additions = json.loads((root / 'scripts/d94-reviewed-additions.json').read_text())
+assert additions['inputs']['kernelcache_sha256'] == profile['kernel']['prelink']['kernelcache_sha256']
+for name in ('ios27-kernel.yml', 'ios27-root-policies.yml'):
+    text = (root / '.github/workflows' / name).read_text()
+    assert 'options: [d94ap]' in text and 'default: d94ap' in text
+    assert 'OS_PROFILE: ios-27.0.1-24A446-d94ap' in text
+seed = (root / '.github/workflows/ios27-data-seed.yml').read_text()
+assert "product='iPhone17,2'" in seed and "'--gib', '3'" in seed
+assert 'set-ram-data-role.py' in seed and "assert report['bytes'] == 2 * 1024**3" in seed
+assert 'c640246d38aaeb2d' not in seed
+config = (root / 'configs/ios27_data_defconfig').read_text()
+assert 'CONFIG_XNU_OWNER_DATA_MOUNT=y' in config
+assert 'CONFIG_XNU_OWNER_DATA_VOLUME_UUID="9EE3A4D1-60A0-49AD-9D49-B960370FF230"' in config
+assert '072899DE-BA32-4875-B776-41C1929F4002' not in config
+print('PASS: canonical D94 profile/fixture/root identities/workflow defaults; verified new Data UUID;2GiB donor seed selected')

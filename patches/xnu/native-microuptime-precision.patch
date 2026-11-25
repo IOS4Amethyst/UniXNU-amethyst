@@ -1,0 +1,13 @@
+--- a/osfmk/arm/rtclock.c
++++ b/osfmk/arm/rtclock.c
+@@ -468,7 +468,9 @@
+ 	*secs = t64 = abstime / rtclock_sec_divisor;
+ 	abstime -= (t64 * rtclock_sec_divisor);
+ 
+-	*microsecs = (uint32_t)(abstime / rtclock_usec_divisor);
++	/* Scale the remainder, not a truncated ticks-per-microsecond divisor.
++	 * abstime < rtclock_sec_divisor (uint32_t), so this cannot overflow. */
++	*microsecs = (uint32_t)((abstime * USEC_PER_SEC) / rtclock_sec_divisor);
+ }
+ 
+ void

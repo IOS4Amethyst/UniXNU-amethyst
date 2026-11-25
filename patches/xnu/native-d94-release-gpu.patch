@@ -1,0 +1,53 @@
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -1325,6 +1325,18 @@
+ 	}
+ 
+ 	kern_return_t result = IOKitBSDInit();
++#if !(DEVELOPMENT || DEBUG) && defined(XNU_NATIVE_AMETHYST_GPU) && XNU_NATIVE_AMETHYST_GPU
++	/* Board-main probe defaults to mode 19: require an explicit opt-in here.
++	 * IOBSD must exist before the probe's asynchronous IOKit/user-client work.
++	 * Define this only with the qualified real libAmethystAdreno.late.a.
++	 */
++	unsigned gpu_mode = 0;
++	if (result == KERN_SUCCESS &&
++	    PE_parse_boot_argn("sheng-gpu-power", &gpu_mode, sizeof(gpu_mode)) && gpu_mode) {
++		extern void sheng_gpu_power_probe(void);
++		sheng_gpu_power_probe();
++	}
++#endif
+ #if defined(XNU_NATIVE_LEGACY_DISPLAY) && XNU_NATIVE_LEGACY_DISPLAY
+ 	/* The original IOSurface personality requires the genuine IOBSD resource.
+ 	 * The default-off framebuffer instrument may start only after publication.
+--- a/libkern/c++/OSKext.cpp
++++ b/libkern/c++/OSKext.cpp
+@@ -1733,6 +1733,29 @@
+ 	OSKext::resetAfterUserspaceReboot();
+ }
+ 
++// Match OSKext::load's lock order while registering built-in board classes.
++extern "C" OSReturn OSKextRegisterBoardClasses(const char *, void (*)(void));
++extern "C" OSReturn
++OSKextRegisterBoardClasses(const char *identifier, void (*constructors)(void))
++{
++	if (!identifier || !constructors) {
++		return kOSReturnError;
++	}
++	OSReturn result = kOSKextReturnNoMemory;
++	if (sKextLock) {
++		IORecursiveLockLock(sKextLock);
++	}
++	void *handle = OSMetaClass::preModLoad(identifier);
++	if (handle) {
++		constructors();
++		result = OSMetaClass::postModLoad(handle);
++	}
++	if (sKextLock) {
++		IORecursiveLockUnlock(sKextLock);
++	}
++	return result;
++}
++
+ /*
+  * Remove daemon exit requests from sKernelRequests
+  *

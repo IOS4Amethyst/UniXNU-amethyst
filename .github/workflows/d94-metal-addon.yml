@@ -1,0 +1,126 @@
+name: D94 pinned ios27 Metal addon
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  addon:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    environment: ARTIFACT_PASSPHRASE
+    timeout-minutes: 180
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+      HOMEBREW_NO_ENV_HINTS: 1
+      PYTHONUNBUFFERED: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: IOS4Amethyst/UniXNU
+          ref: e6795bfe7ae4ef1825cd0be7201a4cc572c6b2cb
+          path: unixnu-core
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: IOS4Amethyst/UniXNU-amethyst
+          ref: d468023cd3f79ebd6093c644dc38356f232667f4
+          path: gpu-helper
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Build pinned arm64e Turnip and plugin, verify and pack
+        env:
+          ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/d94-metal"
+          exec > >(tee "$RUNNER_TEMP/d94-metal/build.log") 2>&1
+          test -n "$ARTIFACT_PASSPHRASE"
+          unset ARTIFACT_PASSPHRASE
+          test "$(uname -m)" = arm64
+          xcodebuild -version | tee "$RUNNER_TEMP/d94-metal/xcode.txt"
+          grep -qx 'Xcode 26.6' "$RUNNER_TEMP/d94-metal/xcode.txt"
+          xcrun --sdk iphoneos --show-sdk-path
+          xcrun --sdk iphoneos --show-sdk-version
+          xcrun --sdk iphoneos --show-sdk-build-version
+          xcrun clang --version
+          brew install llvm glslang shaderc ninja
+          command -v glslc
+          export PATH="$(brew --prefix llvm)/bin:$HOME/.cargo/bin:$PATH"
+          llvm-as --version
+          glslangValidator --version
+          ninja --version
+          rustup toolchain install 1.98.0 --profile minimal --component rust-src
+          rustc +1.98.0 -Vv
+          cd unixnu-core
+          test "$(git rev-parse HEAD)" = e6795bfe7ae4ef1825cd0be7201a4cc572c6b2cb
+          test "$(git -C ../gpu-helper rev-parse HEAD)" = d468023cd3f79ebd6093c644dc38356f232667f4
+          git submodule update --init drivers/AdrenoMetal kits/AdrenoPM4 drivers/GopFramebuffer
+          test "$(git -C drivers/AdrenoMetal rev-parse HEAD)" = 243d63cf43305a85c8119b66b49cb7df4b30b019
+          test "$(git -C kits/AdrenoPM4 rev-parse HEAD)" = 282606b528b2595bc4274ea7490b62b323f35a5f
+          test "$(git -C drivers/GopFramebuffer rev-parse HEAD)" = e47c1b8de169cd2bd0b885c7d85e433010e3cdf2
+          ln -s GopFramebuffer drivers/NativeMobileDisplay
+          git -C drivers/Adreno740 init
+          git -C drivers/Adreno740 fetch --depth 1 https://github.com/IOS4Amethyst/NativeAdreno.git 26c1da780d602c7bfe2fcd62bff41f9009ead6a3
+          git -C drivers/Adreno740 checkout --detach FETCH_HEAD
+          test "$(git -C drivers/Adreno740 rev-parse HEAD)" = 26c1da780d602c7bfe2fcd62bff41f9009ead6a3
+          echo '889f361ff6903d68f48c95fdbdfcb6922431284be1dec2004a2a233cd1b09457  drivers/Adreno740/NativeAdrenoABI.h' | shasum -a 256 -c -
+          # The pinned patch creates this header but omits Git's new-file metadata.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('patches/mesa/turnip-frame-diagnostics.patch')
+          text = p.read_text()
+          old = 'diff --git a/src/freedreno/vulkan/tu_frame_diagnostic.h b/src/freedreno/vulkan/tu_frame_diagnostic.h\n--- /dev/null'
+          assert text.count(old) == 1
+          p.write_text(text.replace(old, old.replace('\n---', '\nnew file mode 100644\n---'), 1))
+          PY
+          python3 ../gpu-helper/scripts/prepare-asteroids-turnip.py --unixnu "$PWD" --fetch-only
+          .cache/mesa-venv/bin/pip install -r scripts/requirements-adreno-compiler.txt
+          .cache/mesa-venv/bin/pip freeze
+          test "$(git -C .cache/mesa-work rev-parse HEAD)" = 85fda3b36405bcaea8bffc64aa4f2651dc90770d
+          mkdir -p .cache/gpu-reference/metal2vulkan
+          git -C .cache/gpu-reference/metal2vulkan init
+          git -C .cache/gpu-reference/metal2vulkan fetch --depth 1 https://github.com/steelbrain/metal2vulkan 624bab3918de5b978e1101517abca2b4fa426565
+          git -C .cache/gpu-reference/metal2vulkan checkout --detach FETCH_HEAD
+          for repo in . ../gpu-helper drivers/AdrenoMetal drivers/Adreno740 kits/AdrenoPM4 drivers/GopFramebuffer .cache/mesa-work .cache/gpu-reference/metal2vulkan; do
+            printf '%s ' "$repo"
+            git -C "$repo" rev-parse HEAD
+          done | tee "$RUNNER_TEMP/d94-metal/pins.txt"
+          python3 scripts/build-turnip-darwin.py --target ios27
+          python3 scripts/build-adreno-metal-plugin.py --target ios27 --no-replay 2>&1 | tee "$RUNNER_TEMP/d94-metal/plugin.log"
+          python3 ../scripts/d94-metal-evidence.py verify "$PWD" "$RUNNER_TEMP/d94-metal"
+          ADRENO_PLUGIN_DIR="$PWD/build/adreno-metal-plugin27" python3 scripts/make-gpu-addon.py --publish --no-daemon "$RUNNER_TEMP/d94-metal/d94-metal.addon"
+      - name: Preserve build evidence and encrypt even on failure
+        if: always()
+        env:
+          ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
+          BUILD_STATUS: ${{ job.status }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ARTIFACT_PASSPHRASE"
+          mkdir -p "$RUNNER_TEMP/d94-metal" "$RUNNER_TEMP/encrypted"
+          printf '%s\n' "$BUILD_STATUS" > "$RUNNER_TEMP/d94-metal/job-status.txt"
+          collect_status=0
+          python3 scripts/d94-metal-evidence.py collect "$GITHUB_WORKSPACE/unixnu-core" "$RUNNER_TEMP/d94-metal" || collect_status=$?
+          printf '%s\n' "$collect_status" > "$RUNNER_TEMP/d94-metal/collection-exit-code.txt"
+          tar -C "$RUNNER_TEMP" -czf - d94-metal | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:ARTIFACT_PASSPHRASE -out "$RUNNER_TEMP/encrypted/d94-metal.tar.gz.enc"
+          shasum -a 256 "$RUNNER_TEMP/encrypted/d94-metal.tar.gz.enc"
+          exit "$collect_status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: d94-metal-encrypted
+          path: ${{ runner.temp }}/encrypted/d94-metal.tar.gz.enc
+          if-no-files-found: error
+          retention-days: 7

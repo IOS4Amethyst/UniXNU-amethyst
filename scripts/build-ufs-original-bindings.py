@@ -20,6 +20,8 @@ import struct
 import subprocess
 import sys
 
+from kernel_target import CONFIG_LEVEL, OBJECT_TREE
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'kits/XnuPrelink'))
 import native_prelink as np
@@ -68,7 +70,7 @@ require((headers / 'IOBlockStorageDevice.h').is_file(),
         'Run prepare-storage-headers.py before this binder')
 out = args.objects_dir.resolve()
 out.mkdir(parents=True, exist_ok=True)
-recipe = json.loads((ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/'
+recipe = json.loads((ROOT / OBJECT_TREE / 'iokit' / CONFIG_LEVEL /
                      'IOPlatformExpert.cpo.json').read_text().strip().rstrip(','))
 reference = out / 'IOBlockStorageDevice-reference.o'
 arguments = recipe['arguments']

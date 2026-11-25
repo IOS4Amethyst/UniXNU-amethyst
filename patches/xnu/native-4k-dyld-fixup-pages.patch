@@ -1,0 +1,266 @@
+# Port of UniXNU-sheng zzzz-sheng-ipados27-bringup.patch: assemble 16 KiB dyld fixup pages on a 4 KiB kernel.
+# Applied after native-zero-key-user-signing.patch. Keep signature validation and chain bounds.
+--- a/osfmk/vm/vm_dyld_pager.c
++++ b/osfmk/vm/vm_dyld_pager.c
+@@ -145,12 +145,12 @@
+ 
+ /* funciton that calculates delta pointer that remains within the same page by using nospec ISA */
+ static inline bool
+-_delta_ptr_within_page_nospec(uint64_t ** __nonnull ptr, uint64_t deltaByteCount, bool *crossing_page, uintptr_t userVA)
+-{
+-	uintptr_t old_page = (uintptr_t)*ptr >> PAGE_SHIFT;
+-	uintptr_t new_page = ((uintptr_t)*ptr + deltaByteCount) >> PAGE_SHIFT;
++_delta_ptr_within_page_nospec(uint64_t ** __nonnull ptr, uint64_t deltaByteCount, bool *crossing_page, uintptr_t userVA, unsigned int page_shift)
++{
++	uintptr_t old_page = (uintptr_t)*ptr >> page_shift;
++	uintptr_t new_page = ((uintptr_t)*ptr + deltaByteCount) >> page_shift;
+ 	uint64_t  nospec_delta = deltaByteCount;
+-	uintptr_t page_offset = (uintptr_t)*ptr & PAGE_MASK;
++	uintptr_t page_offset = (uintptr_t)*ptr & ((1UL << page_shift) - 1);
+ #if __arm64__
+ 	bool      nospec_delta_valid = false;
+ 	SPECULATION_GUARD_ZEROING_XXX(
+@@ -372,7 +372,8 @@
+ 	struct mwl_info_hdr                   *hdr = (struct mwl_info_hdr *)link_info;
+ 	uint64_t                              *bindsArray  = (uint64_t *)((uintptr_t)hdr + hdr->mwli_binds_offset);
+ 	uint16_t                              firstStartOffset = segInfo->page_start[pageIndex];
+-	vm_offset_t                           end_contents = contents + PAGE_SIZE;
++	vm_offset_t                           end_contents = contents + segInfo->page_size;
++	unsigned int                          page_shift = __builtin_ctz((uint32_t)segInfo->page_size);
+ 	//  For DYLD_CHAINED_PTR_64 (arm64 and x86_64) and DYLD_CHAINED_PTR_32 (arm64_32) the stride is always 4
+ 	uint64_t                              step_multiplier = 4; // 4-byte stride
+ 	/*
+@@ -428,7 +429,7 @@
+ 		}
+ 		/* shifts chain to a delta, chain cannot be used to access outside of page speculatively after this point */
+ 		bool crossing_page = false;
+-		valid_chain = _delta_ptr_within_page_nospec(&chain, delta, &crossing_page, (uintptr_t)userVA);
++		valid_chain = _delta_ptr_within_page_nospec(&chain, delta, &crossing_page, (uintptr_t)userVA, page_shift);
+ 		if (crossing_page) {
+ 			return KERN_FAILURE;
+ 		}
+@@ -619,7 +620,8 @@
+ 	uint32_t             link_info_size = pager->dyld_link_info_size;
+ 	struct mwl_info_hdr  *hdr = (struct mwl_info_hdr *)link_info;
+ 	uint64_t             *bindsArray = (uint64_t*)((uintptr_t)link_info + hdr->mwli_binds_offset);
+-	vm_offset_t          end_contents = contents + PAGE_SIZE;
++	vm_offset_t          end_contents = contents + segInfo->page_size;
++	unsigned int         page_shift = __builtin_ctz((uint32_t)segInfo->page_size);
+ 	bool                 valid_chain = false;
+ 	uint64_t             step_multiplier = 8; // always 8-bytes stride for arm64e pages
+ 
+@@ -719,7 +721,7 @@
+ 			}
+ 		}
+ 		bool crossing_page = false;;
+-		valid_chain = _delta_ptr_within_page_nospec(&chain, delta, &crossing_page, (uintptr_t)userVA);
++		valid_chain = _delta_ptr_within_page_nospec(&chain, delta, &crossing_page, (uintptr_t)userVA, page_shift);
+ 
+ 		if (crossing_page) {
+ 			return KERN_FAILURE;
+@@ -742,7 +744,8 @@
+ 	void                 *link_info = pager->dyld_link_info;
+ 	uint32_t             link_info_size = pager->dyld_link_info_size;
+ 	struct mwl_info_hdr  *hdr = (struct mwl_info_hdr *)link_info;
+-	vm_offset_t          end_contents = contents + PAGE_SIZE;
++	vm_offset_t          end_contents = contents + segInfo->page_size;
++	unsigned int         page_shift = __builtin_ctz((uint32_t)segInfo->page_size);
+ 	bool                 valid_chain = false;
+ 	uint64_t             step_multiplier = 8; // always 8-bytes stride for arm64e
+ 
+@@ -806,7 +809,7 @@
+ 			*chain = target + high8;
+ 		}
+ 		bool crossing_page = false;
+-		valid_chain = _delta_ptr_within_page_nospec(&chain, delta, &crossing_page, (uintptr_t)userVA);
++		valid_chain = _delta_ptr_within_page_nospec(&chain, delta, &crossing_page, (uintptr_t)userVA, page_shift);
+ 		if (crossing_page) {
+ 			return KERN_FAILURE;
+ 		}
+@@ -861,11 +864,14 @@
+ 			return KERN_FAILURE;
+ 		}
+ 
++		if (seg->page_size != hdr->mwli_page_size) {
++			return KERN_INVALID_ARGUMENT;
++		}
+ 		segStartAddress = hdr->mwli_image_address + seg->segment_offset;
+ 		segEndAddress = segStartAddress + seg->page_count * seg->page_size;
+ 		if (segStartAddress <= userVA && userVA < segEndAddress) {
+ 			segInfo = seg;
+-			pageIndex = (uint32_t)(userVA - segStartAddress) / PAGE_SIZE;
++			pageIndex = (uint32_t)(userVA - segStartAddress) / seg->page_size;
+ 
+ 			/* ensure seg->size fits in link_info_size */
+ 			if ((uintptr_t)seg + seg->size > (uintptr_t)link_info + link_info_size) {
+@@ -955,6 +961,73 @@
+ }
+ 
+ /*
++ * Fault one backing page into a kernel buffer (mirrors shared_region_pager_peek).
++ * Used when the fixup page size exceeds PAGE_SIZE so the full fixup page can be assembled.
++ */
++static kern_return_t
++dyld_pager_peek(
++	vm_object_t                    object,
++	vm_object_offset_t             backing_offset,
++	void                           *buffer,
++	struct vm_object_fault_info    *fault_info)
++{
++	vm_page_t page, top_page;
++	vm_prot_t prot;
++	kern_return_t error_code;
++	vm_fault_return_t vmfr;
++	/* The caller's fault_info may have been mutated by the page's own fault (shadow offset); fault the peeked page at its own range. */
++	struct vm_object_fault_info local_fault = *fault_info;
++	local_fault.lo_offset = backing_offset;
++	local_fault.hi_offset = backing_offset + PAGE_SIZE;
++
++retry:
++	vm_page_grab_prime();
++	vm_object_lock(object);
++	vm_object_paging_begin(object);
++	error_code = 0;
++	prot = VM_PROT_READ;
++	page = VM_PAGE_NULL;
++	vmfr = vm_fault_page(object, backing_offset, VM_PROT_READ, FALSE, FALSE, &prot, &page, &top_page, NULL,
++	    &error_code, FALSE, &local_fault, NULL);
++	switch (vmfr) {
++	case VM_FAULT_SUCCESS:
++		break;
++	case VM_FAULT_RETRY:
++		goto retry;
++	case VM_FAULT_MEMORY_SHORTAGE:
++		if (vm_page_wait(local_fault.interruptible)) {
++			goto retry;
++		}
++		return KERN_RESOURCE_SHORTAGE;
++	case VM_FAULT_SUCCESS_NO_VM_PAGE:
++		vm_object_paging_end(object);
++		vm_object_unlock(object);
++		return KERN_MEMORY_ERROR;
++	default:
++		return KERN_MEMORY_ERROR;
++	}
++	vm_object_t page_object = VM_PAGE_OBJECT(page);
++	const void *source = (const void *)phystokv((pmap_paddr_t)VM_PAGE_GET_PHYS_PAGE(page) << PAGE_SHIFT);
++	if (page_object->code_signed) {
++		vm_page_validate_cs_mapped(page, PAGE_SIZE, 0, source);
++	}
++	const bool tainted = page->vmp_cs_tainted;
++	if (!tainted) {
++		bcopy(source, buffer, PAGE_SIZE);
++	}
++	vm_page_wakeup_done(page_object, page);
++	vm_object_paging_end(page_object);
++	vm_object_unlock(page_object);
++	if (top_page != VM_PAGE_NULL) {
++		vm_object_lock(object);
++		VM_PAGE_FREE(top_page);
++		vm_object_paging_end(object);
++		vm_object_unlock(object);
++	}
++	return tainted ? KERN_CODESIGN_ERROR : KERN_SUCCESS;
++}
++
++/*
+  * dyld_pager_data_request()
+  *
+  * Handles page-in requests from VM.
+@@ -991,6 +1064,10 @@
+ 	struct mwl_info_hdr     *hdr;
+ 	uint32_t                r;
+ 	uint64_t                userVA;
++	uint32_t                mwli_page_size;
++	void                   *fixup_buffer = NULL;
++	void                   *fixup_alloc = NULL;
++	uint32_t                i;
+ 
+ 	fault_info.stealth = TRUE;
+ 	fault_info.io_sync = FALSE;
+@@ -1003,6 +1080,11 @@
+ 	assert(os_ref_get_count_raw(&pager->dyld_ref_count) > 1); /* pager is alive */
+ 	assert(pager->dyld_is_mapped); /* pager is mapped */
+ 	hdr = (struct mwl_info_hdr *)pager->dyld_link_info;
++	mwli_page_size = hdr->mwli_page_size;
++	/* Accept only native pages or the supported 16 KiB image pages. */
++	if (mwli_page_size != PAGE_SIZE && mwli_page_size != 16384) {
++		return KERN_INVALID_ARGUMENT;
++	}
+ 
+ 	/*
+ 	 * Gather in a UPL all the VM pages requested by VM.
+@@ -1040,6 +1122,20 @@
+ 	src_top_object = pager->dyld_backing_object;
+ 	assert(src_top_object != VM_OBJECT_NULL);
+ 	vm_object_reference(src_top_object); /* keep the source object alive */
++
++	/*
++	 * 16 KiB fixup pages on a 4 KiB kernel: assemble the whole fixup page in a scratch
++	 * buffer, apply the chain once, then copy out the requested 4 KiB part.
++	 */
++	if (mwli_page_size > PAGE_SIZE) {
++		/* The chain walk finds page boundaries from the buffer address, so align it to the fixup page size. */
++		fixup_alloc = kalloc_data(2 * (vm_size_t)mwli_page_size, Z_WAITOK);
++		if (fixup_alloc == NULL) {
++			retval = KERN_RESOURCE_SHORTAGE;
++			goto done;
++		}
++		fixup_buffer = (void *)(((uintptr_t)fixup_alloc + mwli_page_size - 1) & ~((uintptr_t)mwli_page_size - 1));
++	}
+ 
+ 	/*
+ 	 * Fill in the contents of the pages requested by VM.
+@@ -1164,6 +1260,7 @@
+ 		 */
+ 		bcopy((const char *)src_vaddr, (char *)dst_vaddr, PAGE_SIZE);
+ 
++
+ 		/*
+ 		 * Figure out what the original user virtual address was, based on the offset.
+ 		 */
+@@ -1187,6 +1284,34 @@
+ 				panic("%s(): Range not found for offset 0x%llx", __func__, (long long)cur_offset);
+ 			}
+ 			retval = KERN_FAILURE;
++		} else if (mwli_page_size > PAGE_SIZE) {
++			/* Assemble the whole fixup page, apply the chain once, copy out the requested part. */
++			vm_object_offset_t page_off = offset + cur_offset;
++			vm_object_offset_t base_off = page_off & ~(vm_object_offset_t)(mwli_page_size - 1);
++			uint32_t part = (uint32_t)((page_off - base_off) / PAGE_SIZE);
++			uint64_t base_userVA = userVA - (uint64_t)(page_off - base_off);
++
++			/* The current page's source is already faulted and still mapped; fill the rest by peeking. */
++			bcopy((const char *)src_vaddr, (char *)fixup_buffer + (vm_offset_t)part * PAGE_SIZE, PAGE_SIZE);
++			retval = KERN_SUCCESS;
++			for (i = 0; i < mwli_page_size / PAGE_SIZE; ++i) {
++				if (i == part) {
++					continue;
++				}
++				kr = dyld_pager_peek(src_top_object, base_off + (vm_object_offset_t)i * PAGE_SIZE,
++				    (char *)fixup_buffer + (vm_offset_t)i * PAGE_SIZE, &fault_info);
++				if (kr != KERN_SUCCESS) {
++					retval = kr;
++					break;
++				}
++			}
++			if (retval == KERN_SUCCESS) {
++				if (fixup_page((vm_offset_t)fixup_buffer, base_userVA, pager) != KERN_SUCCESS) {
++					retval = KERN_FAILURE;
++				} else {
++					bcopy((const char *)fixup_buffer + (vm_offset_t)part * PAGE_SIZE, (char *)dst_vaddr, PAGE_SIZE);
++				}
++			}
+ 		} else if (fixup_page(dst_vaddr, userVA, pager) != KERN_SUCCESS) {
+ 			/* KDBG / printf was done under fixup_page() */
+ 			retval = KERN_FAILURE;
+@@ -1252,6 +1377,9 @@
+ 	}
+ 	if (src_top_object != VM_OBJECT_NULL) {
+ 		vm_object_deallocate(src_top_object);
++	}
++	if (fixup_alloc != NULL) {
++		kfree_data(fixup_alloc, 2 * (vm_size_t)mwli_page_size);
+ 	}
+ 	return retval;
+ }

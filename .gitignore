@@ -38,6 +38,9 @@ uefi-amethyst
 *.spv
 *.metallib
 *.bin
+# Exception: the signed root-policy headers are repository inputs of the storage area.
+# Only the 544-byte header and the public anchor are shipped; the full block tables stay local.
+!scripts/policies/**/*.bin
 *.mbn
 *.fw
 *.pem

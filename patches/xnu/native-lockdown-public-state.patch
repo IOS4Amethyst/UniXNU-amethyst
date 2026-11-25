@@ -1,0 +1,21 @@
+--- a/bsd/kern/lockdown_mode.c
++++ b/bsd/kern/lockdown_mode.c
+@@ -83,6 +83,18 @@
+ STARTUP(EARLY_BOOT, STARTUP_RANK_LAST, lockdown_mode_init);
+ #endif
+ 
++/* Darwin 26 libsystem requires this read-only name; preserve the real state. */
++static int
++sysctl_lockdown_mode_state_public SYSCTL_HANDLER_ARGS
++{
++#pragma unused(oidp, arg1, arg2)
++	int state = get_lockdown_mode_state();
++	return SYSCTL_OUT(req, &state, sizeof(state));
++}
++SYSCTL_PROC(_security_mac, OID_AUTO, lockdown_mode_state_public,
++    CTLTYPE_INT | CTLFLAG_RD | CTLFLAG_LOCKED,
++    0, 0, sysctl_lockdown_mode_state_public, "I", "Lockdown Mode state");
++
+ int
+ get_lockdown_mode_state(void)
+ {

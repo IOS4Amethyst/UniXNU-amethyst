@@ -7,8 +7,9 @@ import argparse
 import json
 import tomllib
 from pathlib import Path
-import struct
 import subprocess
+
+from kernel_target import ARCH, CONFIG_LEVEL, OBJECT_TREE, TRIPLE, check_object
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
@@ -43,7 +44,13 @@ switch = {'NativeAdreno': 'XNU_NATIVE_ADRENO', 'NativeVirtioBlock': 'XNU_NATIVE_
 if switch and os.environ.get(switch) == '0':
     print(f'build-arm-driver: {identifier} skipped ({switch} is off)')
     sys.exit(0)
-recipe = ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/IOPlatformExpert.cpo.json'
+# amethyst: on the source-storage path build-sheng-source-storage.py compiles the same driver with the
+# source API enabled and publishes build/sheng-ufs/libShengUfs.a itself. Rebuilding it here would
+# overwrite that archive with a build that has no native_ufs_source_create().
+if component == 'ShengUfs' and 'build-sheng-source-storage.py' in (ROOT / 'board.toml').read_text():
+    print(f'build-arm-driver: {identifier} skipped (build-sheng-source-storage.py owns libShengUfs.a)')
+    sys.exit(0)
+recipe = ROOT / OBJECT_TREE / 'iokit' / CONFIG_LEVEL / 'IOPlatformExpert.cpo.json'
 record = json.loads(recipe.read_text().strip().rstrip(','))
 directory = 'GopFramebuffer' if runtime in ('NativeLegacyDisplay', 'NativeGOPPresenter') else 'AdrenoMetal' if runtime in ('NativeOfflineGPU', 'NativeOfflineAccelerator', 'NativeIOGPUProviderProbe') else identifier
 filename = next((name for name in metadata.get('source_files', []) if name.endswith('.cpp')), runtime + '.cpp')
@@ -121,20 +128,10 @@ result = subprocess.run(command, cwd=record['directory'], stdout=subprocess.PIPE
 (out / 'compile.log').write_text(result.stdout)
 if result.returncode:
     raise SystemExit(result.stdout[-3500:])
-data = destination.read_bytes()
-magic, cpu, subtype, kind, count, size = struct.unpack_from('<6I', data)
-if (magic, cpu, subtype, kind) != (0xfeedfacf, 0x100000c, 0, 1):
-    raise SystemExit('Unexpected platform object architecture')
-offset = 32
-deployment = None
-for _ in range(count):
-    cmd, length = struct.unpack_from('<II', data, offset)
-    if cmd == 0x32:
-        deployment = struct.unpack_from('<II', data, offset + 8)
-    offset += length
-if deployment != (2, 0x110000):
-    raise SystemExit(f'Unexpected platform deployment {deployment}')
+# ios27: the object audit of upstream UniXNU (kernel_target.check_object): the OS profile's target, arm64e for iOS 27,
+# where the iPadOS 17 copy above required ARM64 subtype 0 and the iOS 17 deployment.
+check_object(destination.read_bytes(), component)
 archive = out / ('lib' + identifier + '.a')
 archive.unlink(missing_ok=True)
 subprocess.run(['xcrun', 'ar', 'rcs', archive, destination], check=True)
-print(f'{identifier}: -Werror build and actual ARM64/iOS 17 object audit passed')
+print(f'{identifier}: -Werror build and {TRIPLE} object audit passed')

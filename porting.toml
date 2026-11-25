@@ -11,6 +11,7 @@ id = "configuration"
 status = "implemented"
 components = ["ArmDTPlatform"]
 paths = [
+  "profiles/os/ios-27.0.1-24A446-d94ap/**",
   "board.toml",
   "feeds.toml",
   "configs/**",
@@ -40,6 +41,7 @@ procedure = [
   "./unixnu status --json to confirm the resolved overrides and patch order.",
 ]
 findings = [
+  "The D94 iOS 27 bring-up and V60 iPadOS 17 fallback share the device repository; the D94 kernel, GPU and seed workflows run by manual dispatch.",
   "Sm7635Platform is not selected: board services are provided by board-package code and test kernels instead.",
   "The board ADT keeps arm_io_base 0x01000000; a zero parent base made pe_identify_machine return early and skip clock-frequency initialisation.",
   "drivers/Adreno740 is fetched from IOS4Amethyst/NativeAdreno (main = 38227e7, the A810 branch of rootstockos/NativeAdreno); the add-on and seed workflows run by hand from main.",
@@ -120,6 +122,7 @@ procedure = [
   "Add the SMP and cpufreq arguments (pack-log.py --smp --cpufreq 4), boot, pull the log, read the AmethystSmp and [clocks]/[cpu gov] rows.",
 ]
 findings = [
+  "The D94 port uses full-frequency tick conversion to avoid the second-boundary microtime discontinuity.",
   "Without armcpu-self-ipi=1 the secondaries keep SIGPdisabled until their first IPI, so a stackshot (DebuggerXCallEnter) could not signal them and the boot hung.",
   "Booting all 8 cores cut time to the lock screen from about 272 s to about 152 s.",
   "scripts/log/AmethystSmc.c carries the SMC call helper used by the GPU zap load.",
@@ -181,6 +184,9 @@ id = "storage"
 status = "device-verified"
 components = ["ShengUfs", "VirtioMmioBlock", "VerifiedRoot", "RamBlock", "SoftwareAES", "AppleKeyStoreState"]
 paths = [
+  "package/SourceRoot*",
+  "package/SourceStorage.cpp",
+  "scripts/policies/**",
   "drivers/ShengUfs",
   "drivers/NativeUfs/**",
   "scripts/*ufs*",
@@ -205,6 +211,7 @@ procedure = [
   "Pack the image with a Data seed (pack-log.py --data-seed), fastboot boot, confirm launchd and SpringBoard in the pulled log.",
 ]
 findings = [
+  "D94 boots the verified root with device-matched policy inputs and a volatile Data seed.",
   "Mounting SystemOS alone did not satisfy the shared-region carrier policy; the owner cache carrier requires read-only root/cache mounts with the exact signed UUIDs.",
   "On split devices persistent Data and log/export opens stay disabled; the log uses only the last 32 MiB of unixnu.",
   "The AppleKeyStore stand-in (sheng-aks=1) reports no keybag and no passcode, so the lock screen dismisses; it protects nothing.",
@@ -232,6 +239,7 @@ id = "display"
 status = "device-verified"
 components = []
 paths = [
+  "package/touch/AmethystPanel.cpp",
   "drivers/NativeMobileDisplay/**",
   "package/*Display*",
   "package/*Framebuffer*",
@@ -257,6 +265,7 @@ procedure = [
   "pack-log.py --display-probe --display-pm --display-unit-scale 2 --display-validate --display-cpu-present, then boot.",
 ]
 findings = [
+  "The D94 display reaches the UI with the board backlight and GPU copy presenter; physical cadence remains unverified.",
   "NativeLegacyDisplay rejects pipeline-disabled swaps and keeps accepted requests in its tracking table.",
   "validateSwap accepts plain BGRA or one-plane &BGA only; Apple-compressed two-plane framebuffers are refused, so the Data seed disables CA framebuffer compression.",
   "Presenting by CPU copy costs about 170 ms per frame; the GPU hand-off presenter (sheng-fb-gpu=1, sheng-vsync=120) brings swaps to about 10 ms.",
@@ -283,6 +292,12 @@ id = "input"
 status = "device-verified"
 components = []
 paths = [
+  "package/touch/AmethystSpmiRead.h",
+  "package/touch/GeniSpi.*",
+  "package/touch/Goodix*",
+  "package/touch/LICENSE.*",
+  "package/touch/NativeHidInput.cpp",
+  "package/touch/QcomRpmh.*",
   "drivers/ShengHidInput",
   "patches/ShengHidInput/**",
   "package/*Touch*",
@@ -312,6 +327,7 @@ procedure = [
   "pack-log.py --touch-snapshot --touch-goodix --touch-frames --touch-hid --buttons, boot, read the AmethystTouch and AmethystHid rows in the pulled log.",
 ]
 findings = [
+  "The D94 Goodix path publishes HID touch and buttons and restores digitizer usages after DriverKit resets them.",
   "The grid starts 20 bytes after head+attr+log; the 18 axis is screen x (0 left), the 40 axis screen y (0 top).",
   "Boot UI animation shifts whole drive lines by +-500 counts; the detector removes each line's shift and needs an adjacent-line neighbour, which removed all false presses.",
   "backboardd drops digitizer events unless the driver publishes Built-In, DisplayIntegrated and PrimaryUsage 0x0D/4.",
@@ -341,6 +357,7 @@ id = "gpu"
 status = "device-verified"
 components = ["AdrenoFirmware"]
 paths = [
+  "scripts/gen-ios-bridge-patch.py",
   "kits/AdrenoFirmware",
   "package/*Gpu*",
   "package/*Gmu*",
@@ -371,6 +388,7 @@ procedure = [
   "Build the add-on on the gpu-addon branch, pack with pack-log.py --gpu-power 19 --gpu-addon <addon> --owner-trust <bundle> --fb-gpu, boot.",
 ]
 findings = [
+  "D94 b43 reached the home screen using the b33 addon. Fence 879 stalled on b46; its recovery failed and the UI lost its GPU device.",
   "CX GDSC, SMMU vote and the GMU pool round trip pass once firmware reserves GMU_Pool.",
   "Zap loads through SCM PAS 13 with amethyst's own gen80300_zap.mbn; CP init, CP_MEM_WRITE and the first IB pass.",
   "The sandbox grant matches exact process names: it must name backboardd for the render server to open the GPU.",
@@ -401,6 +419,9 @@ id = "network"
 status = "planned"
 components = []
 paths = [
+  "package/BluetoothFirmware.*",
+  "package/touch/WpssGlinkVersion.h",
+  "scripts/bringup-24A446/test-wpss-version.cpp",
   "drivers/Ath12kWifi",
   "package/*Wifi*",
   "package/MhiBoot*",
@@ -417,6 +438,7 @@ procedure = [
   "Inventory the Wi-Fi/Bluetooth chip, bus and firmware from the Android device tree and vendor partitions.",
 ]
 findings = [
+  "WCN6750 WPSS startup was observed on b43. GLINK negotiation and connectivity remain unverified on D94 hardware.",
   "No network work has been started.",
 ]
 completion = [
@@ -490,6 +512,7 @@ procedure = [
   "Inventory the ADSP firmware and codec from the Android device tree.",
 ]
 findings = [
+  "The D94 port performs no hardware audio qualification.",
   "Only the sheng audio ABI header is carried for log tooling.",
 ]
 completion = [
@@ -529,6 +552,7 @@ procedure = [
   "Build the kernel; the platform power archive is linked from board.toml archives.",
 ]
 findings = [
+  "The D94 bring-up includes GPU and CPU power probes; sustained thermal/clock behavior remains unqualified.",
   "The guarded ApplePMGR provider only publishes what AMFI needs; unimplemented power operations panic rather than touch unqualified registers.",
   "watchdogd traps without a backend, so the Data seed disables it.",
   "GPU power-up (CX GDSC, SMMU vote clock, GMU votes) runs from GpuPowerProbe modes 1-19; scripts/log/check-gpu-power.c covers the GMU pool round trip on the host.",
@@ -551,6 +575,9 @@ id = "packaging"
 status = "device-verified"
 components = ["XnuPrelink"]
 paths = [
+  "scripts/pack-ios27.py",
+  "scripts/patch-darwinboot.py",
+  "scripts/set-ram-data-role.py",
   "scripts/*payload*",
   "scripts/*image*",
   "scripts/*flash*",
@@ -579,6 +606,7 @@ procedure = [
   "For test images: compile -> link -> prelink -> scripts/log/pack-log.py.",
 ]
 findings = [
+  "D94 images are packed for RAM-only boot with volatile Data and extracted to verify their actual contents.",
   "Test kernels use the unchanged original pe_init.o object; hand-assembled pe_init flags caused an earlier regression.",
   "pack-log.py --aks adds sheng-aks=1; --fb-gpu adds sheng-fb-gpu=1 sheng-vsync=120 and requires --gpu-addon.",
 ]
@@ -601,6 +629,12 @@ id = "diagnostics"
 status = "device-verified"
 components = []
 paths = [
+  "scripts/bringup-24A446/**",
+  "scripts/d94-reviewed-additions.json",
+  "scripts/fixtures/fileset-24A446-d94ap-donor.json",
+  "scripts/test-boot-crash-filter.py",
+  "scripts/test-d94-*.py",
+  "scripts/test-microuptime-precision.py",
   "scripts/check-*",
   "scripts/probe-*",
   "scripts/audit-*",
@@ -635,6 +669,7 @@ procedure = [
   "Boot the image, reboot to recovery, run python3 scripts/log/pull-log.py --out <dir> --serial <serial>, read latest.txt, slots.txt and msgbuf.txt.",
 ]
 findings = [
+  "D94 adds current-boot GPU and display logs, prelink checks and host fixtures for the D94 ABI and timing.",
   "The panic hook does not write UFS; periodic writes continue during normal operation.",
   "The log is found by partition name in recovery because this device keeps its root image in a split partition.",
   "Row 48 shows the swap rejection reason (why=, surface format and planes) once a swap is refused.",

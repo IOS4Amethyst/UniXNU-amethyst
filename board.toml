@@ -4,9 +4,21 @@ schema_version = 2
 name = "amethyst"
 soc = "SM7635"
 soc_source = "sm7635"
+# The default profile is the working iPadOS 17 fallback: a bare `unixnu build` (macos.yml,
+# local runs) keeps producing that image. The iOS 27 port is selected per command with
+# --os ios-27.0.1-24A446, which is what ios27-kernel.yml and ios27-root-policies.yml do.
+# Do not change this default to ios-27.0.1-24A446 without also passing --os to the fallback
+# workflows: it would silently repoint the working iPadOS 17 build at the iOS 27 kernel.
 os_profile = "ipados-17.7.11-21H461"
 description = "Xiaomi Redmi Note 14 Pro+"
 kit = "amethyst"
+
+# Both profiles build the same defconfig; the kernel config level is a defconfig concern, not a
+# per-OS one. Declared explicitly so the --os pairing is visible rather than implicit.
+[package.defconfig]
+"ipados-17.7.11-21H461" = "amethyst_defconfig"
+"ios-27.0.1-24A446" = "amethyst_defconfig"
+"ios-27.0.1-24A446-d94ap" = "amethyst_defconfig"
 
 [components]
 include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "RamBlock", "XnuPrelink", "DarwinBoot", "AppleKeyStoreState", "AdrenoFirmware", "ShengUfs"]#, "Sm7635Platform"]
@@ -24,8 +36,16 @@ windows = [
 
 [kernel]
 defconfig = "amethyst_defconfig"
+# The iOS 27 prelink fits the native segments around the collection's retained kexts, and
+# com.apple.kernel's __DATA_CONST slot is 0xd8000. A DEVELOPMENT kernel's __DATA_CONST is
+# 0x120000 (over by 0x48000) because KERNEL_DEV adds mach_assert, config_xnupost and
+# development on top of KERNEL_BASE; the RELEASE set is KERNEL_BASE alone and measures
+# 0xb8000. Every file in this board's patches, defconfig and kit sources that is gated on
+# DEVELOPMENT or DEBUG is behind a config macro this board leaves off, so nothing
+# board-specific is lost. See the porting record for the audit.
+config_level = "RELEASE"
 config_fragments = ["arch:configs/common.config", "soc:configs/sm7635.config", "os:configs/ipados.config"]
-patch_series = ["arch:patches/xnu/series", "soc:patches/xnu/series", "os:patches/xnu/series", "device:patches/xnu/series"]
+patch_series = ["arch:patches/xnu/series", "soc:patches/xnu-12377/series", "os:patches/xnu/series", "device:patches/xnu/series"]
 archives = [
   "build-corecrypto-14.py",
   "build-corecrypto-14.py --namespace",
@@ -34,7 +54,10 @@ archives = [
   "build-libpthread-kernel.py",
   "build-amethyst-platform-power.py",
   "component:ShengUfs",
-  "build-ufs-original-bindings.py --candidate build/xnu-prelink/bootstrap-candidate.macho",
+  # The builder searches package/ and kits/sheng; this board's sources are package/, which the tree links as
+  # kits/amethyst. It reads that directory from its [board] kit when the device repository is given, so
+  # build-sheng-source-storage-amethyst.py passes --device from the tree's own resolution.
+  "build-sheng-source-storage-amethyst.py --policy-dir scripts/policies/ios-27.0.1-24A446",
   "component:SoftwareAES",
   "build-native-aes-bindings.py",
   "component:RamBlock",
@@ -82,13 +105,19 @@ header_version = 4
 
 [payload]
 volume = "AMETHYSTESP"
-size_mib = 80
+size_mib = 128   # the iOS 27 kernel collection alone is ~76 MiB
 loader = "firmware"
 title = "iPadOS for amethyst"
+# Source storage authenticates each root read against the owner-signed policy bundle written by
+# build-sheng-source-storage.py from scripts/policies/ios-27.0.1-24A446 (544-byte signed headers;
+# the full block tables remain a local input of the userdata image).
+root_policies = "{tree}/build/sheng-source-storage/root-policies.bin"
 dram_size = "0x1FFE00000"
-# Match hardware-working kernel87: retain native text console without binary
-# entry/MMU/panic detours (panic_screen also installs the colour-bar probes).
-panic_screen = false
+# iOS 27 i2 (2026-11-07): DarwinBoot handed off and no kernel text appeared. The entry probe
+# (panic_screen) paints blue at MMU-off entry and magenta before MMU enable; the timed reset
+# 6 s after MMU enable shows whether translation came on. kernel87 (iPadOS) ran without it.
+panic_screen = true
+entry_probe_reset_delay = 6
 kernel_args = [
   "-v",
   "serial=3",
@@ -96,9 +125,11 @@ kernel_args = [
   "-enable_kprintf_spam",
   "-textconsole",
   "sheng-pmgr=2",
-  # Controller/SMMU takeover is not yet qualified on SM7635. Observation only.
-  "native-ufs-root=0",
-  "native-ufs-allow-unverified=1",
+  # Source storage (build-sheng-source-storage.py) starts the UFS driver from its own
+  # module-init pass after the original IOStorageFamily loads, so the personality stays
+  # observation-only here. Persistence and logging stay off for the first root read.
+  "native-source-storage=1",
+  "native-ufs-root=1",
   "offline-apfs-load=1",
   "-apfs_shared_datavolume",
   "sheng-data-persist=0",
@@ -110,7 +141,7 @@ kernel_args = [
 arm_io_base = "0x01000000"
 chip_id = "207"
 unique_chip_id = "required"
-root_match_volume_uuid = "04769D26-2CA0-4825-B443-E2E5F88300F2"
+root_match_volume_uuid = "E89DE0E4-B66C-425D-BCD1-90F637F43F1F"  # iOS 27 24A446 OS volume (profile [root] os_volume_uuid)
 packed_data_ramdisk = true
 persistent_data = false
 owned_memory_size = "0x130000000"

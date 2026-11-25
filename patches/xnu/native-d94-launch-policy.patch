@@ -1,0 +1,18 @@
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -9131,6 +9131,14 @@
+ 	int policy_error=sheng_boot_watchdog_policy(p, (uint64_t)scratch_addr);
+ 	if (policy_error) panic("sheng watchdog launch policy failed: %d", policy_error);
+ 	boot_progress_stage("temporary watchdog launch policy ready");
++#else
++	/* Without BootProgress (iOS 27 D94; UniXNU-sheng zzzz-sheng-ipados27-bringup.patch): the launchd job policy and amethyst-skip-setup, */
++	/* from the source storage archive's BootWatchdogPolicy.c, after the Data mount and before launchd. */
++	extern int sheng_boot_watchdog_policy(void *, uint64_t) __attribute__((weak_import));
++	if (sheng_boot_watchdog_policy) {
++		int policy_error = sheng_boot_watchdog_policy(p, (uint64_t)scratch_addr);
++		if (policy_error) printf("sheng watchdog launch policy failed: %d (continuing)\n", policy_error);
++	}
+ #endif
+ #endif
+ #if CONFIG_MEMORYSTATUS

@@ -1071,7 +1071,66 @@ void barStart() {
 //   5 a burst of 32 submissions on one connection, each writing its index, then one WaitFence on the last: every word must
 //     be there (fences retire in order)
 // Nothing is torn down at the end: the service stays published for user space.
+// The GPU restart after a hang (NativeAdrenoSubmit::recover from NativeAdrenoPublish's hangcheck, under the publish lock), after
+// UniXNU-sheng's gpuRestart (GpuPowerProbe.cpp, BSD-2-Clause-Patent) on the A810's registers. Until now no restart was installed, so a
+// hang was only counted and the GPU stayed stopped for the rest of the boot (amethyst b29b/b29c: 49 and 40 hangs, frozen display,
+// touch alive). The sequence is a6xx_recover's for a GPU whose GMU it does not power-cycle: SQE halted (a8xx_recover writes
+// CP_SQE_CNTL 3), a8xx_bus_clear_pending_transactions with its GX side (RBBM_GBIF_HALT 0x0a / ACK 0x0b on A8XX; the ring kit's
+// busHalt has the A7XX offsets, so only its GBIF half is used), RBBM_SW_RESET_CMD (A8XX 0x73) for at least 100 us, then mode 13's
+// hw_init and mode 14's CP start on the same ring, and CP_SET_SECURE_MODE 0 again when mode 15 left secure mode. Linux's a8xx_recover
+// collapses the CX domain through the GMU instead; the GMU kit has no stop and warm boot, so the GMU keeps its OOB GPU_SET vote.
+// [0] restarts, [1] the step a failed one stopped at, [2] its status, [3] RBBM_STATUS after the reset.
+#define A810_RBBM_SW_RESET_CMD 0x00073u   // a6xx.xml RBBM_SW_RESET_CMD, variants A8XX-
+extern "C" {uint32_t native_gpu_restart[4];}
+IOReturn gpuRestart(void *, NativeAdrenoRing *ring, uint32_t completed) {
+    uint32_t *r = native_gpu_restart;
+    r[0] = r[0] + 1;
+    auto fail = [&](uint32_t step, IOReturn status) {r[1] = step; r[2] = uint32_t(status); return status ? status : kIOReturnIOError;};
+    if (!ring) return fail(1, kIOReturnBadArgument);
+    ringWrite(nullptr, A810_CP_SQE_CNTL, 3);
+    uint32_t ack = 0;
+    ringWrite(nullptr, A810_RBBM_GBIF_HALT, 1);
+    unsigned spins = 0;
+    for (; spins < 1000000; ++spins) {if (ringRead(nullptr, A810_RBBM_GBIF_HALT_ACK, &ack)) return fail(2, kIOReturnIOError); if (ack & 1) break;}
+    if (spins == 1000000) return fail(2, kIOReturnTimeout);
+    IOReturn status = ring->busHalt(false, 1000000);
+    if (status) return fail(2, status);
+    ringWrite(nullptr, A810_RBBM_SW_RESET_CMD, 1); ringRead(nullptr, A810_RBBM_SW_RESET_CMD, &ack); IODelay(1);
+    IODelay(100);
+    ringWrite(nullptr, A810_RBBM_SW_RESET_CMD, 0); ringRead(nullptr, A810_RBBM_SW_RESET_CMD, &ack); IODelay(1);
+    ringRead(nullptr, A810_RBBM_STATUS, &r[3]);
+    gpuHwInit();
+    if (native_gpu_hw.failed || native_gpu_hw.step != 9) return fail(3, kIOReturnIOError);
+    const uint64_t sqe = gGpuBuffers[0].iova, bv_rptr = gGpuBuffers[2].iova + 8;
+    if (ringWrite(nullptr, A810_CP_SQE_INSTR_BASE, uint32_t(sqe)) || ringWrite(nullptr, A810_CP_SQE_INSTR_BASE + 1, uint32_t(sqe >> 32)))
+        return fail(4, kIOReturnIOError);
+    status = ring->restart(completed);
+    if (status) return fail(4, status);
+    if (ringWrite(nullptr, A810_CP_RB_RPTR_ADDR_BV, uint32_t(bv_rptr)) || ringWrite(nullptr, A810_CP_RB_RPTR_ADDR_BV + 1, uint32_t(bv_rptr >> 32)) ||
+        ringWrite(nullptr, A810_CP_SQE_CNTL, A810_INIT_CP_SQE_CNTL)) return fail(4, kIOReturnIOError);
+    // The power-up list stays as a8xx_patch_pwrup_reglist wrote it at bring-up (mode 14 step 4).
+    const NativeAdrenoRingIo rio{nullptr, ringWrite, ringRead, ringBarrier, nullptr, nullptr};
+    const NativeAdrenoCpInitConfig config{gGpuBuffers[0].iova, gGpuBuffers[3].iova, 1};
+    const NativeAdrenoRingClock clock{nullptr, ringNow, nullptr};
+    NativeAdrenoCpInit init;
+    uint32_t fence = 0;
+    status = init.setRegisters(NativeAdrenoRegisterTable::gen8());
+    if (!status) status = init.run(&rio, ring, &config, &fence, false);
+    if (status) return fail(5, status);
+    status = ring->idle(&clock, 1000000);
+    if (status) return fail(6, status);
+    if (!native_gpu_zap[12] && !native_gpu_zap[13] && native_gpu_zap[14] == 0x05ec0ff1) {
+        uint32_t words[2] = {};
+        if (AdrenoPM4Type7(GPB_CP_SET_SECURE_MODE, 1, &words[0]) != AdrenoPM4Success) return fail(7, kIOReturnInternalError);
+        status = ring->submitUnfenced(words, 2);
+        if (!status) status = ring->idle(&clock, 1000000);
+        if (status) return fail(7, status);
+    }
+    r[1] = 0; r[2] = 0;
+    return kIOReturnSuccess;
+}
 extern "C" {
+void native_adreno_set_restart(NativeAdrenoRestart, void *) __attribute__((weak));
 IOReturn native_adreno_publish(NativeAdrenoVm *, NativeAdrenoSubmit *, NativeAdrenoRing *, const NativeAdrenoRingClock *,
                                const NativeAdrenoTimer *, const NativeAdrenoAbiDeviceInfo *, uint32_t, uint32_t);
 uint32_t native_adreno_publish_stats(uint32_t *);
@@ -1436,6 +1495,8 @@ void ucStart() {
     if (bootArg("asteroids-gpu-cp-aperture", 0) == 1) openCpAperture();
     const unsigned ias = NativeAdrenoGpuContextInputBits();
     gDeviceInfo.va_size = ias > 32 ? (1ull << ias) - GpuClientVaStart : 0;
+    // Installed before publication, as sheng does: the hangcheck the publish starts restarts a hung GPU through it.
+    if (native_adreno_set_restart && bootArg("sheng-gpu-restart", 1)) native_adreno_set_restart(gpuRestart, nullptr);
     u[5] = uint32_t(native_adreno_publish(vm, &gSubmit, &gRing, &clock, &gTimer, &gDeviceInfo, ias, bits));
     IOService *svc = u[5] ? nullptr : native_adreno_published_service();
     IOLog("ASTEROIDS GPU: publish %x service %s chip %08x gmem %x va %llx+%llx\n", u[5], svc ? "NativeAdrenoGpu" : "-",

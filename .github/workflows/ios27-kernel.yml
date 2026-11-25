@@ -1,0 +1,349 @@
+# iPhone17,2 / D94AP / 24A446 kernel-only build. iPadOS17 fallback is separate.
+name: iOS 27 kernel
+
+on:
+  workflow_dispatch:
+    inputs:
+      gpu_full_link:
+        description: "Kernel-only relink of pinned D94 GPU archive (runtime remains off)"
+        type: boolean
+        default: false
+      donor:
+        description: Kernel donor (D94 is kernel-only migration audit)
+        type: choice
+        options: [d94ap]
+        default: d94ap
+      donor_policy_run:
+        description: Successful D94 root-policy run ID (required for D94)
+        required: false
+        default: "43184772128"
+      defconfig:
+        description: Defconfig name
+        required: true
+        default: amethyst_defconfig
+      build_payload:
+        description: "Build Payload"
+        type: boolean
+        default: false
+      build_firmware:
+        description: "Build the Mu firmware (uefi-amethyst) for its DarwinBoot.efi"
+        type: boolean
+        default: false
+      build_userdata:
+        description: "Build Userdata (takes ~16GB disk)"
+        type: boolean
+        default: false
+      data_ramdisk:
+        description: "Data seed (owner-data.cdr from the Data seed workflow) for the payload"
+        required: false
+        default: ""
+      root_policies:
+        description: "Root-policy bundle for the payload (built here unless a path is given)"
+        required: false
+        default: ""
+      xcode:
+        description: Xcode version
+        required: true
+        default: "26.6"
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+  HOMEBREW_NO_ENV_HINTS: 1
+
+jobs:
+  build:
+    runs-on: macos-26
+    # ARTIFACT_PASSPHRASE is a secret of the environment of the same name (as gpu-addon.yml): the outputs hold the prelinked
+    # Apple kernelcache, so they are only uploaded encrypted. This repository is public.
+    environment: ARTIFACT_PASSPHRASE
+    timeout-minutes: 360
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_${{ inputs.xcode || '26.6' }}.app/Contents/Developer
+      DEFCONFIG: ${{ inputs.defconfig || 'amethyst_defconfig' }}
+      OS_PROFILE: ios-27.0.1-24A446-d94ap
+
+    steps:
+      - name: Check out Device Repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Check out UniXNU Core
+        uses: actions/checkout@v4
+        with:
+          repository: IOS4Amethyst/UniXNU
+          # The configuration-level parameter. Merge back to ios27-iphone15 once the
+          # RELEASE kernel links and prelinks.
+          ref: ${{ inputs.gpu_full_link && 'e6795bfe7ae4ef1825cd0be7201a4cc572c6b2cb' || 'ios27-release-config-level' }}
+          path: unixnu-core
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check out UEFI repo
+        if: inputs.build_payload || inputs.build_firmware
+        uses: actions/checkout@v4
+        with:
+          repository: IOS4Amethyst/uefi-amethyst.git
+          ref: amethyst
+          path: uefi-amethyst
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Locate root-policy bundle
+        id: root-policies
+        if: inputs.build_payload
+        env:
+          GIVEN: ${{ inputs.root_policies }}
+        run: |
+          set -euo pipefail
+          # The bundle is written by this repository's "iOS 27 iPhone root policies" workflow
+          # (scripts/build-ios27-root-policies.py) from the owner key. board.toml points the payload at
+          # {tree}/build/sheng-source-storage/root-policies.bin, which is the tree outside the core checkout.
+          if [ -n "$GIVEN" ]; then
+            test -f "$GIVEN" || { echo "root-policy bundle not found: $GIVEN"; exit 1; }
+            mkdir -p "$GITHUB_WORKSPACE/build/sheng-source-storage"
+            cp "$GIVEN" "$GITHUB_WORKSPACE/build/sheng-source-storage/root-policies.bin"
+            echo "board.toml root_policies: build/sheng-source-storage/root-policies.bin (from $GIVEN)"
+          else
+            echo "No root_policies given: the payload boot entry carries no root-policy bundle" \
+                 "(the kernel boots without a root read, as in the last RAM-only test)."
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install host tools
+        run: |
+          brew install llvm lld mtools dtc
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+          if ! command -v unifdef >/dev/null; then
+            brew install unifdef
+            echo "$(brew --prefix unifdef)/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Verify D94 cross-compilation host
+        if: env.OS_PROFILE == 'ios-27.0.1-24A446-d94ap'
+        run: |
+          uname -m
+          xcodebuild -version
+          xcrun --sdk iphoneos clang --version
+          printf 'int d94_target_probe;\n' | xcrun --sdk iphoneos clang -target arm64e-apple-ios27.0 -x c -c -o "$RUNNER_TEMP/d94-target.o" -
+          file "$RUNNER_TEMP/d94-target.o"
+
+      - name: Prepare isolated D94 donor audit
+        if: env.OS_PROFILE == 'ios-27.0.1-24A446-d94ap'
+        env:
+          PAYLOAD: ${{ inputs.build_payload }}
+          FIRMWARE: ${{ inputs.build_firmware }}
+          USERDATA: ${{ inputs.build_userdata }}
+        run: |
+          test "$PAYLOAD" != true && test "$FIRMWARE" != true && test "$USERDATA" != true
+          git -C unixnu-core submodule update --init --recursive kits/XnuPrelink
+          python3 scripts/prepare-d94-build.py --core unixnu-core --device .
+
+      - name: Prepare pinned GPU full native relink
+        if: inputs.gpu_full_link
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          test "$DEFCONFIG" = amethyst_defconfig || test "$DEFCONFIG" = ios27_data_defconfig
+          test "$(gh run view 44999131568 --json conclusion --jq .conclusion)" = success
+          gh run download 44999131568 -n d94-gpu-qualification-encrypted -D "$RUNNER_TEMP/gpu-download"
+          python3 scripts/prepare-d94-gpu-link.py prepare --core unixnu-core --device . \
+            --encrypted "$RUNNER_TEMP/gpu-download/d94-gpu-qualification.tar.gz.enc" --inputs "$RUNNER_TEMP/gpu-link"
+
+      - name: Load verified D94 root policies
+        if: env.OS_PROFILE == 'ios-27.0.1-24A446-d94ap'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          POLICY_RUN: ${{ inputs.donor_policy_run || '43184772128' }}
+        run: |
+          [[ "$POLICY_RUN" =~ ^[0-9]+$ ]] || { echo 'D94 requires a successful root-policy run ID'; exit 1; }
+          test "$(gh run view "$POLICY_RUN" --json conclusion --jq .conclusion)" = success
+          gh run download "$POLICY_RUN" -n ios27-d94ap-root-policies -D scripts/policies/ios-27.0.1-24A446-d94ap
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('board.toml')
+          text = p.read_text()
+          old = '--policy-dir scripts/policies/ios-27.0.1-24A446"'
+          assert text.count(old) == 1
+          p.write_text(text.replace(old, '--policy-dir scripts/policies/ios-27.0.1-24A446-d94ap"'))
+          PY
+
+      - name: Select the device
+        working-directory: ./unixnu-core
+        run: |
+          # Explicit --os reselects package.defconfig on every command. Keep this
+          # disposable CI checkout's mapping aligned with the requested config.
+          python3 - <<'PY'
+          import os, re, tomllib
+          from pathlib import Path
+          device = Path(os.environ['GITHUB_WORKSPACE'])
+          selected = os.environ['DEFCONFIG']
+          if not re.fullmatch(r'[A-Za-z0-9_]+_defconfig', selected) or not (device/'configs'/selected).is_file():
+              raise SystemExit('Invalid or missing requested defconfig')
+          path = device/'board.toml'
+          text = path.read_text()
+          old = tomllib.loads(text)['package']['defconfig'][os.environ['OS_PROFILE']]
+          needle = '"' + os.environ['OS_PROFILE'] + '" = "' + old + '"'
+          assert text.count(needle) == 1
+          path.write_text(text.replace(needle, '"' + os.environ['OS_PROFILE'] + '" = "' + selected + '"'))
+          PY
+          ./unixnu defconfig "$DEFCONFIG" --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
+
+      - name: Prepare pinned PMGR kernelcache
+        working-directory: ./unixnu-core
+        run: |
+          python3 - <<'PY'
+          import sys
+          import os
+          import tomllib
+          from pathlib import Path
+          from types import SimpleNamespace
+          sys.path.insert(0, 'scripts')
+          from unixnu.ipsw import Ipsw, kernelcache
+          profile = tomllib.loads((Path('profiles/os') / os.environ['OS_PROFILE'] / 'profile.toml').read_text())
+          ctx = SimpleNamespace(board=profile, out_root=Path('out'))
+          source = Ipsw(ctx, spec=profile['ipsw']['url'])
+          print(kernelcache(ctx, source))
+          PY
+          echo "UNIXNU_KERNELCACHE=$GITHUB_WORKSPACE/unixnu-core/out/ipsw/24A446/kernelcache.decompressed" >> "$GITHUB_ENV"
+
+      - name: Build kernel
+        working-directory: ./unixnu-core
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./unixnu build kernel --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
+
+      - name: Verify retained GPU full-link output
+        if: inputs.gpu_full_link
+        run: python3 scripts/prepare-d94-gpu-link.py verify --core unixnu-core
+
+      - name: Summarize prelink audit
+        if: always() && env.OS_PROFILE == 'ios-27.0.1-24A446-d94ap'
+        run: |
+          python3 - <<'PY'
+          import glob, hashlib, json, os
+          from pathlib import Path
+          records = glob.glob('unixnu-core/out/amethyst/ios-27.0.1-24A446-d94ap/*/kernel/kernel.json')
+          lines = ['## D94 offline prelink audit (not hardware qualification)']
+          for name in records:
+              p = Path(name)
+              r = json.loads(p.read_text())
+              lines.append('candidate_written=' + str(r.get('candidate_written')))
+              for key in ('missing', 'stubbed'):
+                  owners = r.get(key, {})
+                  lines.append(f'{key}: {sum(len(v) for v in owners.values())} distinct owner/targets, {sum(sum(v.values()) for v in owners.values())} references')
+                  for owner in ('com.apple.security.sandbox', 'com.apple.driver.AppleMobileFileIntegrity'):
+                      lines.append(f'{key} {owner}: ' + json.dumps(owners.get(owner, {}), sort_keys=True))
+              kernel = p.with_suffix('.macho')
+              if kernel.is_file():
+                  lines.append('kernel_sha256=' + hashlib.sha256(kernel.read_bytes()).hexdigest())
+          if not records:
+              lines.append('No prelink record produced; inspect preceding build failure.')
+          text = '\n'.join(lines) + '\n'
+          print(text)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write(text)
+          PY
+
+      # The kernel logs are only uploaded encrypted (the outputs hold the prelinked Apple kernelcache), so a failed build is opaque.
+      # Print just the compiler and linker error lines: diagnostics about the open XNU sources, nothing derived from the kernelcache.
+      - name: Show kernel build errors
+        if: failure()
+        run: |
+          for f in unixnu-core/out/*/*/*/logs/kernel-bootstrap.log unixnu-core/out/*/*/*/logs/kernel.log; do
+            [ -f "$f" ] || continue
+            echo "=== $f: $(wc -l < "$f") lines, error lines:"
+            grep -n -E "error:|fatal error|Error [0-9]+$|\*\*\* |undefined symbol|ld: |Undefined symbols" "$f" | head -80 | cut -c1-420 || true
+          done
+
+      - name: Build payload
+        if: inputs.build_payload
+        working-directory: ./unixnu-core
+        env:
+          UNIXNU_UNIQUE_CHIP_ID: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
+          DATA_SEED: ${{ inputs.data_ramdisk }}
+        run: |
+          set -euo pipefail
+          extra=()
+          if [ -n "$DATA_SEED" ]; then
+            test -f "$DATA_SEED" || { echo "Data seed not found: $DATA_SEED"; exit 1; }
+            extra+=(--data-ramdisk "$DATA_SEED")
+          fi
+          ./unixnu build payload --os "$OS_PROFILE" --uefi uefi-amethyst --edk2 uefi-amethyst/Mu_Basecore \
+            -D "$GITHUB_WORKSPACE" ${extra[@]+"${extra[@]}"}   # bash 3.2: an empty array is unbound under set -u
+
+      - name: Build firmware
+        if: inputs.build_firmware
+        working-directory: ./unixnu-core
+        # The booted firmware's DarwinBoot predates 3c75734 and refuses the arm64e kernel collection (EFI_UNSUPPORTED);
+        # this build's DarwinBoot.efi is transplanted into it (the rest of that firmware matches no source build).
+        run: ./unixnu build firmware --os "$OS_PROFILE" --uefi "$GITHUB_WORKSPACE/uefi-amethyst" -D "$GITHUB_WORKSPACE"
+
+      - name: Build userdata
+        if: inputs.build_userdata
+        working-directory: ./unixnu-core
+        run: ./unixnu build userdata --os "$OS_PROFILE" -D "$GITHUB_WORKSPACE"
+
+      - name: Encrypt compiled binaries and logs
+        if: always()
+        env:
+          ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
+        run: |
+          set -uo pipefail
+          [ -n "$ARTIFACT_PASSPHRASE" ] || { echo "::error::No ARTIFACT_PASSPHRASE secret: nothing is uploaded."; exit 1; }
+          # The kernel, payload, userdata and PMGR outputs carry the prelinked Apple kernelcache and ABI derived from it.
+          # Decrypt: openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in ios27-build.tar.gz.enc -pass file:KEYFILE | tar xz
+          # bash 3.2 on the macOS runner has no globstar: expand the patterns in Python.
+          python3 - "$RUNNER_TEMP/files.txt" <<'PY'
+          import glob, os, sys
+          patterns = [
+              'unixnu-core/out/**/tree/build/d94-gpu/**',
+              'unixnu-core/out/**/kernel/**',
+              'unixnu-core/out/**/payload/**',
+              'unixnu-core/out/**/userdata/**',
+              'unixnu-core/out/**/logs/*.log',
+              'unixnu-core/out/**/tree/build/sheng-source-storage/**/*.log',
+              'unixnu-core/out/**/tree/build/sheng-source-storage/**/*.command.json',
+              'unixnu-core/out/**/tree/build/xnu/fileset-reference/**/*.log',
+              'unixnu-core/out/**/tree/build/xnu/fileset-reference/**/*.json',
+              'unixnu-core/out/**/tree/build/xnu/fileset-reference/mach.*.noctf',
+              'unixnu-core/out/**/build/xnu/ios-obj/EXPORT_HDRS/osfmk/**/*.h',
+              'unixnu-core/out/**/build/xnu/ios-obj/**/mach.*.noctf',
+              'unixnu-core/out/**/tree/build/sheng-platform-power/ShengPlatformPower.o',
+              'unixnu-core/out/**/tree/build/sheng-platform-power/OriginalPMGRABI.h',
+              'unixnu-core/out/**/tree/build/sheng-platform-power/GuardedPMGRSlots.inc',
+              'unixnu-core/out/**/tree/build/sheng-platform-power-arm64e/**',
+              'unixnu-core/out/**/tree/build/xnu/ios-obj/**/IOPMGR.cpo',
+              'unixnu-core/out/**/tree/build/xnu/ios-obj/**/IOPMGR.cpo.json',
+              'unixnu-core/out/**/tree/build/xnu/ios-obj/**/IOPlatformExpert.cpo.json',
+              'uefi-amethyst/Build/**/DarwinBoot.efi',
+              'uefi-amethyst/Build/**/DarwinBoot.debug',
+              'uefi-amethyst/Build/**/FV/SILICIUM_UEFI.fd',
+              'uefi-amethyst/Build/**/BuildLog.txt',
+          ]
+          files = sorted({f for p in patterns for f in glob.glob(p, recursive=True) if os.path.isfile(f)})
+          open(sys.argv[1], 'wb').write(b''.join(f.encode() + b'\0' for f in files))
+          print(len(files), 'files')
+          PY
+          mkdir -p "$RUNNER_TEMP/encrypted"
+          [ -s "$RUNNER_TEMP/files.txt" ] || { echo "::warning::nothing to upload"; exit 0; }
+          tar --null -czf - -T "$RUNNER_TEMP/files.txt" \
+            | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:ARTIFACT_PASSPHRASE \
+              -out "$RUNNER_TEMP/encrypted/ios27-build.tar.gz.enc"
+
+      - name: Upload encrypted build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unixnu-ios27-build-encrypted
+          path: ${{ runner.temp }}/encrypted/ios27-build.tar.gz.enc
+          if-no-files-found: warn
+          retention-days: 7

@@ -76,8 +76,9 @@ def stage(archive, output):
         'ShengGmuSource.h', 'ShengGmuVotesSource.h', 'ShengGmuCommandDbSource.h',
         'ShengGmuFirmware.h', 'ShengSqeFirmware.h', 'ShengZapFirmware.h'}, 'unexpected generated includes')
     # Apply the reviewed board patch only after verifying the pristine source pin.
-    patch = Path(__file__).resolve().parents[1] / 'patches/native-adreno/a810-recovery-isolate-vm.patch'
-    run(['git', '-C', output / 'NativeAdreno', 'apply', '--whitespace=error', patch])
+    patches = Path(__file__).resolve().parents[1] / 'patches/native-adreno'
+    for name in ('a810-recovery-isolate-vm.patch', 'a810-no-replay-on-context-fault.patch'):
+        run(['git', '-C', output / 'NativeAdreno', 'apply', '--whitespace=error', patches / name])
 
 
 def source_inventory(inputs, device):

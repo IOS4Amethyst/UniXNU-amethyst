@@ -1,0 +1,248 @@
+diff --git a/NativeAdrenoDiag.h b/NativeAdrenoDiag.h
+index d589572..5f6eb80 100644
+--- a/NativeAdrenoDiag.h
++++ b/NativeAdrenoDiag.h
+@@ -27,6 +27,18 @@ struct NativeAdrenoClientRecord {char name[20]; uint32_t opens, refused, closes,
+  * For per-PID or per-frame attribution, use a bounded fence/sequence trace instead. */
+ struct NativeAdrenoPacing {uint32_t submitted, fence_seen, skipped;};
+ extern struct NativeAdrenoPacing native_adreno_pacing[8];
++/* Slow head-of-ring jobs (telemetry only): a fence still pending 16 ms or more after its first timed-out wait. head_ms runs from the first
++ * to the last timed-out wait of that fence (not reset while the CP is seen working, unlike native_adreno_fence_pending); submit_ms from
++ * its submission to that last wait (queueing included, 0 when no clock). Both are lower bounds. client is the native_adreno_pacing row
++ * (0xff: none, e.g. the kernel's own jobs or a replayed NOP); ibs/ib_dwords are the indirect buffers the job referenced; stage is the
++ * stall stage reached (0 none, 1 translations dropped and write pointer given again, 3 bus drained) | 0x80 when the 5 ms nudge ran. */
++struct NativeAdrenoSlowJob {uint32_t fence, ib_dwords, head_ms, submit_ms; uint8_t client, ibs, stage, reserved;};
++enum {NativeAdrenoSlowJobs=16, NativeAdrenoSlowClients=9, NativeAdrenoSlowJobMs=16};
++/* Newest NativeAdrenoSlowJobs records (index count % NativeAdrenoSlowJobs), and per client row (row 8: no row): [0] 16-64 ms,
++ * [1] 64 ms or more, [2] of those single-IB jobs, [3] head ms summed. */
++extern volatile struct NativeAdrenoSlowJob native_adreno_slow_job[NativeAdrenoSlowJobs];
++extern volatile uint32_t native_adreno_slow_job_count;
++extern volatile uint32_t native_adreno_slow_client[NativeAdrenoSlowClients][4];
+ /* The last text line (the plugin's failure reason) each process other than the render server streamed: process name and a 64-byte line. */
+ struct NativeAdrenoClientText {char name[20]; char text[64];};
+ extern struct NativeAdrenoMetalDiag native_adreno_metal_diag;
+diff --git a/NativeAdrenoPublish.cpp b/NativeAdrenoPublish.cpp
+index 46e14bf..e6c04ee 100644
+--- a/NativeAdrenoPublish.cpp
++++ b/NativeAdrenoPublish.cpp
+@@ -326,6 +326,7 @@ bool AGXDeviceUserClient::mount(bool kernel)
+             ++g.opened;
+             if(NativeAdrenoClientRecord *record=clientRecord(name_)) {
+                 record->slot=row;
++                NativeAdrenoSubmitPacingRows(native_adreno_pacing);
+                 core_->setPacing(&native_adreno_pacing[record-native_adreno_client_log]);
+             }
+         } else {
+diff --git a/NativeAdrenoSubmit.cpp b/NativeAdrenoSubmit.cpp
+index 7c28d1c..a8f0f0f 100644
+--- a/NativeAdrenoSubmit.cpp
++++ b/NativeAdrenoSubmit.cpp
+@@ -56,6 +56,43 @@ static uint32_t stall_begin_cp_[6];   /* the CP's progress at the stalled fence'
+ extern "C" {volatile uint32_t native_adreno_stall_working;}
+ /* How long fences stayed pending from their first timed-out wait to their last: [i] under 1 << i ms for i < 7, [7] 64 ms or more. */
+ extern "C" {volatile uint32_t native_adreno_fence_pending[8];}
++/* Slow head-of-ring jobs (NativeAdrenoDiag.h). Telemetry only: nothing here changes a wait's result, the stall stages or retirement. */
++extern "C" {
++volatile struct NativeAdrenoSlowJob native_adreno_slow_job[NativeAdrenoSlowJobs];
++volatile uint32_t native_adreno_slow_job_count;
++volatile uint32_t native_adreno_slow_client[NativeAdrenoSlowClients][4];
++}
++/* The head job as it was when its stall began (the job may be released before the stall is closed). */
++static struct {uint64_t submitted_us;uint32_t ibs,ib_dwords;uint8_t client;} stall_job;
++/* The eight pacing rows (NativeAdrenoPublish.cpp owns them and names them here), so a job's row number can be recorded. */
++static const NativeAdrenoPacing *pacing_rows;
++void NativeAdrenoSubmitPacingRows(const NativeAdrenoPacing *rows) {pacing_rows=rows;}
++static uint8_t pacingRow(const NativeAdrenoPacing *pacing)
++{
++    if(!pacing || !pacing_rows)return 0xff;
++    const uintptr_t at=(uintptr_t)pacing,base=(uintptr_t)pacing_rows;
++    if(at<base || at>=base+8*sizeof(NativeAdrenoPacing) || (at-base)%sizeof(NativeAdrenoPacing))return 0xff;
++    return (uint8_t)((at-base)/sizeof(NativeAdrenoPacing));
++}
++/* Called once per closed stall, before the stall state is reset. */
++static void noteSlowJob(uint32_t fence,uint64_t first_us,uint64_t last_us,uint32_t stage,bool nudged)
++{
++    if(!first_us || last_us<first_us)return;   /* no clock, or not one stall's samples */
++    const uint64_t head_ms=(last_us-first_us)/1000;
++    if(head_ms<NativeAdrenoSlowJobMs)return;
++    const uint64_t submit_ms=stall_job.submitted_us && last_us>=stall_job.submitted_us?(last_us-stall_job.submitted_us)/1000:0;
++    const uint32_t row=stall_job.client<8?stall_job.client:8;
++    volatile uint32_t *c=native_adreno_slow_client[row];
++    if(head_ms<64)c[0]=c[0]+1;else c[1]=c[1]+1;
++    if(stall_job.ibs==1)c[2]=c[2]+1;
++    c[3]=c[3]+(uint32_t)(head_ms>UINT32_MAX?UINT32_MAX:head_ms);
++    const uint32_t n=native_adreno_slow_job_count;
++    volatile NativeAdrenoSlowJob &r=native_adreno_slow_job[n%NativeAdrenoSlowJobs];
++    r.fence=fence;r.ib_dwords=stall_job.ib_dwords;
++    r.head_ms=(uint32_t)(head_ms>UINT32_MAX?UINT32_MAX:head_ms);r.submit_ms=(uint32_t)(submit_ms>UINT32_MAX?UINT32_MAX:submit_ms);
++    r.client=stall_job.client;r.ibs=(uint8_t)(stall_job.ibs>255?255:stall_job.ibs);r.stage=(uint8_t)((stage&0x7f)|(nudged?0x80:0));r.reserved=0;
++    native_adreno_slow_job_count=n+1;
++}
+ /* What the stall handler tried: [0] attempts, [1] the fence of the last attempt, [2] attempts after which that fence completed, [3] the
+  * timed-out waits that fence had seen when it did. */
+ /* [4] bus drains, [5] client halt acknowledge, [6] arbiter halt acknowledge, [7] the fence of the last drain, [8] drains after which that fence completed */
+@@ -185,6 +222,7 @@ IOReturn NativeAdrenoSubmit::submit(NativeAdrenoVm *vm,const NativeAdrenoSubmitB
+     /* Every buffer is validated against the live VM before any reference. */
+     uint64_t *handles=scratch_handles_;size_t handle_count=0;
+     uint32_t *words=scratch_words_;size_t word_count=0;
++    uint64_t ib_dwords=0;
+     static_assert(sizeof(scratch_words_)/sizeof(scratch_words_[0])>=SubmitMaxBuffers*(1+SubmitIbWords),"ring words");
+     for(size_t i=0;i<count;++i) {
+         const NativeAdrenoSubmitBuffer &buffer=buffers[i];
+@@ -202,6 +240,7 @@ IOReturn NativeAdrenoSubmit::submit(NativeAdrenoVm *vm,const NativeAdrenoSubmitB
+         words[word_count++]=(uint32_t)buffer.iova;
+         words[word_count++]=(uint32_t)(buffer.iova>>32);
+         words[word_count++]=(uint32_t)(buffer.bytes/4);
++        ib_dwords+=buffer.bytes/4;
+         bool known=false;
+         for(size_t j=0;j<handle_count;++j)if(handles[j]==buffer.handle) {known=true;break;}
+         if(!known)handles[handle_count++]=buffer.handle;
+@@ -314,6 +353,8 @@ IOReturn NativeAdrenoSubmit::submit(NativeAdrenoVm *vm,const NativeAdrenoSubmitB
+     for(size_t i=0;i<word_count;++i)job->words[i]=words[i];
+     ++stats_.submissions;
+     job->pacing=pacing;
++    job->submitted_us=clock && clock->now_us?clock->now_us(clock->cookie):0;
++    job->ib_count=(uint32_t)count;job->ib_dwords=(uint32_t)(ib_dwords>UINT32_MAX?UINT32_MAX:ib_dwords);
+     if(pacing)__atomic_fetch_add(&pacing->submitted,1,__ATOMIC_RELAXED);
+     if(outstanding()>stats_.peak_jobs)stats_.peak_jobs=outstanding();
+     *fence=value;
+@@ -352,6 +393,12 @@ void NativeAdrenoSubmit::noteStall(uint32_t observed,const NativeAdrenoRingClock
+             const uint64_t ms=(stall_last_us-stall_began_us)/1000;
+             uint32_t bucket=0;while(bucket<7 && ms>=(1ull<<bucket))++bucket;
+             native_adreno_fence_pending[bucket]=native_adreno_fence_pending[bucket]+1;
++            noteSlowJob(stall_fence,stall_first_us,stall_last_us,stall_stage,stall_nudged);
++        }
++        {
++            const Job *head=find(next);
++            stall_job.submitted_us=head?head->submitted_us:0;stall_job.ibs=head?head->ib_count:0;
++            stall_job.ib_dwords=head?head->ib_dwords:0;stall_job.client=head?pacingRow(head->pacing):0xff;
+         }
+         stall_began_us=now;stall_first_us=now;stall_snapshots=0;stall_nudged=false;
+         /* The CP moved on: what the stall that just ended took to clear. [9] first-stage recoveries, [10] second, [11] third, [12] timeouts of the longest. */
+diff --git a/NativeAdrenoSubmit.h b/NativeAdrenoSubmit.h
+index a0c5105..0f4438e 100644
+--- a/NativeAdrenoSubmit.h
++++ b/NativeAdrenoSubmit.h
+@@ -34,6 +34,8 @@ struct NativeAdrenoSubmitStats {
+     size_t references_held,references_retired,peak_jobs;
+ };
+ struct NativeAdrenoPacing;
++/* The pacing rows a job's pacing pointer may point into (eight), for the slow-job record's row number; unset: rows are not named. */
++void NativeAdrenoSubmitPacingRows(const NativeAdrenoPacing *rows);
+ /* Kernel-side execbuf: turns validated indirect buffers into one ring
+  * submission and owns a device reference per distinct buffer until the
+  * timestamp fence is actually observed. This is not a userspace ABI and not a
+@@ -48,6 +50,8 @@ class NativeAdrenoSubmit final {
+     struct Job {
+         uint32_t fence=0;
+         NativeAdrenoPacing *pacing=nullptr;
++        uint64_t submitted_us=0;               /* the clock at submission (0: none), for native_adreno_slow_job */
++        uint32_t ib_count=0,ib_dwords=0;       /* the indirect buffers it referenced */
+         size_t count=0;
+         uint64_t handles[NativeAdrenoSubmitMaxBuffers]{};
+         uint64_t queue=0;
+diff --git a/tests/test_submit.cpp b/tests/test_submit.cpp
+index 675cb1f..25b5df1 100644
+--- a/tests/test_submit.cpp
++++ b/tests/test_submit.cpp
+@@ -9,6 +9,10 @@
+ #define SMMU_BYTES 0x40000
+ #define CB 0x22000
+ extern "C" volatile uint64_t native_adreno_hang_job[9];
++#include "NativeAdrenoDiag.h"
++extern "C" volatile uint32_t native_adreno_unstick[15];
++/* Stand-in for the pacing rows NativeAdrenoPublish.cpp owns (not linked here). */
++static NativeAdrenoPacing pacing_fixture[8];
+ IOReturn NativeAdrenoQueryCpu4K(NativeAdrenoCpuState *out)
+ {CHECK(out);*out={};return kIOReturnSuccess;}
+ IOReturn NativeAdrenoMaintainOwnedPages(void *mapping,size_t bytes,NativeAdrenoCacheOperation op)
+@@ -340,7 +344,89 @@ int main()
+         fixture.cache_fail_call=0;
+         CHECK(p.submit.recover(restart,nullptr,&ringclock,&result)==kIOReturnIOError && p.submit.poisoned());
+     }
++    /* Slow head-of-ring job telemetry: a stall is recorded when the next fence's first timed-out wait closes it; under 16 ms is not;
++     * the record names the pacing row, IBs and both lower-bound times; wait results and the stall stages are unchanged; the ring wraps. */
++    {
++        Path p;CHECK(exposed(p)==kIOReturnSuccess);
++        NativeAdrenoSubmitPacingRows(pacing_fixture);
++        NativeAdrenoSubmitBuffer one{p.handle,0x800000,4096},two[2]={{p.handle,0x800000,1024},{p.handle,0x801000,512}};
++        /* The stall tracker is file-static and every Path restarts at fence 1 (the kernel's fences only grow): a filler fence makes A's
++         * first timed-out wait a real change of head whatever the blocks above left behind; the counts are taken after it. */
++        uint32_t filler=0,a=0,b=0,c=0;
++        clock_us=500;
++        CHECK(p.submit.submit(&p.vm,&one,1,0,&filler,&ringclock,nullptr)==kIOReturnSuccess && filler==1);
++        CHECK(p.submit.wait(filler,&ringclock,0)==kIOReturnTimeout);
++        fencemem[1]=filler;CHECK(p.submit.wait(filler,&ringclock,0)==kIOReturnSuccess);
++        clock_us=1000;
++        CHECK(p.submit.submit(&p.vm,&one,1,0,&a,&ringclock,&pacing_fixture[2])==kIOReturnSuccess && a==2);
++        clock_us=3000;CHECK(p.submit.wait(a,&ringclock,0)==kIOReturnTimeout);   /* first timed-out wait: A is the head */
++        const uint32_t base=native_adreno_slow_job_count;
++        uint32_t row2[4],none[4];
++        std::memcpy(row2,(const void *)native_adreno_slow_client[2],sizeof row2);std::memcpy(none,(const void *)native_adreno_slow_client[8],sizeof none);
++        clock_us=30000;CHECK(p.submit.wait(a,&ringclock,0)==kIOReturnTimeout);  /* 27 ms at the head, nudged at 5 ms */
++        fencemem[1]=a;CHECK(p.submit.wait(a,&ringclock,0)==kIOReturnSuccess);
++        CHECK(native_adreno_slow_job_count==base);   /* not closed until the next fence's timed-out wait */
++        CHECK(p.submit.submit(&p.vm,two,2,0,&b,&ringclock,nullptr)==kIOReturnSuccess && b==3);
++        clock_us=31000;CHECK(p.submit.wait(b,&ringclock,0)==kIOReturnTimeout);
++        CHECK(native_adreno_slow_job_count==base+1);
++        {
++            const volatile NativeAdrenoSlowJob &r=native_adreno_slow_job[base%NativeAdrenoSlowJobs];
++            CHECK(r.fence==a && r.client==2 && r.ibs==1 && r.ib_dwords==1024 && r.head_ms==27 && r.submit_ms==29 && r.stage==0x80);
++        }
++        CHECK(native_adreno_slow_client[2][0]==row2[0]+1 && native_adreno_slow_client[2][1]==row2[1] &&
++              native_adreno_slow_client[2][2]==row2[2]+1 && native_adreno_slow_client[2][3]==row2[3]+27);
++        /* B leaves after 4 ms: counted by native_adreno_fence_pending as before, not recorded here. */
++        clock_us=35000;CHECK(p.submit.wait(b,&ringclock,0)==kIOReturnTimeout);
++        fencemem[1]=b;CHECK(p.submit.wait(b,&ringclock,0)==kIOReturnSuccess);
++        CHECK(p.submit.submit(&p.vm,&one,1,0,&c,&ringclock,&pacing_fixture[2])==kIOReturnSuccess && c==4);
++        clock_us=36000;CHECK(p.submit.wait(c,&ringclock,0)==kIOReturnTimeout);
++        CHECK(native_adreno_slow_job_count==base+1);
++        /* C stays 70 ms: the 50 ms stage still runs (unchanged), and the record says so. No pacing row on the next job: row 8. */
++        const uint32_t kicks=native_adreno_unstick[0];
++        clock_us=106000;CHECK(p.submit.wait(c,&ringclock,0)==kIOReturnTimeout);
++        CHECK(native_adreno_unstick[0]==kicks+1);
++        fencemem[1]=c;CHECK(p.submit.wait(c,&ringclock,0)==kIOReturnSuccess);
++        uint32_t f=0;
++        CHECK(p.submit.submit(&p.vm,two,2,0,&f,&ringclock,nullptr)==kIOReturnSuccess && f==5);
++        clock_us=107000;CHECK(p.submit.wait(f,&ringclock,0)==kIOReturnTimeout);
++        CHECK(native_adreno_slow_job_count==base+2);
++        {
++            const volatile NativeAdrenoSlowJob &r=native_adreno_slow_job[(base+1)%NativeAdrenoSlowJobs];
++            CHECK(r.fence==c && r.client==2 && r.head_ms==70 && r.submit_ms==71 && r.stage==(1|0x80));
++        }
++        CHECK(native_adreno_slow_client[2][1]==row2[1]+1 && native_adreno_slow_client[2][2]==row2[2]+2);
++        /* Twenty more 20 ms jobs without a pacing row: the newest sixteen are kept, the count keeps going, row 8 counts all. */
++        for(unsigned k=0;k<20;++k) {
++            const uint32_t head=f;
++            clock_us+=20000;CHECK(p.submit.wait(head,&ringclock,0)==kIOReturnTimeout);
++            fencemem[1]=head;CHECK(p.submit.wait(head,&ringclock,0)==kIOReturnSuccess);
++            CHECK(p.submit.submit(&p.vm,two,2,0,&f,&ringclock,nullptr)==kIOReturnSuccess && f==head+1);
++            clock_us+=1000;CHECK(p.submit.wait(f,&ringclock,0)==kIOReturnTimeout);
++        }
++        CHECK(native_adreno_slow_job_count==base+22);
++        CHECK(native_adreno_slow_client[8][0]==none[0]+20 && native_adreno_slow_client[8][2]==none[2]);
++        {
++            const volatile NativeAdrenoSlowJob &r=native_adreno_slow_job[(base+21)%NativeAdrenoSlowJobs];
++            CHECK(r.fence==f-1 && r.client==0xff && r.ibs==2 && r.ib_dwords==384 && r.head_ms==20);
++        }
++        /* A submission without a clock records no submit time. */
++        fencemem[1]=f;CHECK(p.submit.wait(f,&ringclock,0)==kIOReturnSuccess);
++        uint32_t g=0,h=0;
++        CHECK(p.submit.submit(&p.vm,&one,1,0,&g,nullptr,&pacing_fixture[1])==kIOReturnSuccess);
++        clock_us+=1000;CHECK(p.submit.wait(g,&ringclock,0)==kIOReturnTimeout);
++        clock_us+=17000;CHECK(p.submit.wait(g,&ringclock,0)==kIOReturnTimeout);
++        fencemem[1]=g;CHECK(p.submit.wait(g,&ringclock,0)==kIOReturnSuccess);
++        CHECK(p.submit.submit(&p.vm,&one,1,0,&h,&ringclock,nullptr)==kIOReturnSuccess);
++        clock_us+=1000;CHECK(p.submit.wait(h,&ringclock,0)==kIOReturnTimeout);
++        {
++            const volatile NativeAdrenoSlowJob &r=native_adreno_slow_job[(base+22)%NativeAdrenoSlowJobs];
++            CHECK(native_adreno_slow_job_count==base+23 && r.fence==g && r.client==1 && r.head_ms==17 && r.submit_ms==0);
++        }
++        fencemem[1]=h;CHECK(p.submit.wait(h,&ringclock,0)==kIOReturnSuccess);
++        CHECK(p.submit.outstanding()==0 && !p.submit.poisoned() && p.submit.detach()==kIOReturnSuccess);
++    }
+     std::printf("PASS: submit, hang replay, failed restart, and poisoned process VM isolation\n");
++    std::printf("PASS: slow head-of-ring job telemetry\n");
+ }
+ /* Physical-page maintenance (imported BOs): record it; no host page is touched. */
+ /* Host double: the page attribute change of user BOs has no host equivalent (no host page is touched). */

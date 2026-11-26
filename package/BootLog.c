@@ -219,6 +219,12 @@ struct native_adreno_client_record {char name[20]; uint32_t opens, refused, clos
 extern struct native_adreno_client_record native_adreno_client_log[8] __attribute__((weak_import));
 struct native_adreno_pacing {uint32_t submitted, fence_seen, skipped;};
 extern struct native_adreno_pacing native_adreno_pacing[8] __attribute__((weak_import));
+// Slow head-of-ring jobs (NativeAdreno a810-slow-job-trace.patch, NativeAdrenoSlowJob in NativeAdrenoDiag.h): newest 16 records, and per pacing
+// row (row 8: no row) [0] 16-64 ms, [1] 64 ms or more, [2] single-IB jobs among them, [3] head ms summed. Both times are lower bounds.
+struct native_adreno_slow_job {uint32_t fence, ib_dwords, head_ms, submit_ms; uint8_t client, ibs, stage, reserved;};
+extern volatile struct native_adreno_slow_job native_adreno_slow_job[16] __attribute__((weak_import));
+extern volatile uint32_t native_adreno_slow_job_count __attribute__((weak_import));
+extern volatile uint32_t native_adreno_slow_client[9][4] __attribute__((weak_import));
 struct native_adreno_client_text {char name[20]; char text[64];};
 extern struct native_adreno_client_text native_adreno_client_text[8] __attribute__((weak_import));
 extern volatile uint32_t native_adreno_mount_fail[4] __attribute__((weak_import));
@@ -830,6 +836,29 @@ static size_t compose(char *out, size_t cap, uint32_t slot, unsigned now) {
       snprintf(row, sizeof row, "[gpu pace] %.19s submitted=%u fence-seen=%u skipped=%u", native_adreno_client_log[i].name,
                submitted, __atomic_load_n(&p->fence_seen, __ATOMIC_RELAXED), __atomic_load_n(&p->skipped, __ATOMIC_RELAXED));
       at = put(out, at, cap, row, sizeof row);
+    }
+  }
+  // [gpu slow] per client: jobs that stayed 16-64 ms / 64 ms or more at the head of the ring, how many of them had one IB, and their head
+  // time summed (ms). [gpu slow job] the newest eight: total count, fence, client, head and submit-to-last-wait ms (lower bounds), IBs,
+  // IB dwords, stall stage (| 80: write pointer nudged at 5 ms). Rows are telemetry: they do not identify a frame or a visible delay.
+  if (log_gpu_on && &native_adreno_client_log && &native_adreno_slow_client && &native_adreno_slow_job && &native_adreno_slow_job_count) {
+    char row[400];
+    size_t used = (size_t)snprintf(row, sizeof row, "[gpu slow]");
+    for (unsigned i = 0; i < 9 && used < sizeof row; ++i) {
+      const volatile uint32_t *c = native_adreno_slow_client[i];
+      if (!c[0] && !c[1]) continue;
+      const char *name = i < 8 && native_adreno_client_log[i].name[0] ? native_adreno_client_log[i].name : "-";
+      used += (size_t)snprintf(row + used, sizeof row - used, " %.19s %u/%u 1ib=%u ms=%u", name, c[0], c[1], c[2], c[3]);
+    }
+    at = put(out, at, cap, row, sizeof row);
+    const uint32_t n = native_adreno_slow_job_count, first = n > 8 ? n - 8 : 0;
+    for (uint32_t k = first; k < n; ++k) {
+      const volatile struct native_adreno_slow_job *r = &native_adreno_slow_job[k % 16];
+      const char *name = r->client < 8 && native_adreno_client_log[r->client].name[0] ? native_adreno_client_log[r->client].name : "-";
+      char line[140];
+      snprintf(line, sizeof line, "[gpu slow job] #%u f=%u %.19s head=%ums sub=%ums ibs=%u dw=%u st=%x", (unsigned)k + 1, r->fence, name,
+               r->head_ms, r->submit_ms, r->ibs, r->ib_dwords, r->stage);
+      at = put(out, at, cap, line, sizeof line);
     }
   }
   // [exc]: the last four user exceptions of the processes sheng-exc-name lists (oldest first): name[pid] type, pc, lr, far, esr, then the

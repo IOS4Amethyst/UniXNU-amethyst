@@ -450,6 +450,7 @@ findings = [
   "b43 observed WPSS startup; b49, b50, b51 and b53 recorded GLINK version agreement.",
   "The IPCRTR candidate handles one early peer OPEN and does not advertise intents or exchange QRTR packets.",
   "D94 b54 received a peer OPEN after version agreement but rejected it before ACK. The follow-up logs the header and up to seven published name bytes without changing validation.",
+  "D94 b55 identified the first OPEN as an unrelated channel with prefix LOOPBAC. The host-tested filter skips complete, bounded unregistered OPENs without acknowledging them and still opens only IPCRTR.",
 ]
 completion = [
   "Scanning, association, address configuration and sustained receive/transmit traffic pass with the selected firmware.",
@@ -687,7 +688,7 @@ procedure = [
 findings = [
   "D94 adds current-boot GPU and display logs, prelink checks and host fixtures for the D94 ABI and timing. Swap logs distinguish missing offer timestamps from observed retirements.",
   "The D94 GPU log places per-client pacing counters alongside global display-copy totals without treating the copies as app-specific.",
-  "WPSS stage 4 row 40 retains the last OPEN header and a bounded name prefix alongside the row 42 result.",
+  "WPSS stage 4 row 40 retains the last OPEN header, bounded name prefix and ignored-OPEN count alongside the row 42 result.",
   "The recovery relink verifies the downloaded qualification digest, all GPU archive members and private-header provenance before linking.",
   "The context-fault replay relink pins both the encrypted artifact and archive digest from qualification run 45546635968.",
   "The recovery log retains a pre-reset job snapshot independently of later fence wait timeouts. The pacing/IPCRTR relink pins both digests from qualification run 45740068404.",

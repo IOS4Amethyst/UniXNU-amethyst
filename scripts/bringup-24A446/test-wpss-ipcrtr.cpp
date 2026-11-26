@@ -2,8 +2,8 @@
 #include "../../package/touch/WpssIpcrtrOpen.h"
 #include <cassert>
 
-struct Peer {
-    uint32_t d[4]{},tx[8]{},rx[8]{};
+template<unsigned RxWords=8> struct Peer {
+    uint32_t d[4]{},tx[8]{},rx[RxWords]{};
     WpssVersion v{d,tx,rx,sizeof tx,sizeof rx};
     WpssIpcrtrOpen channel{v};
     unsigned kicks=0;
@@ -18,6 +18,20 @@ struct Peer {
 };
 
 int main() {
+    // b55 saw an 18-byte unregistered OPEN beginning with LOOPBAC. Model
+    // a complete wrapped name of that size, then an exact IPCRTR OPEN.
+    Peer<16> other;
+    other.negotiated();
+    other.d[2]=other.d[3]=56;
+    other.frame(0x10002,18);
+    other.frame(0x504f4f4c,0x5f4b4341); // LOOPBACK_
+    assert(other.step()==0 && other.d[2]==56 && !other.channel.ignoredOpens && !other.kicks);
+    other.frame(0x5254534d,0x44433231);
+    other.frame(0x00000045,0);
+    assert(other.step()==0 && other.d[2]==24 && other.channel.ignoredOpens==1 && !other.channel.rcid && !other.kicks);
+    other.open();
+    assert(other.step()==0 && other.channel.rcid==42 && other.channel.ackSent && other.kicks==1);
+    assert(other.tx[0]==0x2a0004);
     // Wrapped OPEN is queued between VERSION and VERSION_ACK; no channel TX before version agreement.
     Peer p;
     p.d[0]=p.d[1]=16;

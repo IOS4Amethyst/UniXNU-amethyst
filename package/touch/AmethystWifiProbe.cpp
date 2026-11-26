@@ -401,9 +401,9 @@ void stage2(void *,int) {
         for(unsigned i=0;i<500 && !rc;++i){rc=channel.step(kick);if(!rc)IOSleep(10);}
         if(channel.openHeader) {
             const auto &n=channel.openName;
-            stepLog("AmethystWifi: s4 OPEN hdr=%08x arg=%08x n=%u prefix=%02x%02x%02x%02x%02x%02x%02x\n",
+            stepLog("AmethystWifi: s4 OPEN hdr=%08x arg=%08x n=%u prefix=%02x%02x%02x%02x%02x%02x%02x ignored=%u\n",
                 channel.openHeader,channel.openArg,(unsigned)channel.openNameBytes,
-                (unsigned)n[0],(unsigned)n[1],(unsigned)n[2],(unsigned)n[3],(unsigned)n[4],(unsigned)n[5],(unsigned)n[6]);
+                (unsigned)n[0],(unsigned)n[1],(unsigned)n[2],(unsigned)n[3],(unsigned)n[4],(unsigned)n[5],(unsigned)n[6],channel.ignoredOpens);
         }
         resultLog("AmethystWifi: s4 IPCRTR rc=%d v=%u/%u/%u peer=%u ack=%u open=%u last=%u\n",
             rc,(unsigned)link.sent,(unsigned)link.replied,(unsigned)link.agreed,

@@ -9,6 +9,7 @@ struct WpssIpcrtrOpen {
     explicit WpssIpcrtrOpen(WpssVersion &version):link(version) {}
     uint16_t rcid=0, last=0xffff;
     uint32_t openHeader=0, openArg=0;
+    unsigned ignoredOpens=0;
     uint8_t openName[7]={}, openNameBytes=0;
     bool ackSent=false, openSent=false, openAcked=false;
 
@@ -38,18 +39,30 @@ struct WpssIpcrtrOpen {
             case 2: { // OPEN: low 16 bits are length; high bits can carry priority.
                 // Record only published bytes, capped at the expected name size.
                 const uint32_t available=rh>rt?rh-rt:rn-rt+rh;
+                const uint32_t length=arg&0xffff;
+                auto nameByte=[&](uint32_t i) {
+                    const uint32_t at=advance(rt,8+i,rn);
+                    return uint8_t(link.rx[at/4]>>((at&3)*8));
+                };
                 openHeader=hdr;openArg=arg;openNameBytes=0;
                 for(auto &byte:openName)byte=0;
-                for(uint32_t i=0;i<sizeof openName && i<(arg&0xffff) && i+8<available;++i) {
-                    const uint32_t at=advance(rt,8+i,rn);
-                    openName[openNameBytes++]=uint8_t(link.rx[at/4]>>((at&3)*8));
+                for(uint32_t i=0;i<sizeof openName && i<length && i+8<available;++i)
+                    openName[openNameBytes++]=nameByte(i);
+                if(!cid || length<2 || length>32)return -3;
+                size=(8+length+7)&~7u;
+                if(size>=rn)return -3; // Preserve the FIFO's full/empty gap.
+                if(available<size)return 0;
+                for(uint32_t i=0;i<length;++i)
+                    if((nameByte(i)==0)!=(i==length-1))return -3;
+                const bool matches=length==7 && link.rx[advance(rt,8,rn)/4]==name0 &&
+                    (link.rx[advance(rt,8,rn)/4+1]&0xffffff)==name1;
+                if(!matches) {
+                    if(cid==rcid)return -3; // Don't accept a rename of the tracked channel.
+                    ++ignoredOpens; // Like Sheng: consume a complete unregistered OPEN, without ACK.
+                    break;
                 }
-                if(!cid || (arg&0xffff)!=7 || (rcid && rcid!=cid))return -3;
-                if(available<16)return 0;
-                if(link.rx[advance(rt,8,rn)/4]!=name0 ||
-                   (link.rx[advance(rt,8,rn)/4+1]&0xffffff)!=name1)return -3;
+                if(rcid && rcid!=cid)return -3;
                 rcid=cid; // Stash even before VERSION_ACK, so it cannot block version frames behind it.
-                size=16;
                 break;
             }
             case 4: // OPEN_ACK echoes our local, not the remote, CID.

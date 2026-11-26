@@ -687,6 +687,7 @@ procedure = [
 findings = [
   "D94 adds current-boot GPU and display logs, prelink checks and host fixtures for the D94 ABI and timing. Swap logs distinguish missing offer timestamps from observed retirements.",
   "The D94 GPU log places per-client pacing counters alongside global display-copy totals without treating the copies as app-specific.",
+  "WPSS stage 4 row 40 retains the last OPEN header and a bounded name prefix alongside the row 42 result.",
   "The recovery relink verifies the downloaded qualification digest, all GPU archive members and private-header provenance before linking.",
   "The context-fault replay relink pins both the encrypted artifact and archive digest from qualification run 45546635968.",
   "The recovery log retains a pre-reset job snapshot independently of later fence wait timeouts. The pacing/IPCRTR relink pins both digests from qualification run 45740068404.",

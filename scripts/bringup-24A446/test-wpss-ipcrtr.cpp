@@ -58,6 +58,15 @@ int main() {
     p.frame(0x10004);p.frame(0x2a0005,1); // Following non-channel frame remains unread.
     assert(p.step()==1 && p.d[2]==16 && p.channel.openAcked && p.kicks==7);
     assert(p.step()==1 && p.d[2]==16 && p.kicks==7);
+    uint32_t count=0,first=0,largest=0;
+    assert(p.channel.peekIntents(count,first,largest)==0 && !count && p.d[2]==16);
+    p.frame(0x800,9);
+    assert(p.channel.peekIntents(count,first,largest)==1 && count==1 && first==9 && largest==0x800);
+    assert(p.d[2]==16 && p.kicks==7); // Read-only, including a batch that wraps.
+    p.rx[5]=0xffffffff;
+    assert(p.channel.peekIntents(count,first,largest)==-3 && !count && p.d[2]==16);
+    p.rx[4]=0x2b0005;
+    assert(p.channel.peekIntents(count,first,largest)==-2 && !count && p.d[2]==16);
 
     Peer q;
     q.negotiated();

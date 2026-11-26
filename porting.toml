@@ -451,15 +451,16 @@ findings = [
   "The IPCRTR candidate handles one early peer OPEN and does not advertise intents or exchange QRTR packets.",
   "D94 b54 received a peer OPEN after version agreement but rejected it before ACK. The follow-up logs the header and up to seven published name bytes without changing validation.",
   "D94 b55 identified the first OPEN as an unrelated channel with prefix LOOPBAC. The host-tested filter skips complete, bounded unregistered OPENs without acknowledging them and still opens only IPCRTR.",
+  "D94 b56 skipped one unrelated OPEN and completed bilateral IPCRTR OPEN/ACK. Opt-in mode 5 adds a read-only observation of the first queued peer intent batch without advertising any local buffers.",
 ]
 completion = [
   "Scanning, association, address configuration and sustained receive/transmit traffic pass with the selected firmware.",
 ]
 limits = [
-  "IPCRTR OPEN/ACK compiled for D94 but is not yet verified on hardware. QRTR, WLFW, data path and connectivity are not implemented.",
+  "IPCRTR OPEN/ACK was verified on b56. Peer intents have not been observed on hardware; local advertisement, QRTR, WLFW, data path and connectivity are not implemented.",
 ]
 next_action = [
-  "Qualify the OPEN diagnostic and compare row 40 with row 42 after an authorized RAM boot.",
+  "Qualify mode 5 and compare row 41 with the confirmed channel result in row 42 after an authorized RAM boot.",
 ]
 evidence = []
 
@@ -689,6 +690,7 @@ findings = [
   "D94 adds current-boot GPU and display logs, prelink checks and host fixtures for the D94 ABI and timing. Swap logs distinguish missing offer timestamps from observed retirements.",
   "The D94 GPU log places per-client pacing counters alongside global display-copy totals without treating the copies as app-specific.",
   "WPSS stage 4 row 40 retains the last OPEN header, bounded name prefix and ignored-OPEN count alongside the row 42 result.",
+  "WPSS stage 5 row 41 reports whether the first queued peer frame advertises receive buffers, without advancing the FIFO.",
   "The recovery relink verifies the downloaded qualification digest, all GPU archive members and private-header provenance before linking.",
   "The context-fault replay relink pins both the encrypted artifact and archive digest from qualification run 45546635968.",
   "The recovery log retains a pre-reset job snapshot independently of later fence wait timeouts. The pacing/IPCRTR relink pins both digests from qualification run 45740068404.",

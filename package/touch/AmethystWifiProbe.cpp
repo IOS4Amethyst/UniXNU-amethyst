@@ -43,7 +43,7 @@ constexpr uint16_t kSmp2pIn=0x269,kSmp2pOut=0x268,kGlinkDesc=478,kGlinkTx=479,kG
 struct Part { uint32_t offset,bytes,uncached,cached,cacheline; uint16_t host0,host1; };
 
 uintptr_t gVa;
-bool gStage3,gIpcrtr;
+bool gStage3,gIpcrtr,gPeekIntents;
 uint32_t rd32(uint32_t off) { uint32_t v; const uintptr_t a=gVa+off; __asm__ volatile("ldr %w0, [%1]" : "=r"(v) : "r"(a) : "memory"); return v; }
 uint16_t rd16(uint32_t off) { return (uint16_t)(rd32(off&~3u)>>((off&2)*8)); }
 bool span(uint32_t limit,uint32_t off,uint32_t n) { return off<=limit && n<=limit-off; }
@@ -408,6 +408,12 @@ void stage2(void *,int) {
         resultLog("AmethystWifi: s4 IPCRTR rc=%d v=%u/%u/%u peer=%u ack=%u open=%u last=%u\n",
             rc,(unsigned)link.sent,(unsigned)link.replied,(unsigned)link.agreed,
             (unsigned)channel.rcid,(unsigned)channel.ackSent,(unsigned)channel.openSent,(unsigned)channel.last);
+        if(gPeekIntents && rc==1) {
+            uint32_t count=0,firstId=0,largest=0;
+            int observed=0;
+            for(unsigned i=0;i<100 && !observed;++i){observed=channel.peekIntents(count,firstId,largest);if(!observed)IOSleep(10);}
+            scmLog("AmethystWifi: s5 intents rc=%d count=%u first=%u max=%u\n",observed,count,firstId,largest);
+        }
     } else {
         for(unsigned i=0;i<500 && !rc;++i){rc=link.step(kick);if(!rc)IOSleep(10);}
         resultLog("AmethystWifi: s3 version rc=%d sent=%u replied=%u agreed=%u\n",rc,link.sent,link.replied,link.agreed);
@@ -423,7 +429,8 @@ extern "C" void amethyst_wifi_probe(void) {
     done=true;
     unsigned mode=2;PE_parse_boot_argn("amethyst-wifi",&mode,sizeof mode);
     if(!mode)return;
-    gIpcrtr=(mode==4);
+    gPeekIntents=(mode==5);
+    gIpcrtr=(mode==4 || gPeekIntents);
     gStage3=(mode==3 || gIpcrtr);
     IOMemoryMap *map=mapDevice(kSmemBase,kSmemBytes,kIOMapInhibitCache|(gStage3?0:kIOMapReadOnly));
     if(!map) { snapshotLog("AmethystWifi: smem map failed\n");return; }

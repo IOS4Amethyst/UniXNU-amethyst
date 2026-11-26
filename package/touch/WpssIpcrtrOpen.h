@@ -13,6 +13,32 @@ struct WpssIpcrtrOpen {
     uint8_t openName[7]={}, openNameBytes=0;
     bool ackSent=false, openSent=false, openAcked=false;
 
+    // Read-only checkpoint: observe the first queued remote intent batch.
+    // Do not advertise receive storage or consume a frame without a live endpoint.
+    int peekIntents(uint32_t &count,uint32_t &firstId,uint32_t &largest) const {
+        count=firstId=largest=0;
+        if(!openAcked)return -1;
+        const uint32_t rt=link.d[2],rh=link.d[3],rn=link.rn;
+        if(rn<24 || ((rn|rt|rh)&7) || rt>=rn || rh>=rn)return -1;
+        if(rt==rh)return 0;
+        WpssVersion::fence();
+        const uint32_t hdr=link.rx[rt/4],n=link.rx[rt/4+1];
+        if((hdr&0xffff)!=5 || (hdr>>16)!=rcid)return -2;
+        if(!n || n>(rn-16)/8)return -3;
+        const uint32_t available=rh>rt?rh-rt:rn-rt+rh;
+        if(available<8+8*n)return 0;
+        uint32_t id=0,maxSize=0;
+        for(uint32_t i=0;i<n;++i) {
+            const uint32_t at=advance(rt,8+8*i,rn)/4;
+            const uint32_t size=link.rx[at];
+            if(!size)return -3;
+            if(!i)id=link.rx[at+1];
+            if(size>maxSize)maxSize=size;
+        }
+        count=n;firstId=id;largest=maxSize;
+        return 1;
+    }
+
     // 0 pending, 1 OPEN in both directions, -1 bad ring, -2 unsupported command, -3 invalid OPEN/ACK.
     template<class Kick> int step(Kick kick) {
         if(openAcked)return 1;

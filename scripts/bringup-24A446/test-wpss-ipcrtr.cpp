@@ -2,8 +2,8 @@
 #include "../../package/touch/WpssIpcrtrOpen.h"
 #include <cassert>
 
-template<unsigned RxWords=8> struct Peer {
-    uint32_t d[4]{},tx[8]{},rx[RxWords]{};
+template<unsigned RxWords=8,unsigned TxWords=8> struct Peer {
+    uint32_t d[4]{},tx[TxWords]{},rx[RxWords]{};
     WpssVersion v{d,tx,rx,sizeof tx,sizeof rx};
     WpssIpcrtrOpen channel{v};
     unsigned kicks=0;
@@ -18,6 +18,31 @@ template<unsigned RxWords=8> struct Peer {
 };
 
 int main() {
+    Peer<16,16> data;
+    data.channel.openAcked=true;data.channel.rcid=2;
+    data.d[0]=24;
+    auto receive=[&]{return data.channel.receiveOne([&]{++data.kicks;});};
+    assert(receive()==0 && !data.channel.advertised && !data.kicks);
+    data.d[0]=0;
+    assert(receive()==0 && data.channel.advertised && data.kicks==1);
+    assert(data.tx[0]==0x10005 && data.tx[1]==1 && data.tx[2]==128 && data.tx[3]==1);
+    data.d[2]=data.d[3]=48;
+    data.frame(0x20005,1);data.frame(128,0);
+    assert(receive()==0 && data.d[2]==0 && data.kicks==1); // Peer intent ID zero.
+    data.frame(0x20009,1);data.frame(5,0);
+    assert(receive()==0 && data.d[2]==0 && data.kicks==1);
+    data.frame(0x04030201,5);
+    data.rx[3]=1;
+    assert(receive()==-3 && data.d[2]==0 && data.kicks==1); // Fragment not accepted.
+    data.rx[3]=0;
+    data.d[0]=32;
+    assert(receive()==0 && data.d[2]==0 && data.kicks==1); // RX_DONE backpressure.
+    data.d[0]=16;
+    assert(receive()==1 && data.d[2]==24 && data.kicks==2);
+    assert(data.tx[4]==0x10006 && data.tx[5]==1 && data.channel.receivedBytes==5);
+    for(unsigned i=0;i<5;++i)assert(data.channel.payload[i]==i+1);
+    assert(receive()==1 && data.kicks==2);
+
     // b55 saw an 18-byte unregistered OPEN beginning with LOOPBAC. Model
     // a complete wrapped name of that size, then an exact IPCRTR OPEN.
     Peer<16> other;

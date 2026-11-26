@@ -13,6 +13,57 @@ struct WpssIpcrtrOpen {
     uint8_t openName[7]={}, openNameBytes=0;
     bool ackSent=false, openSent=false, openAcked=false;
 
+    // ponytail: one local intent and one unfragmented receive; stop before QRTR dispatch.
+    static constexpr uint32_t receiveBytes=128, receiveId=1;
+    bool advertised=false, received=false;
+    uint32_t receivedBytes=0, nextCommand=0xffff;
+    uint8_t payload[receiveBytes]={};
+
+    template<class Kick> int receiveOne(Kick kick) {
+        if(received)return 1;
+        if(!openAcked)return -1;
+        auto d=link.d;
+        const uint32_t tt=d[0],th=d[1],rt=d[2],rh=d[3],tn=link.tn,rn=link.rn;
+        if(tn<40 || rn<24 || ((tn|rn|tt|th|rt|rh)&7) || tt>=tn || th>=tn || rt>=rn || rh>=rn)return -1;
+        WpssVersion::fence();
+        const uint32_t free=tt>th?tt-th:tn-th+tt;
+        if(!advertised) {
+            if(free<32)return 0;
+            const uint32_t at=advance(th,8,tn)/4;
+            link.tx[at]=receiveBytes;link.tx[at+1]=receiveId;
+            link.tx[th/4]=5u|(localCid<<16);link.tx[th/4+1]=1;
+            WpssVersion::fence();d[1]=advance(th,16,tn);WpssVersion::fence();
+            advertised=true;kick();return 0;
+        }
+        if(rt==rh)return 0;
+        const uint32_t hdr=link.rx[rt/4];nextCommand=hdr&0xffff;
+        const uint32_t available=rh>rt?rh-rt:rn-rt+rh;
+        if(nextCommand==5 && (hdr>>16)==rcid) {
+            uint32_t count,first,largest;
+            const int rc=peekIntents(count,first,largest);
+            if(rc!=1)return rc;
+            WpssVersion::fence();d[2]=advance(rt,8+8*count,rn);WpssVersion::fence();
+            return 0; // Not transmitting data: no remote intent table needed yet.
+        }
+        if(nextCommand!=9 || (hdr>>16)!=rcid)return -2;
+        if(link.rx[rt/4+1]!=receiveId)return -3;
+        if(available<16)return 0;
+        const uint32_t at=advance(rt,8,rn)/4;
+        const uint32_t chunk=link.rx[at],left=link.rx[at+1];
+        if(!chunk || chunk>receiveBytes || left)return -3;
+        const uint32_t size=(16+chunk+7)&~7u;
+        if(size>=rn)return -3;
+        if(available<size || free<24)return 0;
+        for(uint32_t i=0;i<chunk;++i) {
+            const uint32_t pos=advance(rt,16+i,rn);
+            payload[i]=uint8_t(link.rx[pos/4]>>((pos&3)*8));
+        }
+        WpssVersion::fence();d[2]=advance(rt,size,rn);
+        receivedBytes=chunk;received=true;
+        publish(th,6u|(localCid<<16),receiveId,8,kick); // No INTENT_REUSE negotiated.
+        return 1;
+    }
+
     // Read-only checkpoint: observe the first queued remote intent batch.
     // Do not advertise receive storage or consume a frame without a live endpoint.
     int peekIntents(uint32_t &count,uint32_t &firstId,uint32_t &largest) const {

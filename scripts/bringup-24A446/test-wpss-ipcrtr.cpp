@@ -50,8 +50,10 @@ int main() {
     q.d[2]=q.d[3]=24;
     q.frame(0x2a0002,0x00010007); // Priority bits are not part of length.
     assert(q.step()==0 && q.d[2]==24 && !q.channel.rcid && !q.kicks);
+    assert(q.channel.openHeader==0x2a0002 && q.channel.openArg==0x10007 && !q.channel.openNameBytes);
     q.frame(0x52435049,0x005254);
     assert(q.step()==0 && q.d[2]==8 && q.channel.ackSent && q.kicks==1);
+    assert(q.channel.openNameBytes==7 && q.channel.openName[0]=='I' && q.channel.openName[5]=='R' && q.channel.openName[6]==0);
     assert(q.step()==0 && !q.channel.openSent && q.kicks==2 && q.tx[2]==13);
     q.d[0]=q.d[1];
     assert(q.step()==0 && q.channel.openSent && q.kicks==3);
@@ -76,8 +78,10 @@ int main() {
     assert(invalid.step()==-2 && !invalid.d[2] && !invalid.kicks);
     invalid.rx[0]=0x2a0002;invalid.rx[1]=0xffff;
     assert(invalid.step()==-3 && !invalid.d[2] && !invalid.kicks);
+    assert(invalid.channel.openArg==0xffff && !invalid.channel.openNameBytes);
     invalid.rx[1]=7;invalid.frame(0x52435049,0x015254); // Missing NUL.
     assert(invalid.step()==-3 && !invalid.d[2] && !invalid.kicks);
+    assert(invalid.channel.openNameBytes==7 && invalid.channel.openName[6]==1);
     invalid.d[3]=32;
     assert(invalid.step()==-1 && !invalid.d[2] && !invalid.kicks);
 }

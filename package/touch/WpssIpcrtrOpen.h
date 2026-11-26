@@ -8,6 +8,8 @@ struct WpssIpcrtrOpen {
     WpssVersion &link;
     explicit WpssIpcrtrOpen(WpssVersion &version):link(version) {}
     uint16_t rcid=0, last=0xffff;
+    uint32_t openHeader=0, openArg=0;
+    uint8_t openName[7]={}, openNameBytes=0;
     bool ackSent=false, openSent=false, openAcked=false;
 
     // 0 pending, 1 OPEN in both directions, -1 bad ring, -2 unsupported command, -3 invalid OPEN/ACK.
@@ -33,14 +35,23 @@ struct WpssIpcrtrOpen {
             const uint32_t arg=link.rx[rt/4+1];
             uint32_t size=8;
             switch(last) {
-            case 2: // OPEN: low 16 bits are length; the reference also permits high priority bits.
+            case 2: { // OPEN: low 16 bits are length; high bits can carry priority.
+                // Record only published bytes, capped at the expected name size.
+                const uint32_t available=rh>rt?rh-rt:rn-rt+rh;
+                openHeader=hdr;openArg=arg;openNameBytes=0;
+                for(auto &byte:openName)byte=0;
+                for(uint32_t i=0;i<sizeof openName && i<(arg&0xffff) && i+8<available;++i) {
+                    const uint32_t at=advance(rt,8+i,rn);
+                    openName[openNameBytes++]=uint8_t(link.rx[at/4]>>((at&3)*8));
+                }
                 if(!cid || (arg&0xffff)!=7 || (rcid && rcid!=cid))return -3;
-                if((rh>rt?rh-rt:rn-rt+rh)<16)return 0;
+                if(available<16)return 0;
                 if(link.rx[advance(rt,8,rn)/4]!=name0 ||
                    (link.rx[advance(rt,8,rn)/4+1]&0xffffff)!=name1)return -3;
                 rcid=cid; // Stash even before VERSION_ACK, so it cannot block version frames behind it.
                 size=16;
                 break;
+            }
             case 4: // OPEN_ACK echoes our local, not the remote, CID.
                 if(!openSent || cid!=localCid || arg)return -3;
                 openAcked=true;

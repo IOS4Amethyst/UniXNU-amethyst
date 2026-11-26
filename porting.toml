@@ -449,15 +449,16 @@ procedure = [
 findings = [
   "b43 observed WPSS startup; b49, b50, b51 and b53 recorded GLINK version agreement.",
   "The IPCRTR candidate handles one early peer OPEN and does not advertise intents or exchange QRTR packets.",
+  "D94 b54 received a peer OPEN after version agreement but rejected it before ACK. The follow-up logs the header and up to seven published name bytes without changing validation.",
 ]
 completion = [
   "Scanning, association, address configuration and sustained receive/transmit traffic pass with the selected firmware.",
 ]
 limits = [
-  "IPCRTR OPEN/ACK has no target build or device verification. QRTR, WLFW, data path and connectivity are not implemented.",
+  "IPCRTR OPEN/ACK compiled for D94 but is not yet verified on hardware. QRTR, WLFW, data path and connectivity are not implemented.",
 ]
 next_action = [
-  "Qualify the IPCRTR candidate for D94 before measuring row 42 in an authorized RAM boot.",
+  "Qualify the OPEN diagnostic and compare row 40 with row 42 after an authorized RAM boot.",
 ]
 evidence = []
 

@@ -41,7 +41,7 @@ procedure = [
   "./unixnu status --json to confirm the resolved overrides and patch order.",
 ]
 findings = [
-  "The D94 iOS 27 bring-up and V60 iPadOS 17 fallback share the device repository; the D94 kernel, GPU and seed workflows run by manual dispatch. The pacing/IPCRTR relink uses the qualified GPU archive from run 45740068404.",
+  "The D94 iOS 27 bring-up and V60 iPadOS 17 fallback share the device repository; the D94 kernel, GPU and seed workflows run by manual dispatch. The slow-job trace relink uses the qualified GPU archive from run 45880386281 (pacing/IPCRTR: 45740068404).",
   "Sm7635Platform is not selected: board services are provided by board-package code and test kernels instead.",
   "The board ADT keeps arm_io_base 0x01000000; a zero parent base made pe_identify_machine return early and skip clock-frequency initialisation.",
   "drivers/Adreno740 is fetched from IOS4Amethyst/NativeAdreno (main = 38227e7, the A810 branch of rootstockos/NativeAdreno); the add-on and seed workflows run by hand from main.",
@@ -394,7 +394,7 @@ findings = [
   "The host-tested gpu-replay=0 control skips the stalled job on first recovery while replaying later jobs. The default remains one retry on a progress-only stall.",
   "The A810 soft reset now stops if a required register operation fails; the existing successful operation order is unchanged. The checked source passed ARM Mac object qualification in run 45692009139; hardware behavior remains unverified.",
   "Per-client pacing counters distinguish accepted jobs, observed fences and recovery skips; ARM Mac object qualification passed in run 45740068404. They do not change GPU scheduling or measure panel FPS.",
-  "Host-tested slow-job telemetry records ring fences that stay 16 ms or more at the head (client, IB count and dwords, head and submit-to-wait lower bounds, stall stage) for [gpu slow] and [gpu slow job]. It does not change waits, stall stages, retirement or scheduling.",
+  "Host-tested slow-job telemetry records ring fences that stay 16 ms or more at the head (client, IB count and dwords, head and submit-to-wait lower bounds, stall stage) for [gpu slow] and [gpu slow job]; ARM Mac object qualification passed in run 45880386281. It does not change waits, stall stages, retirement or scheduling.",
   "CX GDSC, SMMU vote and the GMU pool round trip pass once firmware reserves GMU_Pool.",
   "Zap loads through SCM PAS 13 with amethyst's own gen80300_zap.mbn; CP init, CP_MEM_WRITE and the first IB pass.",
   "The sandbox grant matches exact process names: it must name backboardd for the render server to open the GPU.",
@@ -697,7 +697,7 @@ findings = [
   "WPSS stage 6 row 41 reports one-shot receive status, whether a local intent was sent, payload bytes and the last command observed.",
   "The recovery relink verifies the downloaded qualification digest, all GPU archive members and private-header provenance before linking.",
   "The context-fault replay relink pins both the encrypted artifact and archive digest from qualification run 45546635968.",
-  "The recovery log retains a pre-reset job snapshot independently of later fence wait timeouts. The pacing/IPCRTR relink pins both digests from qualification run 45740068404.",
+  "The recovery log retains a pre-reset job snapshot independently of later fence wait timeouts. The slow-job trace relink pins both digests from qualification run 45880386281.",
   "The panic hook does not write UFS; periodic writes continue during normal operation.",
   "The log is found by partition name in recovery because this device keeps its root image in a split partition.",
   "Row 48 shows the swap rejection reason (why=, surface format and planes) once a swap is refused.",

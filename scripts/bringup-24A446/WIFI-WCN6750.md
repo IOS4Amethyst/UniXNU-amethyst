@@ -1,7 +1,7 @@
 # Wi-Fi on amethyst: WCN6750 (qca6750) bring-up plan
 
-Status 2026-11-24 (b43): **stage 2 works: the WPSS boots** (PAS 6 auth_and_reset 0, SMP2P 0x269 and GLINK RX FIFO 480
-appear 100 ms later). Stage 3 (GLINK + QRTR) is next. Earlier: stage 1 ran on b36: the APPS-WPSS partition holds GLINK 478/479 (AP side) but no 480 and no SMP2P items,
+**WPSS boots on b43 and GLINK version agreement was observed on b49/b50/b51/b53.** PAS 6 auth_and_reset returned 0;
+SMP2P 0x269 and GLINK RX FIFO 480 appeared 100 ms later. IPCRTR OPEN/ACK is the next checkpoint. Earlier: stage 1 ran on b36: the APPS-WPSS partition holds GLINK 478/479 (AP side) but no 480 and no SMP2P items,
 so the WPSS is not running. Stage 2 written (`package/touch/AmethystWifiProbe.cpp`): it boots
 the WPSS with PAS id 6 when the GPU addon carries `wpss.mdt` + `wpss.b01..b10` (`addon-trustcache.py addfiles`, stored zlib).
 The UEFI PIL route (uefipil.cfg `FULL_WPSS`, SubsysID 6) is out while PILDxe/UFSDxe stay disabled in amethystPkg.
@@ -28,7 +28,9 @@ Firmware (NON-HLOS.bin, FAT `::/image/qca6750/`, ~12.8 MB folder): `wpss.mdt` + 
 
 ## Linux reference
 
-**Stage 3 version-only probe (host-tested):** `amethyst-wifi=3` runs the b43 boot path, then polls the WPSS GLINK edge for up to five seconds. Row 42 `s3 version rc=1 sent=1 replied=1 agreed=1` means both sides agreed on v1 with no optional features; `rc=0` is a timeout. The default remains stage 2. Channel OPEN is left queued for a future IPCRTR client. No device result yet.
+**Stage 3 version-only probe:** `amethyst-wifi=3` runs the b43 boot path, then polls the WPSS GLINK edge for up to five seconds. Row 42 `s3 version rc=1 sent=1 replied=1 agreed=1` means v1 with no optional features; b49, b50, b51 and b53 recorded this result. `rc=0` is a timeout. Stage 2 remains the default.
+
+**IPCRTR OPEN/ACK candidate (host only):** `amethyst-wifi=4` uses the same five-second budget for version negotiation and a single peer-initiated `IPCRTR` handshake. It retains one early OPEN and uses READ_NOTIF if channel TX is blocked. Row 42 `s4 IPCRTR rc=1 v=1/1/1 peer=<nonzero> ack=1 open=1 last=4` means the peer acknowledged the host's OPEN; `rc=0` means incomplete, and `rc=-1/-2/-3` means invalid ring, unsupported command, or invalid channel control. `last=65535` means no RX header was seen. This is not a live QRTR endpoint: no intents, discovery, WLFW requests or traffic. Unsupported frames stay queued. No target build or phone test.
 
 This is Linux **ath11k** (`drivers/net/wireless/ath/ath11k/ahb.c`, hw rev `ATH11K_HW_WCN6750_HW10`) on SC7280-class SoCs
 (`qcom,wcn6750-wifi`, ChromeOS herobrine), with WPSS booted by `qcom_q6v5_pas` (`qcom,sc7280-wpss-pas`, PAS id 6). Control path:
@@ -53,7 +55,7 @@ DarwinBoot already loads `Payloads/kernel.macho.gpuaddon` and records it in `/ch
 (DarwinBoot.c:684, NativeRamBlock.cpp:435). It is an NGPUADD2 file container (`scripts/bringup-24A446/addon-trustcache.py` reads it).
 Append `wifi/qca6750/wpss.mdt`, `wpss.bNN` and the board file to it; the kernel finds them in that physical range for PAS.
 
-## Stages (each behind a boot argument, RAM-only, default off; boot args are ~1015/1023 chars, so defaults where possible)
+## Bring-up milestones (probe modes above, RAM-only; boot args are ~1015/1023 chars)
 
 1. **SMEM/SMP2P inventory** (read-only): parse SMEM, list the WPSS partition, read SMP2P 0x269 inbound state. Port Trogdor's reader
    with Volcano addresses (SMEM base from the DT `qcom,smem` region).

@@ -217,6 +217,8 @@ extern volatile uint64_t native_adreno_cache_stats[5] __attribute__((weak_import
 // NativeAdrenoPublish.cpp: per process name that opened the GPU, and the processes that asked the Metal discovery for its plugin.
 struct native_adreno_client_record {char name[20]; uint32_t opens, refused, closes, slot, peak_mib, last_refusal;};
 extern struct native_adreno_client_record native_adreno_client_log[8] __attribute__((weak_import));
+struct native_adreno_pacing {uint32_t submitted, fence_seen, skipped;};
+extern struct native_adreno_pacing native_adreno_pacing[8] __attribute__((weak_import));
 struct native_adreno_client_text {char name[20]; char text[64];};
 extern struct native_adreno_client_text native_adreno_client_text[8] __attribute__((weak_import));
 extern volatile uint32_t native_adreno_mount_fail[4] __attribute__((weak_import));
@@ -818,6 +820,17 @@ static size_t compose(char *out, size_t cap, uint32_t slot, unsigned now) {
                                r->peak_mib, r->last_refusal);
     }
     at = put(out, at, cap, row, sizeof row);
+  }
+  if (log_gpu_on && &native_adreno_client_log && &native_adreno_pacing) {
+    for (unsigned i = 0; i < 8 && native_adreno_client_log[i].name[0]; ++i) {
+      const struct native_adreno_pacing *p = &native_adreno_pacing[i];
+      const uint32_t submitted = __atomic_load_n(&p->submitted, __ATOMIC_RELAXED);
+      if (!submitted) continue;
+      char row[112];
+      snprintf(row, sizeof row, "[gpu pace] %.19s submitted=%u fence-seen=%u skipped=%u", native_adreno_client_log[i].name,
+               submitted, __atomic_load_n(&p->fence_seen, __ATOMIC_RELAXED), __atomic_load_n(&p->skipped, __ATOMIC_RELAXED));
+      at = put(out, at, cap, row, sizeof row);
+    }
   }
   // [exc]: the last four user exceptions of the processes sheng-exc-name lists (oldest first): name[pid] type, pc, lr, far, esr, then the
   // return addresses of the frame chain (dyld cache addresses: slide them back offline).

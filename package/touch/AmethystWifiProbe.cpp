@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSD-2-Clause
-// Wi-Fi stages 1-2 (scripts/bringup-24A446/WIFI-WCN6750.md) for the WPSS, the WCN6750's firmware CPU.
+// Wi-Fi probe (scripts/bringup-24A446/WIFI-WCN6750.md) for the WPSS, the WCN6750's firmware CPU.
 //
 // Stage 1 (default): a read-only SMEM inventory. Wire layout from Linux drivers/soc/qcom/smem.c and smp2p.c, structure after
 // chiba233/Trogdor-ipadOS coachz_wifi_smem.h (BSD-2-Clause). Only the public TOC and partitions that include the APPS host (0)
@@ -24,7 +24,7 @@
 #include <pexpert/pexpert.h>
 #include <stdint.h>
 #include <string.h>
-#include "WpssGlinkVersion.h"
+#include "WpssIpcrtrOpen.h"
 
 extern "C" void amethyst_touch_row_at(unsigned index,const char *format,...);
 extern "C" int native_ram_block_gpu_addon(const uint8_t **data,uint64_t *bytes) __attribute__((weak_import));   // NativeRamBlock.cpp
@@ -43,7 +43,7 @@ constexpr uint16_t kSmp2pIn=0x269,kSmp2pOut=0x268,kGlinkDesc=478,kGlinkTx=479,kG
 struct Part { uint32_t offset,bytes,uncached,cached,cacheline; uint16_t host0,host1; };
 
 uintptr_t gVa;
-bool gStage3;
+bool gStage3,gIpcrtr;
 uint32_t rd32(uint32_t off) { uint32_t v; const uintptr_t a=gVa+off; __asm__ volatile("ldr %w0, [%1]" : "=r"(v) : "r"(a) : "memory"); return v; }
 uint16_t rd16(uint32_t off) { return (uint16_t)(rd32(off&~3u)>>((off&2)*8)); }
 bool span(uint32_t limit,uint32_t off,uint32_t n) { return off<=limit && n<=limit-off; }
@@ -394,9 +394,18 @@ void stage2(void *,int) {
     WpssVersion link{};link.d=word(s.desc);link.tx=word(s.tx);link.rx=word(s.rx);
     link.tn=s.txBytes;link.rn=s.rxBytes;
     auto sendID=reinterpret_cast<volatile uint32_t *>(im->getVirtualAddress()+0x0c);
+    auto kick=[&]{*sendID=0x18u<<16;};
     int rc=0;
-    for(unsigned i=0;i<500 && !rc;++i){rc=link.step([&]{*sendID=0x18u<<16;});if(!rc)IOSleep(10);}
-    resultLog("AmethystWifi: s3 version rc=%d sent=%u replied=%u agreed=%u\n",rc,link.sent,link.replied,link.agreed);
+    if(gIpcrtr) {
+        WpssIpcrtrOpen channel(link);
+        for(unsigned i=0;i<500 && !rc;++i){rc=channel.step(kick);if(!rc)IOSleep(10);}
+        resultLog("AmethystWifi: s4 IPCRTR rc=%d v=%u/%u/%u peer=%u ack=%u open=%u last=%u\n",
+            rc,(unsigned)link.sent,(unsigned)link.replied,(unsigned)link.agreed,
+            (unsigned)channel.rcid,(unsigned)channel.ackSent,(unsigned)channel.openSent,(unsigned)channel.last);
+    } else {
+        for(unsigned i=0;i<500 && !rc;++i){rc=link.step(kick);if(!rc)IOSleep(10);}
+        resultLog("AmethystWifi: s3 version rc=%d sent=%u replied=%u agreed=%u\n",rc,link.sent,link.replied,link.agreed);
+    }
     im->release();
 }
 }
@@ -408,7 +417,8 @@ extern "C" void amethyst_wifi_probe(void) {
     done=true;
     unsigned mode=2;PE_parse_boot_argn("amethyst-wifi",&mode,sizeof mode);
     if(!mode)return;
-    gStage3=(mode==3);
+    gIpcrtr=(mode==4);
+    gStage3=(mode==3 || gIpcrtr);
     IOMemoryMap *map=mapDevice(kSmemBase,kSmemBytes,kIOMapInhibitCache|(gStage3?0:kIOMapReadOnly));
     if(!map) { snapshotLog("AmethystWifi: smem map failed\n");return; }
     gVa=(uintptr_t)map->getVirtualAddress();   // kept mapped for stage 2

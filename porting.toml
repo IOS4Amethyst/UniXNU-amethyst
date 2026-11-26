@@ -393,6 +393,7 @@ findings = [
   "b49 resumed GPU work after four resets, but the user observed a SpringBoard restart and artifacts. A host-tested follow-up skips replay of the stalled command buffer when recovery has captured an SMMU context fault; progress-only stalls still allow one retry.",
   "The host-tested gpu-replay=0 control skips the stalled job on first recovery while replaying later jobs. The default remains one retry on a progress-only stall.",
   "The A810 soft reset now stops if a required register operation fails; the existing successful operation order is unchanged. The checked source passed ARM Mac object qualification in run 45692009139; hardware behavior remains unverified.",
+  "Host-tested per-client pacing counters distinguish accepted jobs, observed fences and recovery skips; they do not change GPU scheduling or measure panel FPS.",
   "CX GDSC, SMMU vote and the GMU pool round trip pass once firmware reserves GMU_Pool.",
   "Zap loads through SCM PAS 13 with amethyst's own gen80300_zap.mbn; CP init, CP_MEM_WRITE and the first IB pass.",
   "The sandbox grant matches exact process names: it must name backboardd for the render server to open the GPU.",
@@ -424,8 +425,11 @@ status = "planned"
 components = []
 paths = [
   "package/BluetoothFirmware.*",
+  "package/touch/AmethystWifiProbe.cpp",
   "package/touch/WpssGlinkVersion.h",
+  "package/touch/WpssIpcrtrOpen.h",
   "scripts/bringup-24A446/test-wpss-version.cpp",
+  "scripts/bringup-24A446/test-wpss-ipcrtr.cpp",
   "drivers/Ath12kWifi",
   "package/*Wifi*",
   "package/MhiBoot*",
@@ -433,26 +437,27 @@ paths = [
   "scripts/*mhi*",
 ]
 inputs = [
-  "Wi-Fi and Bluetooth hardware, bus and firmware are not inventoried yet.",
+  "WCN6750 WPSS on the APPS-WPSS GLINK-SMEM edge (SMEM 478/479/480, IPCC 0x18:0); Xiaomi qca6750 WPSS firmware. Bluetooth is out of scope.",
 ]
 configuration = [
   "No network component is selected.",
+  "amethyst-wifi=3 keeps VERSION/ACK only; amethyst-wifi=4 opts into one IPCRTR OPEN/ACK probe.",
 ]
 procedure = [
-  "Inventory the Wi-Fi/Bluetooth chip, bus and firmware from the Android device tree and vendor partitions.",
+  "Boot WPSS from the firmware addon, negotiate GLINK v1, then in mode 4 acknowledge the peer's IPCRTR OPEN and wait for acknowledgment of the host's OPEN.",
 ]
 findings = [
-  "WCN6750 WPSS startup was observed on b43. GLINK negotiation and connectivity remain unverified on D94 hardware.",
-  "No network work has been started.",
+  "b43 observed WPSS startup; b49, b50, b51 and b53 recorded GLINK version agreement.",
+  "The IPCRTR candidate handles one early peer OPEN and does not advertise intents or exchange QRTR packets.",
 ]
 completion = [
   "Scanning, association, address configuration and sustained receive/transmit traffic pass with the selected firmware.",
 ]
 limits = [
-  "Not implemented.",
+  "IPCRTR OPEN/ACK has no target build or device verification. QRTR, WLFW, data path and connectivity are not implemented.",
 ]
 next_action = [
-  "Identify the Wi-Fi chip and its bus from the Android DTB.",
+  "Qualify the IPCRTR candidate for D94 before measuring row 42 in an authorized RAM boot.",
 ]
 evidence = []
 
@@ -679,6 +684,7 @@ procedure = [
 ]
 findings = [
   "D94 adds current-boot GPU and display logs, prelink checks and host fixtures for the D94 ABI and timing. Swap logs distinguish missing offer timestamps from observed retirements.",
+  "The D94 GPU log places per-client pacing counters alongside global display-copy totals without treating the copies as app-specific.",
   "The recovery relink verifies the downloaded qualification digest, all GPU archive members and private-header provenance before linking.",
   "The context-fault replay relink pins both the encrypted artifact and archive digest from qualification run 45546635968.",
   "The recovery log retains a pre-reset job snapshot independently of later fence wait timeouts. The reset-only relink pins both digests from qualification run 45692009139.",

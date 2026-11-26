@@ -1,0 +1,188 @@
+diff --git a/NativeAdrenoDiag.h b/NativeAdrenoDiag.h
+index 69eba7c..d589572 100644
+--- a/NativeAdrenoDiag.h
++++ b/NativeAdrenoDiag.h
+@@ -23,6 +23,10 @@ struct NativeAdrenoOpenRecord {char name[20]; uint32_t type, macf, res, attach,
+ /* One row per process name that opened the plugin type (first eight names): opens granted, refused (sandbox, cap or no free slot),
+  * closes, the slot of its live connection (0xff none), the highest GPU address its mappings reached (MiB) and its last refusal. */
+ struct NativeAdrenoClientRecord {char name[20]; uint32_t opens, refused, closes, slot, peak_mib, last_refusal;};
++/* ponytail: use the existing eight boot-lifetime name rows (not reusable object-stat slots).
++ * For per-PID or per-frame attribution, use a bounded fence/sequence trace instead. */
++struct NativeAdrenoPacing {uint32_t submitted, fence_seen, skipped;};
++extern struct NativeAdrenoPacing native_adreno_pacing[8];
+ /* The last text line (the plugin's failure reason) each process other than the render server streamed: process name and a 64-byte line. */
+ struct NativeAdrenoClientText {char name[20]; char text[64];};
+ extern struct NativeAdrenoMetalDiag native_adreno_metal_diag;
+diff --git a/NativeAdrenoPublish.cpp b/NativeAdrenoPublish.cpp
+index cf75611..46e14bf 100644
+--- a/NativeAdrenoPublish.cpp
++++ b/NativeAdrenoPublish.cpp
+@@ -94,6 +94,7 @@ volatile uint32_t native_adreno_open_log_count;
+  * closes, the board log row of its live connection (4 the shared row, 0xff none), the highest GPU address its mappings reached (MiB) and its
+  * last refusal (NativeAdrenoClientRecord in NativeAdrenoDiag.h). */
+ struct NativeAdrenoClientRecord native_adreno_client_log[8];
++struct NativeAdrenoPacing native_adreno_pacing[8];
+ /* The last text line (the plugin's failure reason) each process other than the render server streamed: process name and a 64-byte line. */
+ struct NativeAdrenoClientText native_adreno_client_text[8];
+ /* Why the latest mount of a connection failed: [0] 1 no address space, 2 the core's open, 3 the window scope; [1] its IOReturn; [2] the queue base; [3] failures so far. */
+@@ -323,7 +324,10 @@ bool AGXDeviceUserClient::mount(bool kernel)
+             core_=core;core=nullptr;space_=space;space=nullptr;row_=row;kernel_=kernel;live_=true;ok=true;
+             if(kernel)g.kernel_client=true;
+             ++g.opened;
+-            if(NativeAdrenoClientRecord *record=clientRecord(name_))record->slot=row;
++            if(NativeAdrenoClientRecord *record=clientRecord(name_)) {
++                record->slot=row;
++                core_->setPacing(&native_adreno_pacing[record-native_adreno_client_log]);
++            }
+         } else {
+             native_adreno_mount_fail[0]=3;native_adreno_mount_fail[1]=uint32_t(scoped);native_adreno_mount_fail[2]=uint32_t(base>>32);native_adreno_mount_fail[3]=native_adreno_mount_fail[3]+1;
+             core->releaseAll(&g.clock,0);
+diff --git a/NativeAdrenoSubmit.cpp b/NativeAdrenoSubmit.cpp
+index d8f6c08..7c28d1c 100644
+--- a/NativeAdrenoSubmit.cpp
++++ b/NativeAdrenoSubmit.cpp
+@@ -1,5 +1,6 @@
+ /* SPDX-License-Identifier: MIT */
+ #include "NativeAdrenoSubmit.h"
++#include "NativeAdrenoDiag.h"
+ #include "AdrenoPM4.h"
+ #include <IOKit/IOLib.h>
+ 
+@@ -127,19 +128,21 @@ IOReturn NativeAdrenoSubmit::forgetVm(NativeAdrenoVm *vm,const NativeAdrenoRingC
+     if(table_mode_==2)ring_->tableInstalled(vm_->ttbr0());
+     table_vm_=vm_;return kIOReturnSuccess;
+ }
+-IOReturn NativeAdrenoSubmit::release(Job &job)
++IOReturn NativeAdrenoSubmit::release(Job &job,bool skipped)
+ {
+     IOReturn status=kIOReturnSuccess;
+     NativeAdrenoVm *vm=job.vm?job.vm:vm_;
+     // A poisoned process VM retains its quarantined mappings and references.
+     // Discard only the scheduler record; the kernel VM still fails closed.
+-    if(vm!=vm_ && vm->poisoned()) {job={};return kIOReturnSuccess;}
+-    for(size_t i=0;i<job.count;++i) {
+-        IOReturn retired=vm->retireJobAfterCompletion(job.handles[i]);
+-        if(retired)status=retired;else ++stats_.references_retired;
++    if(vm==vm_ || !vm->poisoned()) {
++        for(size_t i=0;i<job.count;++i) {
++            IOReturn retired=vm->retireJobAfterCompletion(job.handles[i]);
++            if(retired)status=retired;else ++stats_.references_retired;
++        }
++        if(status)return poison();
++        if(vm->acquireImported())return poison();
+     }
+-    if(status)return poison();
+-    if(vm->acquireImported())return poison();
++    if(job.pacing)__atomic_fetch_add(skipped?&job.pacing->skipped:&job.pacing->fence_seen,1,__ATOMIC_RELAXED);
+     job={};return kIOReturnSuccess;
+ }
+ IOReturn NativeAdrenoSubmit::detach()
+@@ -167,7 +170,7 @@ IOReturn NativeAdrenoSubmit::submit(const NativeAdrenoSubmitBuffer *buffers,size
+     return submit(nullptr,buffers,count,queue,fence,nullptr);
+ }
+ IOReturn NativeAdrenoSubmit::submit(NativeAdrenoVm *vm,const NativeAdrenoSubmitBuffer *buffers,size_t count,
+-    uint64_t queue,uint32_t *fence,const NativeAdrenoRingClock *clock)
++    uint64_t queue,uint32_t *fence,const NativeAdrenoRingClock *clock,NativeAdrenoPacing *pacing)
+ {
+     if(!fence)return kIOReturnBadArgument;*fence=0;
+     if(!vm)vm=vm_;
+@@ -310,6 +313,8 @@ IOReturn NativeAdrenoSubmit::submit(NativeAdrenoVm *vm,const NativeAdrenoSubmitB
+     job->context=ring_->context();job->word_count=word_count;
+     for(size_t i=0;i<word_count;++i)job->words[i]=words[i];
+     ++stats_.submissions;
++    job->pacing=pacing;
++    if(pacing)__atomic_fetch_add(&pacing->submitted,1,__ATOMIC_RELAXED);
+     if(outstanding()>stats_.peak_jobs)stats_.peak_jobs=outstanding();
+     *fence=value;
+     return kIOReturnSuccess;
+@@ -585,7 +590,7 @@ IOReturn NativeAdrenoSubmit::recover(NativeAdrenoRestart restart,void *cookie,co
+     out->status=status;
+     if(status)return poison();
+     poisoned_=false;hang_fence_=hung;progress_retries_=0;
+-    if(guilty && !retry) {status=release(*guilty);if(status)return status;}
++    if(guilty && !retry) {status=release(*guilty,true);if(status)return status;}
+     /* The GPU is idle after the restart's CP init: the CPU installs the kernel table, and each replayed job switches to its own. */
+     if(table_mode_) {
+         if(!write_table_ || write_table_(table_cookie_,vm_->ttbr0()))return poison();
+@@ -618,6 +623,10 @@ IOReturn NativeAdrenoSubmit::recover(NativeAdrenoRestart restart,void *cookie,co
+         uint32_t value=0;
+         status=ring_->submitFramed(run?job->words:&nop,run?job->word_count:1,&value);
+         if(status || value!=next)return poison();
++        if(!run && job && job->pacing) {
++            __atomic_fetch_add(&job->pacing->skipped,1,__ATOMIC_RELAXED);
++            job->pacing=nullptr;  /* Later retirement of the NOP is not an observed client-job fence. */
++        }
+         ++out->replayed;
+     }
+     ++stats_.restarts;
+diff --git a/NativeAdrenoSubmit.h b/NativeAdrenoSubmit.h
+index 572c6e5..a0c5105 100644
+--- a/NativeAdrenoSubmit.h
++++ b/NativeAdrenoSubmit.h
+@@ -33,6 +33,7 @@ struct NativeAdrenoSubmitStats {
+     uint32_t submissions,completed,timeouts,poisoned_jobs,hangs,restarts;
+     size_t references_held,references_retired,peak_jobs;
+ };
++struct NativeAdrenoPacing;
+ /* Kernel-side execbuf: turns validated indirect buffers into one ring
+  * submission and owns a device reference per distinct buffer until the
+  * timestamp fence is actually observed. This is not a userspace ABI and not a
+@@ -46,6 +47,7 @@ struct NativeAdrenoSubmitStats {
+ class NativeAdrenoSubmit final {
+     struct Job {
+         uint32_t fence=0;
++        NativeAdrenoPacing *pacing=nullptr;
+         size_t count=0;
+         uint64_t handles[NativeAdrenoSubmitMaxBuffers]{};
+         uint64_t queue=0;
+@@ -84,7 +86,7 @@ class NativeAdrenoSubmit final {
+     uint32_t scratch_words_[NativeAdrenoSubmitMaxBuffers*4]{};
+     Job *find(uint32_t fence);
+     Job *free();
+-    IOReturn release(Job &);
++    IOReturn release(Job &,bool skipped=false);
+     IOReturn poison();
+ public:
+     NativeAdrenoSubmit()=default;
+@@ -102,7 +104,7 @@ public:
+     /* The same for the buffers of one process's VM (null: the default VM); with table switching on, the GPU runs the job on that
+      * VM's table. The clock is for the CPU switch's wait for the GPU to go idle. */
+     IOReturn submit(NativeAdrenoVm *,const NativeAdrenoSubmitBuffer *,size_t,uint64_t queue,uint32_t *fence,
+-        const NativeAdrenoRingClock *);
++        const NativeAdrenoRingClock *,NativeAdrenoPacing *pacing=nullptr);
+     /* Turns on table switching (mode 1 or 2, see table_mode_); write installs a TTBR0 from the CPU (used by mode 1 and to leave a
+      * table that is about to be freed). Only with no job outstanding. */
+     IOReturn setTableSwitching(unsigned mode,IOReturn (*write)(void *,uint64_t),void *cookie);
+diff --git a/NativeAdrenoUserClient.cpp b/NativeAdrenoUserClient.cpp
+index aaed3fd..21f20f9 100644
+--- a/NativeAdrenoUserClient.cpp
++++ b/NativeAdrenoUserClient.cpp
+@@ -463,7 +463,7 @@ IOReturn NativeAdrenoUserClient::submit(const NativeAdrenoAbiSubmit *request,
+     ring_->useContext(context_);
+     vm_->setOwner(context_);
+     const IOReturn status=submit_->submit(vm_,buffers,request->buffer_count,
+-        queue_base_+request->queue,&fence,clock);
++        queue_base_+request->queue,&fence,clock,pacing_);
+     vm_->setOwner(0);
+     if(status)return status;
+     native_adreno_submit_stats[fence&255]=request->reserved;
+diff --git a/NativeAdrenoUserClient.h b/NativeAdrenoUserClient.h
+index 940df21..27bc122 100644
+--- a/NativeAdrenoUserClient.h
++++ b/NativeAdrenoUserClient.h
+@@ -46,6 +46,7 @@ class NativeAdrenoUserClient final {
+     bool grow();
+     void releaseEntries();
+     uint32_t stats_slot_=4;   /* the board log's client row (4: the shared overflow row) */
++    NativeAdrenoPacing *pacing_=nullptr;
+     NativeAdrenoHandleIndex index_;   /* live handle -> its entries_ index */
+     size_t free_hint_=0,live_=0;   /* no free entry below free_hint_; live_ entries are used */
+     /* Queues as msm's submitqueues: as many as the client creates (queue 0 from open), grown on demand. */
+@@ -98,6 +99,7 @@ public:
+     IOReturn setScope(uint64_t queue_base,uint64_t window_start,uint64_t window_bytes);
+     /* The board log's per-client row this client counts in (0..3; 4 the shared row). */
+     void setStatsSlot(uint32_t slot) {stats_slot_=slot<4?slot:4;}
++    void setPacing(NativeAdrenoPacing *pacing) {pacing_=pacing;}
+     /* Highest end address (exclusive) any mapping of this client has reached, 0 before the first. */
+     uint64_t windowPeak() const {return window_peak_;}
+     /* Whether any job is unobserved in the range this client owns (never, while it owns none). */

@@ -43,7 +43,7 @@ constexpr uint16_t kSmp2pIn=0x269,kSmp2pOut=0x268,kGlinkDesc=478,kGlinkTx=479,kG
 struct Part { uint32_t offset,bytes,uncached,cached,cacheline; uint16_t host0,host1; };
 
 uintptr_t gVa;
-bool gStage3,gIpcrtr,gPeekIntents,gReceiveOne;
+bool gStage3,gIpcrtr,gPeekIntents,gReceiveOne,gGrantRequest;
 uint32_t rd32(uint32_t off) { uint32_t v; const uintptr_t a=gVa+off; __asm__ volatile("ldr %w0, [%1]" : "=r"(v) : "r"(a) : "memory"); return v; }
 uint16_t rd16(uint32_t off) { return (uint16_t)(rd32(off&~3u)>>((off&2)*8)); }
 bool span(uint32_t limit,uint32_t off,uint32_t n) { return off<=limit && n<=limit-off; }
@@ -414,6 +414,16 @@ void stage2(void *,int) {
             for(unsigned i=0;i<100 && !observed;++i){observed=channel.peekIntents(count,firstId,largest);if(!observed)IOSleep(10);}
             scmLog("AmethystWifi: s5 intents rc=%d count=%u first=%u max=%u\n",observed,count,firstId,largest);
         }
+        if(gGrantRequest && rc==1) {
+            channel.grantRequests=true;
+            int received=0;
+            for(unsigned i=0;i<200 && !received;++i){received=channel.receiveOne(kick);if(!received)IOSleep(10);}
+            const uint8_t *p=channel.payload;
+            const uint32_t w0=p[0]|p[1]<<8|p[2]<<16|uint32_t(p[3])<<24,w1=p[4]|p[5]<<8|p[6]<<16|uint32_t(p[7])<<24;
+            scmLog("AmethystWifi: s7 rc=%d req=%u/%u g=%u liid=%u bytes=%u cmd=%u rn=%u q=%08x/%08x\n",
+                received,channel.requestedBytes,channel.requests,(unsigned)channel.granted,channel.receivedId,
+                channel.receivedBytes,channel.nextCommand,channel.notifies,w0,w1);
+        }
         if(gReceiveOne && rc==1) {
             int received=0;
             for(unsigned i=0;i<100 && !received;++i){received=channel.receiveOne(kick);if(!received)IOSleep(10);}
@@ -437,7 +447,8 @@ extern "C" void amethyst_wifi_probe(void) {
     if(!mode)return;
     gPeekIntents=(mode==5);
     gReceiveOne=(mode==6);
-    gIpcrtr=(mode==4 || gPeekIntents || gReceiveOne);
+    gGrantRequest=(mode==7);
+    gIpcrtr=(mode==4 || gPeekIntents || gReceiveOne || gGrantRequest);
     gStage3=(mode==3 || gIpcrtr);
     IOMemoryMap *map=mapDevice(kSmemBase,kSmemBytes,kIOMapInhibitCache|(gStage3?0:kIOMapReadOnly));
     if(!map) { snapshotLog("AmethystWifi: smem map failed\n");return; }

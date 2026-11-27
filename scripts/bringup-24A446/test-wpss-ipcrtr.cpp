@@ -14,6 +14,7 @@ template<unsigned RxWords=8,unsigned TxWords=8> struct Peer {
         rx[i]=cmd;rx[i+1]=arg;d[3]=(d[3]+8)%sizeof rx;
         assert(d[2]!=d[3]);
     }
+    uint32_t payload_word(unsigned i) const {auto p=channel.payload+4*i;return p[0]|p[1]<<8|p[2]<<16|uint32_t(p[3])<<24;}
     void open(uint32_t cid=42) {frame(cid<<16|2,7);frame(0x52435049,0xff005254);}
 };
 
@@ -132,4 +133,48 @@ int main() {
     assert(invalid.channel.openNameBytes==7 && invalid.channel.openName[6]==1);
     invalid.d[3]=32;
     assert(invalid.step()==-1 && !invalid.d[2] && !invalid.kicks);
+
+    // b58: after our 128-byte intent the peer sent RX_INTENT_REQ (cmd 7), which
+    // mode 6 leaves queued. Mode 7 grants one 1024-byte intent, then ACKs.
+    {
+        Peer<128,32> g;
+        g.channel.openAcked=true;g.channel.rcid=2;g.channel.grantRequests=true;
+        auto rx=[&]{return g.channel.receiveOne([&]{++g.kicks;});};
+        assert(rx()==0 && g.channel.advertised && g.kicks==1 && g.d[1]==16);
+        g.d[2]=g.d[3]=504; // Request is the last RX slot; consuming it wraps.
+        g.frame(0x20007,600);
+        g.d[0]=48; // free = 32: not enough for INTENT+ACK+reserve.
+        assert(rx()==0 && g.d[2]==504 && !g.channel.requests && g.kicks==1);
+        g.d[0]=0;
+        assert(rx()==0 && g.d[2]==0 && g.channel.granted && g.channel.requestedBytes==600 && g.kicks==2);
+        assert(g.tx[4]==0x10005 && g.tx[5]==1 && g.tx[6]==1024 && g.tx[7]==2);
+        assert(g.tx[8]==0x10008 && g.tx[9]==1 && g.d[1]==40);
+        g.frame(0x20007,64); // Second request: refused, not re-advertised.
+        assert(rx()==0 && g.channel.requests==2 && g.tx[10]==0x10008 && g.tx[11]==0 && g.d[1]==48 && g.kicks==3);
+        g.frame(0x20007,2048); // Oversize while ungranted would also be refused; here just one more refusal.
+        assert(rx()==0 && g.channel.requests==3 && g.tx[13]==0 && g.kicks==4);
+        g.frame(13); // READ_NOTIF consumed with a kick.
+        assert(rx()==0 && g.channel.notifies==1 && g.kicks==5);
+        // 200-byte QRTR packet into the granted intent (too large for intent 1).
+        g.frame(0x20009,2);g.frame(200,0);
+        for(unsigned i=0;i<200;i+=8)g.frame(i==0?1u:i,i==0?2u:i+4);
+        assert(rx()==1 && g.channel.receivedId==2 && g.channel.receivedBytes==200);
+        assert(g.payload_word(0)==1 && g.payload_word(1)==2);
+        assert(g.tx[(g.d[1]+sizeof g.tx-8)%sizeof g.tx/4]==0x10006);
+        assert(g.tx[((g.d[1]+sizeof g.tx-8)%sizeof g.tx)/4+1]==2);
+    }
+    {   // Without a grant, data addressed to intent 2 is invalid; mode 6 leaves cmd 7 queued.
+        Peer<32,32> g;
+        g.channel.openAcked=true;g.channel.rcid=2;
+        auto rx=[&]{return g.channel.receiveOne([&]{++g.kicks;});};
+        assert(rx()==0 && g.channel.advertised);
+        g.frame(0x20007,64);
+        assert(rx()==-2 && g.d[2]==0 && !g.channel.requests && g.channel.nextCommand==7);
+        g.channel.grantRequests=true;
+        g.rx[0]=0x20009;g.rx[1]=2;g.frame(8,0);
+        assert(rx()==-3 && g.d[2]==0);
+        // Oversized request is refused without advertising.
+        g.rx[0]=0x20007;g.rx[1]=4096;
+        assert(rx()==0 && !g.channel.granted && g.channel.requestedBytes==4096 && g.tx[4]==0x10008 && g.tx[5]==0);
+    }
 }

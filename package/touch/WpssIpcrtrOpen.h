@@ -17,7 +17,11 @@ struct WpssIpcrtrOpen {
     static constexpr uint32_t receiveBytes=128, receiveId=1;
     bool advertised=false, received=false;
     uint32_t receivedBytes=0, nextCommand=0xffff;
-    uint8_t payload[receiveBytes]={};
+    // Mode 7: answer one RX_INTENT_REQ like Sheng/Linux (INTENT, then RX_INTENT_REQ_ACK).
+    static constexpr uint32_t grantBytes=1024, grantId=2;
+    bool grantRequests=false, granted=false;
+    uint32_t requestedBytes=0, requests=0, receivedId=0, notifies=0;
+    uint8_t payload[grantBytes]={};
 
     template<class Kick> int receiveOne(Kick kick) {
         if(received)return 1;
@@ -45,12 +49,37 @@ struct WpssIpcrtrOpen {
             WpssVersion::fence();d[2]=advance(rt,8+8*count,rn);WpssVersion::fence();
             return 0; // Not transmitting data: no remote intent table needed yet.
         }
+        if(grantRequests && nextCommand==13 && hdr==13) { // READ_NOTIF
+            if(link.rx[rt/4+1])return -3;
+            WpssVersion::fence();d[2]=advance(rt,8,rn);WpssVersion::fence();
+            ++notifies;kick();return 0;
+        }
+        if(grantRequests && nextCommand==7 && (hdr>>16)==rcid) { // RX_INTENT_REQ, arg = bytes
+            const uint32_t want=link.rx[rt/4+1];
+            const bool grant=!granted && want && want<=grantBytes;
+            if(free<(grant?24u:8u)+16)return 0; // Keep the full gap and READ_NOTIF reserve.
+            requestedBytes=want;++requests;
+            uint32_t at=th;
+            if(grant) {
+                const uint32_t pair=advance(at,8,tn)/4;
+                link.tx[pair]=grantBytes;link.tx[pair+1]=grantId;
+                link.tx[at/4]=5u|(localCid<<16);link.tx[at/4+1]=1;
+                at=advance(at,16,tn);
+            }
+            link.tx[at/4]=8u|(localCid<<16);link.tx[at/4+1]=grant;
+            WpssVersion::fence();
+            d[2]=advance(rt,8,rn);d[1]=advance(at,8,tn);
+            WpssVersion::fence();
+            granted=granted||grant;kick();return 0;
+        }
         if(nextCommand!=9 || (hdr>>16)!=rcid)return -2;
-        if(link.rx[rt/4+1]!=receiveId)return -3;
+        const uint32_t liid=link.rx[rt/4+1];
+        const uint32_t limit=liid==receiveId?receiveBytes:(granted && liid==grantId?grantBytes:0);
+        if(!limit)return -3;
         if(available<16)return 0;
         const uint32_t at=advance(rt,8,rn)/4;
         const uint32_t chunk=link.rx[at],left=link.rx[at+1];
-        if(!chunk || chunk>receiveBytes || left)return -3;
+        if(!chunk || chunk>limit || left)return -3;
         const uint32_t size=(16+chunk+7)&~7u;
         if(size>=rn)return -3;
         if(available<size || free<24)return 0;
@@ -59,8 +88,8 @@ struct WpssIpcrtrOpen {
             payload[i]=uint8_t(link.rx[pos/4]>>((pos&3)*8));
         }
         WpssVersion::fence();d[2]=advance(rt,size,rn);
-        receivedBytes=chunk;received=true;
-        publish(th,6u|(localCid<<16),receiveId,8,kick); // No INTENT_REUSE negotiated.
+        receivedBytes=chunk;received=true;receivedId=liid;
+        publish(th,6u|(localCid<<16),liid,8,kick); // No INTENT_REUSE negotiated.
         return 1;
     }
 

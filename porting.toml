@@ -442,6 +442,7 @@ inputs = [
 configuration = [
   "No network component is selected.",
   "amethyst-wifi=3 keeps VERSION/ACK only; amethyst-wifi=4 opts into one IPCRTR OPEN/ACK probe.",
+  "amethyst-wifi=7 adds one RX_INTENT_REQ grant (a 1,024-byte intent then RX_INTENT_REQ_ACK) to the mode 6 receive checkpoint; mode 6 is unchanged.",
 ]
 procedure = [
   "Boot WPSS from the firmware addon, negotiate GLINK v1, then in mode 4 acknowledge the peer's IPCRTR OPEN and wait for acknowledgment of the host's OPEN.",
@@ -453,6 +454,7 @@ findings = [
   "D94 b55 identified the first OPEN as an unrelated channel with prefix LOOPBAC. The host-tested filter skips complete, bounded unregistered OPENs without acknowledging them and still opens only IPCRTR.",
   "D94 b56 skipped one unrelated OPEN and completed bilateral IPCRTR OPEN/ACK. Opt-in mode 5 adds a read-only observation of the first queued peer intent batch without advertising any local buffers.",
   "D94 b57 observed one peer intent (ID 0, 128 bytes). Host-tested mode 6 advertises a single local intent, accepts one unfragmented payload, and publishes RX_DONE without starting QRTR.",
+  "D94 b58 advertised the local intent; the peer's next frame was RX_INTENT_REQ (command 7), which mode 6 leaves queued (rc -2). Host-tested mode 7 grants one request as Sheng does, logs the requested size and the first two words of a received packet, and still stops before QRTR.",
 ]
 completion = [
   "Scanning, association, address configuration and sustained receive/transmit traffic pass with the selected firmware.",
@@ -693,6 +695,7 @@ findings = [
   "WPSS stage 4 row 40 retains the last OPEN header, bounded name prefix and ignored-OPEN count alongside the row 42 result.",
   "WPSS stage 5 row 41 reports whether the first queued peer frame advertises receive buffers, without advancing the FIFO.",
   "WPSS stage 6 row 41 reports one-shot receive status, whether a local intent was sent, payload bytes and the last command observed.",
+  "WPSS stage 7 row 41 reports receive status, requested intent size and count, grant, receiving intent ID, payload bytes, last command, READ_NOTIF count and the first two payload words.",
   "The recovery relink verifies the downloaded qualification digest, all GPU archive members and private-header provenance before linking.",
   "The context-fault replay relink pins both the encrypted artifact and archive digest from qualification run 45546635968.",
   "The recovery log retains a pre-reset job snapshot independently of later fence wait timeouts. The pacing/IPCRTR relink pins both digests from qualification run 45740068404.",

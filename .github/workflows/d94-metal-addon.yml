@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: IOS4Amethyst/UniXNU
-          ref: e6795bfe7ae4ef1825cd0be7201a4cc572c6b2cb
+          ref: 9d1f78892d2595b8d015bd428948f85b050e2e70
           path: unixnu-core
           persist-credentials: false
       - uses: actions/checkout@v4
@@ -63,7 +63,7 @@ jobs:
           rustup toolchain install 1.98.0 --profile minimal --component rust-src
           rustc +1.98.0 -Vv
           cd unixnu-core
-          test "$(git rev-parse HEAD)" = e6795bfe7ae4ef1825cd0be7201a4cc572c6b2cb
+          test "$(git rev-parse HEAD)" = 9d1f78892d2595b8d015bd428948f85b050e2e70
           test "$(git -C ../gpu-helper rev-parse HEAD)" = d468023cd3f79ebd6093c644dc38356f232667f4
           git submodule update --init drivers/AdrenoMetal kits/AdrenoPM4 drivers/GopFramebuffer
           test "$(git -C drivers/AdrenoMetal rev-parse HEAD)" = 243d63cf43305a85c8119b66b49cb7df4b30b019

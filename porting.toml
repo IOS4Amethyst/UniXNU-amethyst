@@ -394,6 +394,7 @@ findings = [
   "The host-tested gpu-replay=0 control skips the stalled job on first recovery while replaying later jobs. The default remains one retry on a progress-only stall.",
   "The A810 soft reset now stops if a required register operation fails; the existing successful operation order is unchanged. The checked source passed ARM Mac object qualification in run 45692009139; hardware behavior remains unverified.",
   "Per-client pacing counters distinguish accepted jobs, observed fences and recovery skips; ARM Mac object qualification passed in run 45740068404. They do not change GPU scheduling or measure panel FPS.",
+  "The D94 Metal addon workflow builds from core 9d1f788 (e6795bfe plus UniXNU 3f3f711): Turnip takes GMEM blit events for imported linear attachments whose rows hold the 16-texel block reach (the 1220x2712 swap surfaces). Previously every pass used shaded loads and 2D stores. Host-tested predicate only.",
   "Host-tested slow-job telemetry records ring fences that stay 16 ms or more at the head (client, IB count and dwords, head and submit-to-wait lower bounds, stall stage) for [gpu slow] and [gpu slow job]; ARM Mac object qualification passed in run 45880386281. It does not change waits, stall stages, retirement or scheduling.",
   "CX GDSC, SMMU vote and the GMU pool round trip pass once firmware reserves GMU_Pool.",
   "Zap loads through SCM PAS 13 with amethyst's own gen80300_zap.mbn; CP init, CP_MEM_WRITE and the first IB pass.",

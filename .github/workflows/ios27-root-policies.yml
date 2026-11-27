@@ -12,7 +12,6 @@ on:
         description: Export encrypted verified OS/SystemOS inputs for host root-image assembly
         type: boolean
         default: false
-      - scripts/prepare-ios27-root-images.py
 
 permissions:
   contents: read

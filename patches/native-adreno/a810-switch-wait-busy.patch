@@ -1,0 +1,114 @@
+diff --git a/NativeAdrenoSubmit.cpp b/NativeAdrenoSubmit.cpp
+index a8f0f0f..c23ba94 100644
+--- a/NativeAdrenoSubmit.cpp
++++ b/NativeAdrenoSubmit.cpp
+@@ -139,12 +139,12 @@ IOReturn NativeAdrenoSubmit::setTableSwitching(unsigned mode,IOReturn (*write)(v
+ /* Makes vm the table the GPU runs for the next submission. Mode 1: once every earlier job has finished, the CPU writes TTBR0 (the bank
+  * caches translations per ASID, so the switch needs no TLB operation). Mode 2: the ring's next prologue carries the switch, which the CP
+  * runs after every earlier submission. */
+-IOReturn NativeAdrenoSubmit::useVm(NativeAdrenoVm *vm,const NativeAdrenoRingClock *clock)
++IOReturn NativeAdrenoSubmit::useVm(NativeAdrenoVm *vm,const NativeAdrenoRingClock *clock,uint32_t timeout_us)
+ {
+     if(!table_mode_ || vm==table_vm_)return kIOReturnSuccess;
+     if(table_mode_==2) {ring_->useTable(vm->ttbr0());table_vm_=vm;return kIOReturnSuccess;}
+     if(!clock)return kIOReturnBadArgument;
+-    IOReturn status=waitAll(clock,2000000);
++    IOReturn status=waitAll(clock,timeout_us);
+     if(status)return status;
+     status=write_table_(table_cookie_,vm->ttbr0());
+     if(status)return poison();
+@@ -328,10 +328,15 @@ IOReturn NativeAdrenoSubmit::submit(NativeAdrenoVm *vm,const NativeAdrenoSubmitB
+         for(unsigned i=0;i<28;++i)native_adreno_ib_log[slot][4+i]=head[i];
+         native_adreno_ib_log_count=native_adreno_ib_log_count+1;
+     }
+-    status=useVm(vm,clock);
++    /* amethyst b59/b60: a mode-1 switch waited up to 2 s here for every other process's job, under the connection lock, which also
++     * held off the 500 ms hangcheck. During a GPU hang SpringBoard's submit ran that wait out, the timeout came back as a failed
++     * submission, and Turnip, which retries only kIOReturnBusy, declared its device lost. The UI then stayed frozen after the restart. A
++     * short wait answers busy instead: nothing has been written, the caller waits for its own work and submits again, and the lock
++     * is free for recovery in between. */
++    status=useVm(vm,clock,NativeAdrenoSubmitSwitchWaitUs);
+     if(status) {
+         for(size_t i=0;i<handle_count;++i) {vm_->retireJobAfterCompletion(handles[i]);++stats_.references_retired;}
+-        return status;
++        return status==kIOReturnTimeout?kIOReturnBusy:status;
+     }
+     status=ring_->submitFramed(words,word_count,&value);
+     if(status) {
+diff --git a/NativeAdrenoSubmit.h b/NativeAdrenoSubmit.h
+index 0f4438e..6e8ffe1 100644
+--- a/NativeAdrenoSubmit.h
++++ b/NativeAdrenoSubmit.h
+@@ -34,6 +34,8 @@ struct NativeAdrenoSubmitStats {
+     size_t references_held,references_retired,peak_jobs;
+ };
+ struct NativeAdrenoPacing;
++/* How long a submission waits under the lock for a mode-1 table switch before it answers kIOReturnBusy (NativeAdrenoSubmit::submit). */
++constexpr uint32_t NativeAdrenoSubmitSwitchWaitUs=50000;
+ /* The pacing rows a job's pacing pointer may point into (eight), for the slow-job record's row number; unset: rows are not named. */
+ void NativeAdrenoSubmitPacingRows(const NativeAdrenoPacing *rows);
+ /* Kernel-side execbuf: turns validated indirect buffers into one ring
+@@ -79,7 +81,8 @@ class NativeAdrenoSubmit final {
+     NativeAdrenoVm *table_vm_=nullptr;
+     void *table_cookie_=nullptr;
+     IOReturn (*write_table_)(void *,uint64_t ttbr0)=nullptr;
+-    IOReturn useVm(NativeAdrenoVm *,const NativeAdrenoRingClock *);
++    /* timeout_us bounds mode 1's wait for every earlier job (kIOReturnTimeout when it runs out). */
++    IOReturn useVm(NativeAdrenoVm *,const NativeAdrenoRingClock *,uint32_t timeout_us=2000000);
+     NativeAdrenoRing *ring_=nullptr;
+     NativeAdrenoSubmitStats stats_{};
+     void noteStall(uint32_t observed,const NativeAdrenoRingClock *clock);   /* the CP's state for a fence that stopped advancing (native_adreno_stall) */
+diff --git a/tests/test_submit.cpp b/tests/test_submit.cpp
+index 25b5df1..6ef3bc7 100644
+--- a/tests/test_submit.cpp
++++ b/tests/test_submit.cpp
+@@ -425,8 +425,49 @@ int main()
+         fencemem[1]=h;CHECK(p.submit.wait(h,&ringclock,0)==kIOReturnSuccess);
+         CHECK(p.submit.outstanding()==0 && !p.submit.poisoned() && p.submit.detach()==kIOReturnSuccess);
+     }
++    /* Mode 1: a submission from another process VM while earlier work runs (a GPU hang) answers busy after a short wait, writes
++     * nothing and keeps no reference; once the work is done the same submission switches the table and runs. */
++    {
++        Path p;CHECK(exposed(p)==kIOReturnSuccess);
++        NativeAdrenoVm process;
++        process.keepStreamsOnFailure();
++        NativeAdrenoTablePages tables;
++        ArmSmmu4KLiveArena arena;
++        ArmSmmu4KLiveState state{};
++        ArmSmmu4KLiveVisibility visibility;
++        CHECK(NativeAdrenoPrepareSmmuMemory(&tables,32,40,0x800000,65536,0,16,&arena,&state,&visibility)==kIOReturnSuccess);
++        ArmSmmu4KContextConfig config=context;
++        config.lower=&arena.config;config.lower_tables=&state.tables;config.asid=2;config.ttbr0_switched=1;
++        state.detached=1;state.context_offset=CB;
++        NativeAdrenoVmRegion lower={&tables,&arena,&state};
++        CHECK(process.attach(&smmuio,&config,&streams,&lower,nullptr,32,1000)==kIOReturnSuccess);
++        NativeAdrenoMemory other;
++        CHECK(other.allocate(8192,40,false,8192)==kIOReturnSuccess);
++        uint64_t handle=0;
++        CHECK(process.map(&other,0,0x802000,3,0,2,&handle)==kIOReturnSuccess);
++        static struct {unsigned writes;uint64_t ttbr0;} tw;tw={};
++        auto write=[](void *,uint64_t ttbr0)->IOReturn {++tw.writes;tw.ttbr0=ttbr0;return kIOReturnSuccess;};
++        CHECK(p.submit.setTableSwitching(1,write,nullptr)==kIOReturnSuccess);
++        NativeAdrenoSubmitBuffer mine{p.handle,0x800000,4096},theirs{handle,0x802000,4096};
++        uint32_t a=0,b=0;
++        CHECK(p.submit.submit(&mine,1,0,&a)==kIOReturnSuccess && a==1);   /* the default VM's job, still running */
++        const uint32_t wptr=cp.regs[0x0807];const auto refs=other.deviceReferences();
++        const uint64_t began=clock_us;
++        CHECK(p.submit.submit(&process,&theirs,1,1,&b,&ringclock)==kIOReturnBusy && b==0);
++        CHECK(clock_us-began>=NativeAdrenoSubmitSwitchWaitUs && clock_us-began<NativeAdrenoSubmitSwitchWaitUs+5000);   /* not 2 s */
++        CHECK(cp.regs[0x0807]==wptr && tw.writes==0 && other.deviceReferences()==refs && p.submit.outstanding()==1 && !p.submit.poisoned());
++        /* Busy again while it still runs; then it finishes and the retry switches and submits. */
++        CHECK(p.submit.submit(&process,&theirs,1,1,&b,&ringclock)==kIOReturnBusy);
++        fencemem[1]=a;
++        CHECK(p.submit.submit(&process,&theirs,1,1,&b,&ringclock)==kIOReturnSuccess && b==2);
++        CHECK(tw.writes==1 && tw.ttbr0==process.ttbr0() && cp.regs[0x0807]!=wptr && other.deviceReferences()==refs+1);
++        fencemem[1]=b;
++        CHECK(p.submit.waitAll(&ringclock,1000)==kIOReturnSuccess && p.submit.outstanding()==0 && other.deviceReferences()==refs);
++        CHECK(p.submit.forgetVm(&process,&ringclock,1000)==kIOReturnSuccess && tw.writes==2 && tw.ttbr0==p.vm.ttbr0());
++    }
+     std::printf("PASS: submit, hang replay, failed restart, and poisoned process VM isolation\n");
+     std::printf("PASS: slow head-of-ring job telemetry\n");
++    std::printf("PASS: mode-1 table switch answers busy instead of failing a submission\n");
+ }
+ /* Physical-page maintenance (imported BOs): record it; no host page is touched. */
+ /* Host double: the page attribute change of user BOs has no host equivalent (no host page is touched). */

@@ -81,7 +81,7 @@ def stage(archive, output):
         cwd=board, env=dict(os.environ, GIT_CEILING_DIRECTORIES=str(board.parent.resolve())))
     for name in ('a810-recovery-isolate-vm.patch', 'a810-no-replay-on-context-fault.patch',
                  'a810-capture-hung-job.patch', 'a810-optional-hung-replay.patch', 'a810-client-pacing.patch',
-                 'a810-slow-job-trace.patch'):
+                 'a810-slow-job-trace.patch', 'a810-switch-wait-busy.patch'):
         run(['git', '-C', output / 'NativeAdreno', 'apply', '--whitespace=error', patches / 'native-adreno' / name])
 
 

@@ -153,8 +153,8 @@ jobs:
         run: |
           set -euo pipefail
           test "$DEFCONFIG" = amethyst_defconfig || test "$DEFCONFIG" = ios27_data_defconfig
-          test "$(gh run view 45880386281 --json conclusion --jq .conclusion)" = success
-          gh run download 45880386281 -n d94-gpu-qualification-encrypted -D "$RUNNER_TEMP/gpu-download"
+          test "$(gh run view 46059111589 --json conclusion --jq .conclusion)" = success
+          gh run download 46059111589 -n d94-gpu-qualification-encrypted -D "$RUNNER_TEMP/gpu-download"
           python3 scripts/prepare-d94-gpu-link.py prepare --core unixnu-core --device . \
             --encrypted "$RUNNER_TEMP/gpu-download/d94-gpu-qualification.tar.gz.enc" --inputs "$RUNNER_TEMP/gpu-link"
 
